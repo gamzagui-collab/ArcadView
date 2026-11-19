@@ -71,13 +71,16 @@ public class AppUpdatesPlugin extends Plugin {
     }
     private File apk() throws Exception{File dir=new File(getContext().getCacheDir(),"updates");if(!dir.isDirectory()&&!dir.mkdirs())throw new Exception("Update storage unavailable");return new File(dir,"verified-update.apk");}
     private String sha(File file) throws Exception{MessageDigest md=MessageDigest.getInstance("SHA-256");try(InputStream in=new FileInputStream(file)){byte[] b=new byte[65536];int n;while((n=in.read(b))!=-1)md.update(b,0,n);}StringBuilder s=new StringBuilder();for(byte b:md.digest())s.append(String.format("%02x",b&255));return s.toString();}
-    private Signature[] signatures(PackageInfo p){return Build.VERSION.SDK_INT>=28?p.signingInfo.getApkContentsSigners():p.signatures;}
+    private Signature[] signatures(PackageInfo p){return Build.VERSION.SDK_INT>=28&&p.signingInfo!=null?p.signingInfo.getApkContentsSigners():p.signatures;}
+    // Some API 28 package parsers leave archive SigningInfo null. Request both
+    // APIs and require the same nonempty certificate digest set in either case.
+    private String[] signatureDigests(Signature[] signatures) throws Exception{if(signatures==null)return null;String[] values=new String[signatures.length];for(int i=0;i<signatures.length;i++){byte[] digest=MessageDigest.getInstance("SHA-256").digest(signatures[i].toByteArray());StringBuilder hex=new StringBuilder();for(byte b:digest)hex.append(String.format("%02x",b&255));values[i]=hex.toString();}return values;}
     private void verify(File file,Offer offer) throws Exception{
         if(file.length()!=offer.size||!sha(file).equalsIgnoreCase(offer.sha))throw new Exception("APK checksum mismatch");
-        PackageManager pm=getContext().getPackageManager();int flags=Build.VERSION.SDK_INT>=28?PackageManager.GET_SIGNING_CERTIFICATES:PackageManager.GET_SIGNATURES;
+        PackageManager pm=getContext().getPackageManager();int flags=Build.VERSION.SDK_INT>=28?(PackageManager.GET_SIGNING_CERTIFICATES|PackageManager.GET_SIGNATURES):PackageManager.GET_SIGNATURES;
         PackageInfo archive=pm.getPackageArchiveInfo(file.getAbsolutePath(),flags),current=pm.getPackageInfo(getContext().getPackageName(),flags);
         if(archive==null||!current.packageName.equals(archive.packageName)||code(archive)!=offer.code||code(archive)<=code(current)||!offer.version.equals(archive.versionName))throw new Exception("APK identity or version mismatch");
-        Signature[] a=signatures(archive),b=signatures(current);if(a==null||b==null||a.length!=b.length||!Arrays.asList(a).containsAll(Arrays.asList(b)))throw new Exception("APK signer mismatch");
+        Signature[] a=signatures(archive),b=signatures(current);if(!UpdateRules.sameSignerDigests(signatureDigests(a),signatureDigests(b)))throw new Exception("APK signer mismatch");
     }
     @PluginMethod public void download(PluginCall call){
         Offer offer=offered;String token=call.getString("token");if(!BuildConfig.GITHUB_UPDATES||offer==null||!offer.token.equals(token)){call.reject("Check this release before downloading.","UPDATE_OFFER");return;}

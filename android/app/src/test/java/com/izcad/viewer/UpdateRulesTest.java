@@ -4,6 +4,8 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 
 public class UpdateRulesTest {
+    @Test public void acceptsOnlyTheSameNonemptyCertificateSet(){String a=new String(new char[64]).replace('\0','a'),b=new String(new char[64]).replace('\0','b');assertTrue(UpdateRules.sameSignerDigests(new String[]{a,b},new String[]{b,a.toUpperCase()}));assertFalse(UpdateRules.sameSignerDigests(new String[]{a},new String[]{b}));assertFalse(UpdateRules.sameSignerDigests(new String[]{a,a},new String[]{a,b}));}
+    @Test public void missingOrMalformedCertificateDataNeverPasses(){assertFalse(UpdateRules.sameSignerDigests(null,null));assertFalse(UpdateRules.sameSignerDigests(new String[0],new String[0]));assertFalse(UpdateRules.sameSignerDigests(new String[]{null},new String[]{null}));assertFalse(UpdateRules.sameSignerDigests(new String[]{""},new String[]{""}));}
     private final String name="Arcad-View-v2.1.0-27.apk", tag="v2.1.0", digest="sha256:"+new String(new char[64]).replace('\0','a');
     private String url(){return UpdateRules.REPOSITORY+"/releases/download/"+tag+"/"+name;}
     @Test public void acceptsVersionedApkWithDigest(){assertEquals(27,UpdateRules.versionCode(tag,name,url(),digest,12881785));}
