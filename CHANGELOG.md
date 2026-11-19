@@ -1,5 +1,9 @@
 # Arcad View changes
 
+## 2.1.1 — 2026-11-20
+
+- GitHub Actions에서 폐기된 Android SDK tools 패키지를 요청하지 않도록 수정
+
 ## 2.1.0 — 2026-11-20
 
 - Arcad View / GUI's Arc Industry 브랜드와 남색·파랑 UX
