@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { MAX_DRAWING_FILE_BYTES } from "../files/fileTypes";
+import { MAX_DRAWING_FILE_BYTES, MAX_CONVERTED_DXF_BYTES } from "../files/fileTypes";
 import {
   readIncomingDrawingFile,
   type IncomingDrawing,
@@ -56,6 +56,12 @@ describe("incoming Android drawings", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(new Blob([]))));
     await expect(readIncomingDrawingFile(drawing))
       .rejects.toMatchObject({ code: "EMPTY_FILE" });
+  });
+  it("cancels an oversized converted stream before reading any body bytes", async () => {
+    const blob = vi.fn();
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ok:true,headers:new Headers({"content-length":String(MAX_CONVERTED_DXF_BYTES+1)}),blob}));
+    await expect(readIncomingDrawingFile(drawing,undefined,MAX_CONVERTED_DXF_BYTES)).rejects.toMatchObject({code:"FILE_TOO_LARGE"});
+    expect(blob).not.toHaveBeenCalled();
   });
 
   it.each(["pdf", "zip", "rar"])("accepts a local shared %s document", async (extension) => {

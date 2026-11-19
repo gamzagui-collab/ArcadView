@@ -6,7 +6,7 @@ import {
   type ViewerCommand,
 } from "../types/drawing";
 import { detectDxfEncoding } from "./dxfEncoding";
-import { validateDrawingFileSize } from "../files/fileTypes";
+import { MAX_CONVERTED_DXF_BYTES, validateDrawingFileSize } from "../files/fileTypes";
 import {
   getSavedDrawingView,
   resolveSavedDrawingView,
@@ -44,7 +44,7 @@ installXclipRendering(DxfViewer);
 installTrianglePrecisionRendering(DxfViewer);
 installCadColorRendering(DxfViewer);
 
-const LOAD_TIMEOUT_MS = 3 * 60 * 1000;
+const LOAD_TIMEOUT_MS = 10 * 60 * 1000;
 const HEADER_BYTES = 64 * 1024;
 
 function abortError(): DOMException {
@@ -219,7 +219,7 @@ export class DrawingViewer {
     if (this.destroyed) {
       throw abortError();
     }
-    validateDrawingFileSize(file.size);
+    validateDrawingFileSize(file.size, MAX_CONVERTED_DXF_BYTES);
     this.cancelLoad?.(abortError());
     this.cancelInitialFit();
     const loadId = ++this.loadId;

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { convertDwgToDxf } from "./convertDwg";
 import { getSavedDrawingView } from "../viewer/savedView";
-import { MAX_DRAWING_FILE_BYTES } from "../files/fileTypes";
+import { MAX_DRAWING_FILE_BYTES, MAX_CONVERTED_DXF_BYTES } from "../files/fileTypes";
 
 class FakeWorker {
   static current: FakeWorker;
@@ -116,7 +116,7 @@ describe("DWG conversion worker lifecycle", () => {
     const result = convertDwgToDxf(drawing());
     const failed = expect(result).rejects.toMatchObject({ code: "DWG_CONVERSION_TIMEOUT" });
     await waitForWorker();
-    await vi.advanceTimersByTimeAsync(3 * 60 * 1000);
+    await vi.advanceTimersByTimeAsync(10 * 60 * 1000);
     await failed;
     expect(FakeWorker.current.terminate).toHaveBeenCalledOnce();
     expect(FakeWorker.current.onmessage).toBeNull();
@@ -142,7 +142,7 @@ describe("DWG conversion worker lifecycle", () => {
     const failed = expect(result).rejects.toMatchObject({ code: "FILE_TOO_LARGE" });
     await waitForWorker();
     const output = new ArrayBuffer(1);
-    Object.defineProperty(output, "byteLength", { value: MAX_DRAWING_FILE_BYTES + 1 });
+    Object.defineProperty(output, "byteLength", { value: MAX_CONVERTED_DXF_BYTES + 1 });
     FakeWorker.current.succeed(output);
     await failed;
     expect(FakeWorker.current.terminate).toHaveBeenCalledOnce();

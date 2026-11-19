@@ -5,11 +5,16 @@ import android.content.Intent;
 import android.os.Build;
 import android.content.pm.ApplicationInfo;
 import android.webkit.WebView;
+import android.webkit.RenderProcessGoneDetail;
+import android.view.ViewGroup;
+import android.widget.Toast;
+import com.getcapacitor.WebViewListener;
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
 import com.getcapacitor.BridgeActivity;
 
 public class MainActivity extends BridgeActivity {
+    private boolean recoveringRenderer;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -17,6 +22,22 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(DwgConversionPlugin.class);
         registerPlugin(AppUpdatesPlugin.class);
         super.onCreate(savedInstanceState);
+        bridge.addWebViewListener(new WebViewListener() {
+            @Override public boolean onRenderProcessGone(WebView view, RenderProcessGoneDetail detail) {
+                if (recoveringRenderer) return true;
+                recoveringRenderer = true;
+                android.util.Log.w("ArcadMemoryRecovery", "Viewer renderer stopped; returning to library without reopening the drawing. crash=" + detail.didCrash());
+                if (view.getParent() instanceof ViewGroup) ((ViewGroup) view.getParent()).removeView(view);
+                view.destroy();
+                // A file VIEW intent must not reopen the same failing drawing.
+                setIntent(new Intent(MainActivity.this, MainActivity.class).setAction(Intent.ACTION_MAIN));
+                getWindow().getDecorView().post(() -> {
+                    Toast.makeText(MainActivity.this, "도면 표시가 중단되어 초기 화면으로 복구합니다. 다른 앱을 닫은 뒤 다시 시도하세요.", Toast.LENGTH_LONG).show();
+                    recreate();
+                });
+                return true;
+            }
+        });
         // Capacitor's bundled config stays secure for release. Override only
         // after it creates the WebView, using the installed variant's flag.
         WebView.setWebContentsDebuggingEnabled(

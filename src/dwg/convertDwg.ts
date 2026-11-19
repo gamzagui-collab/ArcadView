@@ -1,8 +1,9 @@
 import {
   replaceExtension,
   validateDrawingFileSize,
+  MAX_CONVERTED_DXF_BYTES,
 } from "../files/fileTypes";
-import { inspectDwgInput } from "./diagnostics";
+import { inspectDwgInput, isLikelyMemoryError } from "./diagnostics";
 import {
   AppError,
   type AppErrorCode,
@@ -32,7 +33,7 @@ type DwgWorkerResponse =
       diagnostic: DwgDiagnostic;
     };
 
-const CONVERSION_TIMEOUT_MS = 3 * 60 * 1000;
+const CONVERSION_TIMEOUT_MS = 10 * 60 * 1000;
 let conversionId = 0;
 
 function abortError(): DOMException {
@@ -134,7 +135,7 @@ function runConversionWorker(
       cleanup();
       reject(
         new AppError(
-          "DWG_RUNTIME_MISSING",
+          isLikelyMemoryError(event.message) ? "DWG_MEMORY_LIMIT" : "DWG_RUNTIME_MISSING",
           event.message || "DWG conversion worker could not start.",
           { details: { dwg: diagnostic } },
         ),
@@ -196,7 +197,7 @@ async function convertDwg(file: File, signal?: AbortSignal): Promise<File> {
     if (signal?.aborted) {
       throw abortError();
     }
-    validateDrawingFileSize(output.byteLength);
+    validateDrawingFileSize(output.byteLength, MAX_CONVERTED_DXF_BYTES);
 
     const renderFile = new File(
       [output],

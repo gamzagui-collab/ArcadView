@@ -27,6 +27,7 @@ const errorTranslation = {
   DWG_PARSE_FAILED: "dwgParseFailed",
   DWG_EXPORT_FAILED: "dwgExportFailed",
   DWG_MEMORY_LIMIT: "dwgMemoryLimit",
+  DRAWING_MEMORY_LIMIT: "dwgMemoryLimit",
   DWG_CONVERSION_TIMEOUT: "dwgConversionTimeout",
   DWG_RUNTIME_MISSING: "dwgRuntimeMissing",
   RENDER_FAILED: "renderFailed",

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { convertDwgInProcess } from "./dwgConversion";
 import { getSavedDrawingView } from "../viewer/savedView";
+import { MAX_CONVERTED_DXF_BYTES } from "../files/fileTypes";
 
 const mocks = vi.hoisted(() => ({
   begin: vi.fn(), append: vi.fn(), convert: vi.fn(), release: vi.fn(), read: vi.fn(),
@@ -75,5 +76,18 @@ describe("isolated Android DWG conversion", () => {
     mocks.convert.mockRejectedValueOnce({ code: "DWG_MEMORY_LIMIT", message: "allocation failed", data: { dwg: { engine: "libredwg", version: "AC1032", fileSizeBytes: 6 } } });
     await expect(convertDwgInProcess(new File(["AC1032"], "test.dwg"))).rejects.toMatchObject({ code: "DWG_MEMORY_LIMIT", details: { dwg: { version: "AC1032" } } });
     expect(mocks.release).toHaveBeenCalledOnce();
+  });
+
+  it("reads an expanded DXF with its own limit, rather than the source-file limit", async () => {
+    mocks.convert.mockResolvedValueOnce({ uri: "file:///cache/output.dxf", size: 700 * 1024 * 1024, savedView: "null" });
+    await convertDwgInProcess(new File(["AC1032"], "large.dwg"));
+    expect(mocks.read).toHaveBeenCalledWith(expect.objectContaining({size: 700 * 1024 * 1024}), undefined, MAX_CONVERTED_DXF_BYTES);
+  });
+
+  it("releases a failed allocation and lets the next queued drawing open", async () => {
+    mocks.read.mockRejectedValueOnce(new RangeError("Array buffer allocation failed"));
+    await expect(convertDwgInProcess(new File(["AC1032"], "large.dwg"))).rejects.toMatchObject({code:"DWG_MEMORY_LIMIT"});
+    await expect(convertDwgInProcess(new File(["AC1032"], "next.dwg"))).resolves.toBeInstanceOf(File);
+    expect(mocks.release).toHaveBeenCalledTimes(2);
   });
 });

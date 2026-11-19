@@ -138,7 +138,7 @@ describe("drawing viewer lifecycle", () => {
     const loading = viewer.load(new File(["0\nEOF\n"], "test.dxf"), vi.fn());
     const failed = expect(loading).rejects.toMatchObject({ code: "DXF_OPEN_FAILED" });
     await vi.waitFor(() => expect(state.load).toHaveBeenCalledOnce());
-    await vi.advanceTimersByTimeAsync(3 * 60 * 1000);
+    await vi.advanceTimersByTimeAsync(10 * 60 * 1000);
     await failed;
     expect(FakeWorker.current.terminate).toHaveBeenCalledOnce();
     expect(URL.revokeObjectURL).toHaveBeenCalledOnce();

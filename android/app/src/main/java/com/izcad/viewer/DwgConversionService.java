@@ -95,12 +95,12 @@ public class DwgConversionService extends Service {
                 }
                 @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) { return true; }
                 @Override public boolean onRenderProcessGone(WebView view, RenderProcessGoneDetail detail) {
-                    finish(1, "DWG_CONVERSION_FAILED", "The isolated DWG renderer stopped.", "{}", "null");
+                    finish(1, detail.didCrash() ? "DWG_CONVERSION_FAILED" : "DWG_MEMORY_LIMIT", "The isolated DWG renderer stopped; memory may be exhausted.", "{}", "null");
                     return true;
                 }
             });
             Log.i(TAG, "started pid=" + android.os.Process.myPid() + " inputBytes=" + input.length());
-            main.postDelayed(() -> finish(1, "DWG_CONVERSION_TIMEOUT", "DWG conversion timed out.", "{}", "null"), 180000);
+            main.postDelayed(() -> finish(1, "DWG_CONVERSION_TIMEOUT", "DWG conversion timed out.", "{}", "null"), DrawingLimits.CONVERSION_TIMEOUT_MS);
             webView.loadUrl("https://" + HOST + "/index.html");
         } catch (Exception error) { finish(1, "DWG_RUNTIME_MISSING", error.toString(), "{}", "null"); }
         return START_NOT_STICKY;
@@ -114,7 +114,7 @@ public class DwgConversionService extends Service {
             synchronized (outputLock) {
                 if (finished.get() || output == null) throw new Exception("Conversion is closed.");
                 outputBytes += bytes.length;
-                if (outputBytes > 128L * 1024 * 1024) throw new Exception("Converted drawing exceeds the size limit.");
+                if (outputBytes > DrawingLimits.DXF_BYTES) throw new Exception("Converted drawing exceeds the size limit.");
                 output.write(bytes);
             }
         }

@@ -10,7 +10,7 @@ import {
   type SavedDwgLayerStates,
 } from "../dwg/layerVisibility";
 import { annotateDxfXclips, type SavedDwgSpatialFilters } from "../dwg/xclipMetadata";
-import { MAX_DRAWING_FILE_BYTES } from "../files/fileTypes";
+import { MAX_CONVERTED_DXF_BYTES } from "../files/fileTypes";
 import type {
   AppErrorCode,
   DwgDiagnostic,
@@ -43,13 +43,14 @@ type DwgFailure = {
 };
 
 type LibreDwgFileSystem = {
-  writeFile(path: string, data: Uint8Array): void;
+  writeFile(path: string, data: Uint8Array, options?: { canOwn: boolean }): void;
   readFile(path: string): Uint8Array;
   stat(path: string): { size: number };
   unlink(path: string): void;
 };
 
 type LibreDwgModule = {
+  HEAPU8: Uint8Array;
   FS: LibreDwgFileSystem;
   dwg_abandon(data: number): void;
   dwg_dynapi_entity_value(
@@ -77,6 +78,7 @@ type LibreDwgFactory = (options: {
   locateFile(path: string): string;
   print(message: string): void;
   printErr(message: string): void;
+  onMemoryGrowthFailed(bytes: number): void;
 }) => Promise<LibreDwgModule>;
 
 const workerScope = self as DedicatedWorkerGlobalScope;
@@ -189,6 +191,7 @@ function readSavedDwgMetadata(
   try {
     const result = runtime.dwg_read_file(inputPath);
     data = result.data;
+    if (result.error & 8192) throw new RangeError("DWG metadata allocation failed.");
     // LibreDWG defines CLASSESNOTFOUND (128) and larger codes as critical.
     // Optional layer/view metadata must not traverse an incomplete database.
     if (!data || result.error >= 128) {
@@ -299,7 +302,8 @@ function readSavedDwgMetadata(
       savedView: activeViewportView ?? savedView,
       spatialFilters,
     };
-  } catch {
+  } catch (error) {
+    if (isLikelyMemoryError(error)) throw error;
     return {
       layerStates: null,
       savedView: null,
@@ -359,6 +363,9 @@ async function loadRuntime(
         // LibreDWG CLI output is not needed in the application.
       },
       printErr: onNativeError,
+      onMemoryGrowthFailed: (bytes) => {
+        throw new RangeError(`DWG memory allocation failed (${bytes} bytes requested).`);
+      },
     });
   } catch (error) {
     throw new DwgWorkerError(
@@ -380,6 +387,7 @@ async function convertWithLibreDwg(
 }> {
   const diagnostic = inspectDwgInput(input);
   let nativeError = "";
+  let memoryFailure = false;
   const runtime = await loadRuntime(
     baseUrl,
     diagnostic,
@@ -387,13 +395,17 @@ async function convertWithLibreDwg(
       // Native output can contain drawing metadata. Keep it inside the worker
       // and use it only to recognize memory failures.
       nativeError = String(message).slice(0, 512);
+      memoryFailure ||= isLikelyMemoryError(message);
     },
   );
   const inputPath = "/tmp/izcad-input.dwg";
   const outputPath = "/tmp/izcad-output.dxf";
+  let phase = "read";
 
   try {
+    // Keep the input stable while the runtime reads both geometry and metadata.
     runtime.FS.writeFile(inputPath, new Uint8Array(input));
+    phase = "export";
     const errorValue = runtime.dwg_write_dxf(inputPath, outputPath);
     const diagnosticWithEngineCode: DwgDiagnostic = {
       ...diagnostic,
@@ -408,18 +420,21 @@ async function convertWithLibreDwg(
       );
     }
 
-    if (runtime.FS.stat(outputPath).size > MAX_DRAWING_FILE_BYTES) {
+    if (runtime.FS.stat(outputPath).size > MAX_CONVERTED_DXF_BYTES) {
       throw new DwgWorkerError(
         "FILE_TOO_LARGE",
         "The converted drawing exceeds the viewer's file size limit.",
         diagnosticWithEngineCode,
       );
     }
+    phase = "read-output";
     const rawOutput = runtime.FS.readFile(outputPath);
     // Export from a fresh runtime before optional metadata decoding/freeing.
     // Release the MEMFS copy before reading the source a second time.
     unlinkIfPresent(runtime.FS, outputPath);
+    phase = "metadata";
     const savedMetadata = readSavedDwgMetadata(runtime, inputPath);
+    phase = "annotate";
     const output = annotateDxfXclips(
       restoreDxfLayerStates(
         rawOutput,
@@ -434,6 +449,9 @@ async function convertWithLibreDwg(
     const outputSuffix = output.subarray(
       Math.max(0, output.byteLength - 4096),
     );
+    if (output.byteLength > MAX_CONVERTED_DXF_BYTES) {
+      throw new DwgWorkerError("FILE_TOO_LARGE", "Annotated DXF exceeds the conversion size limit.", diagnosticWithEngineCode);
+    }
     if (
       output.byteLength === 0 ||
       !containsAscii(outputPrefix, "SECTION") ||
@@ -463,10 +481,10 @@ async function convertWithLibreDwg(
 
     throw new DwgWorkerError(
       isLikelyMemoryError(error) ||
-      isLikelyMemoryError(nativeError)
+      memoryFailure || isLikelyMemoryError(nativeError)
         ? "DWG_MEMORY_LIMIT"
         : "DWG_CONVERSION_FAILED",
-      errorMessage(error),
+      `${phase}: ${errorMessage(error)} (heapBytes=${runtime.HEAPU8.byteLength})`,
       diagnostic,
     );
   } finally {

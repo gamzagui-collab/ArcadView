@@ -82,7 +82,7 @@ export function classifyEngineError(value: number): AppErrorCode {
 
 export function isLikelyMemoryError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
-  return /out of memory|memory access out of bounds|cannot enlarge memory|allocation failed|oom/i.test(
+  return /out of memory|not enough memory|memory access out of bounds|cannot enlarge memory|allocat(?:ion|ing|e).*fail|array buffer allocation|invalid (?:array|typed array|string) length|oom/i.test(
     message,
   );
 }

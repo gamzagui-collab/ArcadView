@@ -41,5 +41,7 @@ describe("DWG diagnostics", () => {
       isLikelyMemoryError(new Error("Cannot enlarge memory arrays")),
     ).toBe(true);
     expect(isLikelyMemoryError(new Error("invalid file"))).toBe(false);
+    expect(isLikelyMemoryError("Not enough memory")).toBe(true);
+    expect(isLikelyMemoryError(new RangeError("Invalid string length"))).toBe(true);
   });
 });

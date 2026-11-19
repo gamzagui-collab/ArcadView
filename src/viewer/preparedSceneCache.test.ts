@@ -24,3 +24,9 @@ it("evicts only derived cache entries within its count bound",async()=>{
  const load=vi.fn(async()=>fixture());for(let i=0;i<5;i++)await preparedScene("file"+i,load);
  expect(entries.size).toBe(8);await preparedScene("file4",load);expect(load).toHaveBeenCalledTimes(5);
 });
+it("does not run a second full parse after a cached-scene allocation failure",async()=>{
+ const load=vi.fn(async()=>fixture());await preparedScene("file",load);
+ vi.stubGlobal("caches",{open:async()=>({match:async()=>{throw new RangeError("Array buffer allocation failed");}})});
+ await expect(preparedScene("file",load)).rejects.toMatchObject({code:"DRAWING_MEMORY_LIMIT"});
+ expect(load).toHaveBeenCalledTimes(1);
+});

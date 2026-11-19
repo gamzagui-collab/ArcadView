@@ -1,7 +1,8 @@
 import { registerPlugin } from "@capacitor/core";
 import { AppError, type AppErrorCode, type AppErrorDetails } from "../types/drawing";
 import { readIncomingDrawingFile } from "./incomingDrawing";
-import { replaceExtension, validateDrawingFileSize } from "../files/fileTypes";
+import { replaceExtension, validateDrawingFileSize, MAX_CONVERTED_DXF_BYTES } from "../files/fileTypes";
+import { isLikelyMemoryError } from "../dwg/diagnostics";
 import { normalizeSavedDrawingView, registerSavedDrawingView } from "../viewer/savedView";
 
 interface DwgConversionPlugin {
@@ -44,12 +45,13 @@ async function convertDrawing(file: File, signal?: AbortSignal): Promise<File> {
     const result = await dwgConversionPlugin.convert({ token });
     if (signal?.aborted) throw cancelled();
     const rendered = await readIncomingDrawingFile({ id: token, uri: result.uri, size: result.size,
-      name: replaceExtension(file.name, "dxf"), mimeType: "application/dxf" }, signal);
+      name: replaceExtension(file.name, "dxf"), mimeType: "application/dxf" }, signal, MAX_CONVERTED_DXF_BYTES);
     const savedView = JSON.parse(result.savedView);
     registerSavedDrawingView(rendered, savedView ? normalizeSavedDrawingView(savedView) : null);
     return rendered;
   } catch (error) {
     if (signal?.aborted) throw cancelled();
+    if (isLikelyMemoryError(error)) throw new AppError("DWG_MEMORY_LIMIT", undefined, {cause:error});
     if (error instanceof AppError || error instanceof DOMException) throw error;
     const failure = error as { message?: string; code?: AppErrorCode; data?: AppErrorDetails };
     throw new AppError(failure.code ?? "DWG_CONVERSION_FAILED", failure.message, { details: failure.data, cause: error });

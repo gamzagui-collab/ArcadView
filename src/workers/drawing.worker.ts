@@ -11,6 +11,7 @@ import { installMeasurementTransfer } from "../viewer/packedMeasurement";
 import { installTrianglePrecision } from "../viewer/trianglePrecision";
 import { installBlockLayerColors } from "../viewer/blockColors";
 import { installPreparedSceneCache } from "../viewer/preparedSceneCache";
+import { installLargeDxfReader } from "../viewer/largeDxf";
 
 installHatchSplineCompatibility(DxfScene);
 installAttributeTextCompatibility(AttributeParser, DxfScene);
@@ -21,4 +22,5 @@ installMeasurementTransfer(DxfWorker);
 installTrianglePrecision(DxfScene);
 installBlockLayerColors(DxfScene);
 installPreparedSceneCache(DxfWorker);
+installLargeDxfReader();
 DxfViewer.SetupWorker();

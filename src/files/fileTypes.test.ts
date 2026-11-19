@@ -5,14 +5,26 @@ import {
   getFileExtension,
   isArchiveFormat,
   isCadFormat,
-  MAX_ARCHIVE_FILE_BYTES,
+  MAX_ARCHIVE_FILE_BYTES, MAX_PDF_FILE_BYTES,
   MAX_DRAWING_FILE_BYTES,
+  MAX_CONVERTED_DXF_BYTES,
   replaceExtension,
   toDrawingFile,
   validateDrawingFileSize,
 } from "./fileTypes";
 
 describe("drawing file types", () => {
+  it("admits CAD sources above the previous 128 MiB cap while bounding originals and expanded DXFs separately", () => {
+    for (const name of ["large.dwg", "large.dxf"]) {
+      const file = new File(["cad"], name);
+      Object.defineProperty(file, "size", { value: 200 * 1024 * 1024, configurable: true });
+      expect(toDrawingFile(file).size).toBe(200 * 1024 * 1024);
+      Object.defineProperty(file, "size", { value: MAX_DRAWING_FILE_BYTES + 1 });
+      expect(() => toDrawingFile(file)).toThrow("FILE_TOO_LARGE");
+    }
+    expect(() => validateDrawingFileSize(700 * 1024 * 1024, MAX_CONVERTED_DXF_BYTES)).not.toThrow();
+    expect(() => validateDrawingFileSize(MAX_CONVERTED_DXF_BYTES + 1, MAX_CONVERTED_DXF_BYTES)).toThrow("FILE_TOO_LARGE");
+  });
   it("detects supported extensions without case sensitivity", () => {
     expect(detectDrawingFormat("floor-plan.DXF")).toBe("dxf");
     expect(detectDrawingFormat("model.DwG")).toBe("dwg");
@@ -58,7 +70,7 @@ describe("drawing file types", () => {
     expect(isArchiveFormat("zip")).toBe(true);
     expect(isArchiveFormat("dwg")).toBe(false);
     expect(fileSizeLimit("rar")).toBe(MAX_ARCHIVE_FILE_BYTES);
-    expect(fileSizeLimit("pdf")).toBe(MAX_DRAWING_FILE_BYTES);
+    expect(fileSizeLimit("pdf")).toBe(MAX_PDF_FILE_BYTES);
     expect(() => validateDrawingFileSize(MAX_ARCHIVE_FILE_BYTES + 1, fileSizeLimit("zip")))
       .toThrow("FILE_TOO_LARGE");
   });

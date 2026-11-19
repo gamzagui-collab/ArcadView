@@ -1,9 +1,9 @@
-import { detectDrawingFormat, MAX_ARCHIVE_FILE_BYTES, MAX_DRAWING_FILE_BYTES } from "./fileTypes";
+import { detectDrawingFormat, MAX_ARCHIVE_FILE_BYTES } from "./fileTypes";
 import type { DrawingFormat } from "../types/drawing";
 
 export const ARCHIVE_LIMITS = {
   compressedBytes: MAX_ARCHIVE_FILE_BYTES,
-  entryBytes: MAX_DRAWING_FILE_BYTES,
+  entryBytes: 128 * 1024 * 1024,
   expandedBytes: 128 * 1024 * 1024,
   entries: 1000,
   depth: 16,

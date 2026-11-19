@@ -13,6 +13,16 @@ beforeEach(() => {
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe("bounded drawing content identity", () => {
+  it("identifies sources above 128 MiB using the unchanged v1 algorithm and bounded reads", async () => {
+    const file=new File(["virtual chunked source"],"large.dwg"),bytes=129*CHUNK,chunk=new Blob([new Uint8Array(CHUNK)]);
+    Object.defineProperty(file,"size",{value:bytes});
+    const slice=vi.spyOn(file,"slice").mockImplementation((start=0,end=bytes)=>{
+      expect(end-start).toBeLessThanOrEqual(CHUNK);return chunk;
+    });
+    const result=await prepareDrawingUnitKey(file);expect(result).toMatch(/^v1-[a-f0-9]{64}$/);expect(slice).toHaveBeenCalledTimes(129);
+    expect(saveDrawingUnitPreference(result,{sourceUnit:"mm",displayUnit:"m"})).toBe(true);
+    expect(readDrawingUnitPreference(result)).toEqual({sourceUnit:"mm",displayUnit:"m"});
+  });
   it("matches an independent SHA-256 reference and ignores filename/date/MIME", async () => {
     const digest = createHash("sha256").update(Buffer.concat([
       Buffer.from("izcad-unit-fingerprint-v1\n3\n1048576\n"), createHash("sha256").update("abc").digest(),

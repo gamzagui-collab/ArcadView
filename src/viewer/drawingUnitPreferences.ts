@@ -1,9 +1,10 @@
 import type { MeasurementUnit } from "./measurementGeometry";
+import { MAX_CONVERTED_DXF_BYTES } from "../files/fileTypes";
 
 export type DrawingUnitPreference = { sourceUnit: MeasurementUnit; displayUnit: MeasurementUnit };
 const PREFIX = "izcad.measurement-units.v1.";
 const CHUNK_BYTES = 1024 * 1024;
-const MAX_BYTES = 128 * 1024 * 1024;
+const MAX_BYTES = MAX_CONVERTED_DXF_BYTES;
 const keys = new WeakMap<File, string | null>();
 const validKey = (key: string) => /^v1-[a-f0-9]{64}$/.test(key);
 const units: readonly string[] = ["drawing", "mm", "cm", "m", "in", "ft"];

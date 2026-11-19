@@ -3,9 +3,11 @@ import {
   cp,
   mkdir,
   readFile,
+  writeFile,
   rm,
 } from "node:fs/promises";
 import { resolve } from "node:path";
+import { patchDwgMemoryFailure } from "./dwg-memory-runtime.mjs";
 
 const libreDwgPackageDirectory = resolve(
   "node_modules",
@@ -46,6 +48,9 @@ await Promise.all([
     resolve(destinationDirectory, "libredwg-web.wasm"),
   ),
 ]);
+
+const runtimePath = resolve(destinationDirectory, "libredwg-web.js");
+await writeFile(runtimePath, patchDwgMemoryFailure(await readFile(runtimePath, "utf8")), "utf8");
 
 const pdfPackageDirectory = resolve("node_modules", "pdfjs-dist");
 const pdfDestination = resolve("public", "pdfjs");

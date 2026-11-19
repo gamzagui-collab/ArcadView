@@ -1,16 +1,18 @@
 // Runs only in the private disposable conversion WebView, never the viewer.
 (async () => {
   let worker;
+  const fail = value => { worker?.terminate(); NativeConversion.fail(JSON.stringify(value)); };
+  const code = error => /out of memory|cannot enlarge memory|allocat.*fail|invalid (array|typed array|string) length|oom/i.test(String(error)) ? "DWG_MEMORY_LIMIT" : "DWG_CONVERSION_FAILED";
   try {
     const input = await fetch('/input.dwg', { cache: 'no-store' }).then(response => {
       if (!response.ok) throw Error('Could not read staged DWG.');
       return response.arrayBuffer();
     });
     worker = new Worker(NativeConversion.workerUrl(), { type: 'module' });
-    worker.onerror = event => NativeConversion.fail(JSON.stringify({ code: 'DWG_RUNTIME_MISSING', message: event.message }));
+    worker.onerror = event => fail({ code: code(event.message), message: event.message });
     worker.onmessage = event => {
       const value = event.data;
-      if (value.status !== 'success') { NativeConversion.fail(JSON.stringify(value)); return; }
+      if (value.status !== 'success') { fail(value); return; }
       try {
         const bytes = new Uint8Array(value.output);
         for (let offset = 0; offset < bytes.length; offset += 256 * 1024) {
@@ -21,8 +23,8 @@
         }
         worker.terminate();
         NativeConversion.complete(JSON.stringify(value.savedView));
-      } catch (error) { NativeConversion.fail(JSON.stringify({ code: 'DWG_EXPORT_FAILED', message: String(error) })); }
+      } catch (error) { fail({ code: code(error), message: String(error) }); }
     };
     worker.postMessage({ id: 1, input, baseUrl: location.origin + '/' }, [input]);
-  } catch (error) { NativeConversion.fail(JSON.stringify({ code: 'DWG_CONVERSION_FAILED', message: String(error) })); }
+  } catch (error) { fail({ code: code(error), message: String(error) }); }
 })();

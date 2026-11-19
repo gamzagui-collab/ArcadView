@@ -1,3 +1,4 @@
+import { isLikelyMemoryError } from "../dwg/diagnostics";
 import {
   lazy,
   Suspense,
@@ -79,9 +80,9 @@ function formatBytes(bytes: number, locale: string): string {
 }
 
 function toAppError(error: unknown, fallback: AppErrorCode): AppError {
-  return error instanceof AppError
-    ? error
-    : new AppError(fallback, undefined, { cause: error });
+  if (error instanceof AppError) return error;
+  if (isLikelyMemoryError(error)) return new AppError("DRAWING_MEMORY_LIMIT", undefined, {cause:error});
+  return new AppError(fallback, undefined, { cause: error });
 }
 
 export function App() {

@@ -53,3 +53,6 @@ declare module "dxf-viewer/src/parser/entities/attribute.js" {
 declare module "dxf-viewer/src/DxfWorker.js" {
   export class DxfWorker {}
 }
+declare module "dxf-viewer/src/DxfFetcher.js" {
+  export class DxfFetcher { url: string; encoding: string; Fetch(progress?: (phase:string,received:number,total:number|null)=>void): Promise<any>; }
+}

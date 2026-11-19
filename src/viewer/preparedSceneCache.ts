@@ -1,6 +1,9 @@
+import { MAX_CONVERTED_DXF_BYTES, MAX_DERIVED_CACHE_BYTES } from "../files/fileTypes";
+import { isLikelyMemoryError } from "../dwg/diagnostics";
+import { AppError } from "../types/drawing";
 // Derived data only: original drawings and the library use separate stores.
 const VERSION = "prepared-v2-universal1-xclip2-snap2", DB = "izcad-prepared-scene-index", CACHE = "izcad-prepared-scenes-v1";
-const MAX_BYTES = 1024 ** 3, MAX_ENTRY = 768 * 1024 ** 2, CHUNK = 4 * 1024 ** 2;
+const MAX_BYTES = MAX_DERIVED_CACHE_BYTES, MAX_ENTRY = MAX_CONVERTED_DXF_BYTES, CHUNK = 4 * 1024 ** 2;
 type Header = { key: string; bytes: number; accessed: number; ready: boolean };
 const constructors = { Float32Array, Float64Array, Uint16Array, Uint32Array, Uint8Array, Int32Array };
 const done = (tx: IDBTransaction) => new Promise<void>((resolve, reject) => { tx.oncomplete = () => resolve(); tx.onabort = tx.onerror = () => reject(tx.error); });
@@ -81,7 +84,11 @@ export async function preparedScene(key: string | undefined, load: () => Promise
   if (!key || !globalThis.caches || !globalThis.indexedDB) return load();
   const id=VERSION+":"+key;let cache:Cache;
   try { cache=await caches.open(CACHE); const result=await read(cache,id);if(result){progress?.("prepare",1,1);console.info("[izcad-scene-cache] hit",id);return result;} }
-  catch(error){console.warn("Prepared scene cache unavailable; rebuilding.",error);}
+  catch(error){
+    // Do not immediately run a second full parse after an allocation failure.
+    if(isLikelyMemoryError(error)) throw new AppError("DRAWING_MEMORY_LIMIT", undefined, {cause:error});
+    console.warn("Prepared scene cache unavailable; rebuilding.",error);
+  }
   const result=await load();
   try{cache??=await caches.open(CACHE);await write(cache,id,result);console.info("[izcad-scene-cache] stored",id);}catch(error){console.warn("Could not store prepared scene.",error);if(cache!)await discard(cache,id).catch(()=>undefined);}
   return result;

@@ -24,7 +24,7 @@ import java.util.concurrent.ConcurrentHashMap;
 /** App-private staging only. The drawing library and user source files are never modified. */
 @CapacitorPlugin(name = "DwgConversion")
 public class DwgConversionPlugin extends Plugin {
-    private static final long LIMIT = 128L * 1024 * 1024;
+    private static final long LIMIT = DrawingLimits.SOURCE_BYTES;
     private final ConcurrentHashMap<String, File> sessions = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, PluginCall> pending = new ConcurrentHashMap<>();
 
@@ -109,7 +109,30 @@ public class DwgConversionPlugin extends Plugin {
             Intent intent = new Intent(getContext(), DwgConversionService.class);
             intent.putExtra("token", token); intent.putExtra("receiver", receiver);
             getContext().startService(intent);
+            watchConversion(token, call, android.os.SystemClock.elapsedRealtime(), false);
         } catch (Exception error) { pending.remove(token); call.reject(error.getMessage(), "DWG_RUNTIME_MISSING"); }
+    }
+
+    // ResultReceiver cannot report if Android kills the entire private service.
+    // Reject that pending request so finally/release can clean staging and the
+    // next drawing can open, rather than leaving a permanent loading screen.
+    private void watchConversion(String token, PluginCall call, long started, boolean seen) {
+        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+            if (pending.get(token) != call) return;
+            ActivityManager manager = (ActivityManager) getContext().getSystemService(Context.ACTIVITY_SERVICE);
+            boolean running = false;
+            if (manager.getRunningAppProcesses() != null) for (ActivityManager.RunningAppProcessInfo p : manager.getRunningAppProcesses()) {
+                if ((getContext().getPackageName() + ":dwg_converter").equals(p.processName)) running = true;
+            }
+            long elapsed = android.os.SystemClock.elapsedRealtime() - started;
+            if ((!running && (seen || elapsed > 20000)) || elapsed > DrawingLimits.CONVERSION_TIMEOUT_MS + 30000) {
+                if (pending.remove(token, call)) {
+                    getContext().stopService(new Intent(getContext(), DwgConversionService.class));
+                    boolean timeout = elapsed > DrawingLimits.CONVERSION_TIMEOUT_MS;
+                    call.reject(timeout ? "DWG conversion timed out." : "The isolated conversion process was stopped; memory may be exhausted.", timeout ? "DWG_CONVERSION_TIMEOUT" : seen ? "DWG_MEMORY_LIMIT" : "DWG_RUNTIME_MISSING");
+                }
+            } else watchConversion(token, call, started, seen || running);
+        }, 1000);
     }
 
     @PluginMethod public void release(PluginCall call) {
