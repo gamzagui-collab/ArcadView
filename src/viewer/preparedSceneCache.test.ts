@@ -24,6 +24,12 @@ it("evicts only derived cache entries within its count bound",async()=>{
  const load=vi.fn(async()=>fixture());for(let i=0;i<5;i++)await preparedScene("file"+i,load);
  expect(entries.size).toBe(8);await preparedScene("file4",load);expect(load).toHaveBeenCalledTimes(5);
 });
+it("reuses the same versioned source's old worker-URL cache across Windows and Linux without copying or reparsing",async()=>{
+ const load=vi.fn(async()=>fixture());await preparedScene("source:converter-v2:data:video/mp2t;base64,V2luZG93c1xyXG4=",load);
+ const keys=[...entries.keys()],result=await preparedScene("source:converter-v2",load);
+ expect(load).toHaveBeenCalledTimes(1);expect([...entries.keys()]).toEqual(keys);expect(new Float64Array(result.scene.vertices)[1]).toBe(2);
+ await preparedScene("different-source:converter-v2",load);await preparedScene("source:converter-v3",load);expect(load).toHaveBeenCalledTimes(3);
+});
 it("does not run a second full parse after a cached-scene allocation failure",async()=>{
  const load=vi.fn(async()=>fixture());await preparedScene("file",load);
  vi.stubGlobal("caches",{open:async()=>({match:async()=>{throw new RangeError("Array buffer allocation failed");}})});

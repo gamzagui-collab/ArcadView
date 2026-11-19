@@ -44,12 +44,18 @@ async function discard(cache: Cache, key: string): Promise<void> {
   await Promise.all([cache.delete(url(key,"meta")),cache.delete(url(key,"data")),record(key)]);
 }
 async function read(cache: Cache, key: string): Promise<any | null> {
-  const header = (await headers()).find(h => h.key === key && h.ready);
+  const available = await headers();
+  // Same explicit geometry/font/snap version and source fingerprint only.
+  // Reuse old Windows/Linux worker-source URL suffixes without duplicating
+  // hundreds of MiB or rebuilding a scene that already fits the renderer.
+  const header = available.find(h => h.key === key && h.ready) ??
+    available.filter(h => h.ready && h.key.startsWith(key + ":data:video/mp2t;base64,")).sort((a,b)=>b.accessed-a.accessed)[0];
   if (!header) return null;
-  const [metaResponse, response] = await Promise.all([cache.match(url(key,"meta")),cache.match(url(key,"data"))]);
+  const storedKey = header.key;
+  const [metaResponse, response] = await Promise.all([cache.match(url(storedKey,"meta")),cache.match(url(storedKey,"data"))]);
   if (!metaResponse || !response?.body) throw Error("Incomplete prepared scene");
   const meta = await metaResponse.json();
-  if (meta.version !== VERSION || meta.key !== key || !Array.isArray(meta.sizes) || meta.sizes.some((n: number) => !Number.isSafeInteger(n) || n < 0) || meta.sizes.reduce((n:number,s:number)=>n+s,0) !== header.bytes || header.bytes > MAX_ENTRY) throw Error("Invalid prepared scene metadata");
+  if (meta.version !== VERSION || meta.key !== storedKey || !Array.isArray(meta.sizes) || meta.sizes.some((n: number) => !Number.isSafeInteger(n) || n < 0) || meta.sizes.reduce((n:number,s:number)=>n+s,0) !== header.bytes || header.bytes > MAX_ENTRY) throw Error("Invalid prepared scene metadata");
   const buffers: ArrayBuffer[] = meta.sizes.map((size:number)=>new ArrayBuffer(size));
   const reader = response.body.getReader(); let index = 0, offset = 0, received = 0;
   try { for (;;) { const {done,value} = await reader.read(); if (done) break; received += value.byteLength; let at=0;

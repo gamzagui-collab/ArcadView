@@ -253,7 +253,10 @@ export class DrawingViewer {
       }).options;
       options.fileEncoding = detectDxfEncoding(new Uint8Array(prefix));
       const contentKey = getDrawingUnitKey(file);
-      (options as any).izcadPreparedKey = contentKey && file.size >= 1024 * 1024 ? `${contentKey}:${DWG_CACHE_VERSION}:${new URL("../workers/drawing.worker.ts",import.meta.url).href}` : undefined;
+      // Cache compatibility is versioned by preparedSceneCache.VERSION. A raw
+      // worker source URL also encodes platform line endings and is not stable
+      // between Windows development and Linux release builds.
+      (options as any).izcadPreparedKey = contentKey && file.size >= 1024 * 1024 ? `${contentKey}:${DWG_CACHE_VERSION}` : undefined;
       this.objectUrl = URL.createObjectURL(file);
 
       await Promise.race([
