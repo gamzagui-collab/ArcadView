@@ -2,8 +2,13 @@ import { access, readFile, readdir } from "node:fs/promises";
 import { constants } from "node:fs";
 import { resolve, relative } from "node:path";
 import { createHash } from "node:crypto";
+import { patchSafeAreaSource } from "./patch-capacitor-safe-area.mjs";
 
 const checks = [];
+const capacitorAndroid = JSON.parse(await readFile(resolve("node_modules/@capacitor/android/package.json"), "utf8"));
+const systemBarsSource = await readFile(resolve("node_modules/@capacitor/android/capacitor/src/main/java/com/getcapacitor/plugin/SystemBars.java"), "utf8");
+check("Document-ready Android safe area injection", patchSafeAreaSource(systemBarsSource, capacitorAndroid.version) === systemBarsSource,
+  "Run npm run android:prepare to apply the pinned Capacitor 8.4.3 lifecycle fix.");
 
 async function filesWithin(directory) {
   const entries = await readdir(directory, { withFileTypes: true });

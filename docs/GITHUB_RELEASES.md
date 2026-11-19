@@ -23,6 +23,8 @@
 
 Node.js >=22, JDK21, Android SDK36/build-tools36.0.0을 사용합니다.
 
+`npm ci`와 `android:prepare`는 고정된 Capacitor Android 8.4.3의 safe area 주입 시점만 보정합니다. HTML 루트가 없으면 문서 준비를 기다려 최신 CSS 여백을 적용하며, 네이티브 여백 계산과 실제 오류 보고는 유지합니다. `scripts/patch-capacitor-safe-area.mjs`에 보정 소스가 포함되고 다른 의존성 버전에서는 검토 없이 적용하지 않습니다.
+
 ```powershell
 npm.cmd ci
 npm.cmd test
