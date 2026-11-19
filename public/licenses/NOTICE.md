@@ -1,6 +1,6 @@
 # Arcad View — modification notice
 
-Arcad View 2.1.5, modified on 2026-11-20 by GUI's Arc Industry.
+Arcad View 2.1.6, modified on 2026-11-20 by GUI's Arc Industry.
 Based on orgofjs/izCAD. Original copyright and third-party notices below are retained.
 Source: https://github.com/gamzagui-collab/ArcadView
 License: GPL-3.0-only.

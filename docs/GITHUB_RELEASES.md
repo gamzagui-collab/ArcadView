@@ -36,6 +36,12 @@ npm.cmd run android:prepare
 
 `package.json`의 버전과 `release-config.json`의 versionCode를 올리고 변경 안내를 갱신한 뒤 `v<package version>` 태그를 푸시합니다. GitHub Actions가 테스트 → 서명 빌드 → 소스 ZIP·해시 생성 → 초안 자산 검증 → 정식 공개 순서로 처리합니다. 기존 릴리스 파일을 덮어쓰지 않습니다.
 
+`scripts/github-release.mjs`는 초안 생성 응답의 숫자 ID를 사용합니다. 생성 직후 목록에서 초안을 다시 검색하지 않으며 일시적인 API 오류와 자산 해시 반영 지연에는 제한된 재시도를 적용합니다. 정식 공개 후에는 APK·소스·메타데이터·해시 파일을 다시 내려받아 검증하고 앱이 사용하는 `/releases/latest`도 확인합니다.
+
+같은 태그의 Actions를 재실행할 수 있습니다. 이미 공개된 릴리스는 원래 파일을 검증한 뒤 빌드와 게시를 건너뜁니다. 완료된 초안은 그대로 공개하며, 부분 업로드나 초안 생성 전 중단은 동일 커밋·태그의 보관된 `arcad-view-<tag>` Actions 산출물을 복원해 누락 파일만 업로드합니다. 재빌드로 APK 해시가 바뀌어도 기존 자산을 교체하지 않습니다. 원래 산출물이 만료됐거나 기존 파일 해시가 다르면 삭제·덮어쓰기 없이 명확한 오류로 중단합니다.
+
+수동 재실행은 GitHub의 **Actions → Build and publish Android release → 해당 태그 실행 → Re-run all jobs**입니다. 배포 권한은 `contents: write`, 원래 빌드 복원 권한은 `actions: read`를 사용합니다. 복구용 Actions 산출물에는 APK와 공개 소스·해시만 포함되고 서명 키는 포함되지 않습니다.
+
 Actions에 필요한 암호화된 저장소 Secrets:
 
 - `ARCAD_KEYSTORE_BASE64`

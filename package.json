@@ -1,7 +1,7 @@
 {
   "name": "arcad-view",
   "private": true,
-  "version": "2.1.5",
+  "version": "2.1.6",
   "description": "Arcad View — offline CAD viewing, measurement and markup by GUI's Arc Industry",
   "license": "GPL-3.0-only",
   "author": {
@@ -35,8 +35,9 @@
     "prebuild": "node scripts/patch-capacitor-safe-area.mjs && node scripts/copy-cad-runtime.mjs",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "test": "vitest run && npm run test:safe-area",
+    "test": "vitest run && npm run test:safe-area && npm run test:release",
     "test:safe-area": "node --test scripts/tests/safe-area-patch.mjs",
+    "test:release": "node --test scripts/tests/github-release.mjs",
     "test:watch": "vitest",
     "android:add": "cap add android && node scripts/configure-android.mjs",
     "android:sync": "npm run build && cap sync android && node scripts/configure-android.mjs",
