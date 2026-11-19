@@ -1,5 +1,9 @@
 # Arcad View changes
 
+## 2.1.2 — 2026-11-20
+
+- 초안 릴리스의 자산 검증·공개를 릴리스 ID 기준으로 처리
+
 ## 2.1.1 — 2026-11-20
 
 - GitHub Actions에서 폐기된 Android SDK tools 패키지를 요청하지 않도록 수정

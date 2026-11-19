@@ -70,9 +70,12 @@ jobs:
             exit 1
           fi
           gh release create "$GITHUB_REF_NAME" release-output/* --draft --verify-tag --title "Arcad View $GITHUB_REF_NAME" --notes-file RELEASE_NOTES.md
-          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$GITHUB_REF_NAME" > release-response.json
+          gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" > release-list.json
+          node --input-type=module -e "import fs from 'node:fs';const r=JSON.parse(fs.readFileSync('release-list.json')).find(r=>r.tag_name===process.env.GITHUB_REF_NAME && r.draft);if(!r)throw Error('Draft release not found');fs.writeFileSync('release-response.json',JSON.stringify(r));"
           node --input-type=module -e "import fs from 'node:fs';const r=JSON.parse(fs.readFileSync('release-response.json'));const sums=fs.readFileSync('release-output/SHA256SUMS.txt','utf8').trim().split('\n');for(const row of sums){const [sha,name]=row.split(/  /);const a=r.assets.find(a=>a.name===name);if(!a||a.digest!=='sha256:'+sha)throw Error('Uploaded asset digest mismatch: '+name);}"
-          gh release edit "$GITHUB_REF_NAME" --draft=false --latest
+          RELEASE_ID=$(node -p "JSON.parse(require('node:fs').readFileSync('release-response.json')).id")
+          gh api --method PATCH "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" -F draft=false -f make_latest=true > published-response.json
+          node --input-type=module -e "import fs from 'node:fs';const r=JSON.parse(fs.readFileSync('published-response.json'));if(r.draft||r.tag_name!==process.env.GITHUB_REF_NAME)throw Error('Release was not published');"
       - name: Remove runner signing key
         if: always()
         run: rm -f -- "$RUNNER_TEMP/arcad.keystore"
