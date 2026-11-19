@@ -1,0 +1,8 @@
+izCAD Universal Regular is an offline drawing font derived from NanumGothic
+Regular (NHN Corporation, 2010) with missing CAD symbols from the bundled
+izCAD Symbols font, derived from Noto Sans KR (Adobe/Google).
+
+The derived family has been renamed to respect the reserved Nanum font names.
+Both sources are distributed under the SIL Open Font License 1.1.
+See LICENSE-NANUM-GOTHIC.txt and LICENSE-CAD-SYMBOLS-OFL.txt in public/licenses.
+Reproduction: scripts/build-universal-font.py (fonttools 4.68.0).

@@ -1,8 +1,8 @@
 {
-  "name": "izcad",
+  "name": "arcad-view",
   "private": true,
-  "version": "2.0.0",
-  "description": "Offline open-source DXF and DWG viewer for Android",
+  "version": "2.1.0",
+  "description": "Arcad View — offline CAD viewing, measurement and markup by GUI's Arc Industry",
   "license": "GPL-3.0-only",
   "author": {
     "name": "İZ",
@@ -10,12 +10,12 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/orgofjs/izCAD.git"
+    "url": "git+https://github.com/gamzagui-collab/ArcadView.git"
   },
   "bugs": {
-    "url": "https://github.com/orgofjs/izCAD/issues"
+    "url": "https://github.com/gamzagui-collab/ArcadView/issues"
   },
-  "homepage": "https://sites.google.com/view/izcad-gp-pp/ana-sayfa",
+  "homepage": "https://github.com/gamzagui-collab/ArcadView",
   "keywords": [
     "android",
     "cad",
@@ -41,13 +41,14 @@
     "android:verify": "node scripts/verify-android.mjs",
     "android:verify:release": "node scripts/verify-android-release.mjs",
     "check": "npm run test && npm run android:prepare",
-    "android:prepare": "npm run android:sync && npm run android:verify"
+    "android:prepare": "npm run android:sync && npm run android:verify",
+    "android:ld-debug": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/android-ld-debug.ps1"
   },
   "dependencies": {
     "@capacitor/android": "8.4.3",
     "@capacitor/browser": "8.0.4",
     "@capacitor/core": "8.4.3",
-    "@mlightcad/libredwg-web": "0.7.9",
+    "@mlightcad/libredwg-web": "0.9.0",
     "dxf-viewer": "1.0.48",
     "fflate": "0.8.3",
     "libarchive-wasm": "1.2.0",

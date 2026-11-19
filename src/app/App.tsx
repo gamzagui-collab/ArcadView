@@ -1,25 +1,28 @@
 import {
   lazy,
   Suspense,
-  type MouseEvent,
   useCallback,
   useEffect,
   useRef,
   useState,
 } from "react";
-import { Browser } from "@capacitor/browser";
 import { Capacitor, type PluginListenerHandle } from "@capacitor/core";
 import { DrawingLibrary } from "../components/DrawingLibrary";
 import { ErrorScreen } from "../components/ErrorScreen";
-import { CloseIcon, FolderIcon, ShieldIcon } from "../components/Icons";
+import { CloseIcon, FolderIcon } from "../components/Icons";
 import { LanguageSwitch } from "../components/LanguageSwitch";
 import { LoadingScreen } from "../components/LoadingScreen";
+import { HomeDashboard } from "../components/HomeDashboard";
+import { AboutPanel } from "../components/AboutPanel";
+import { AppUpdateCenter } from "../components/AppUpdateCenter";
+import { Brand, ArcadMark } from "../components/Brand";
 import { ViewerToolbar } from "../components/ViewerToolbar";
-import { MeasurementPanel } from "../components/MeasurementPanel";
+import { MeasurementPanel, MeasurementStatus } from "../components/MeasurementPanel";
 import type { MeasurementPick } from "../viewer/DrawingViewer";
 import type { MeasurementGeometry, MeasurementSettings, MeasurementUnit } from "../viewer/measurementGeometry";
+import { measurementPointsAfterPick } from "../viewer/measurementTools";
+import { saveDrawingUnitPreference, type DrawingUnitPreference } from "../viewer/drawingUnitPreferences";
 import { dispatchBackNavigation, useBackNavigation } from "./backNavigation";
-import { version } from "../../package.json";
 import { convertDwgToDxf } from "../dwg/convertDwg";
 import { isArchiveFormat, toDrawingFile } from "../files/fileTypes";
 import { useI18n } from "../i18n/I18nProvider";
@@ -81,25 +84,22 @@ function toAppError(error: unknown, fallback: AppErrorCode): AppError {
     : new AppError(fallback, undefined, { cause: error });
 }
 
-function openExternalLink(event: MouseEvent<HTMLAnchorElement>): void {
-  if (!Capacitor.isNativePlatform()) {
-    return;
-  }
-
-  event.preventDefault();
-  void Browser.open({ url: event.currentTarget.href }).catch(() => undefined);
-}
-
 export function App() {
   const { locale, t } = useI18n();
   const [state, setState] = useState<AppState>({ status: "home" });
   const [libraryOpen, setLibraryOpen] = useState(false);
+  const [aboutOpen,setAboutOpen]=useState(false);
   const [libraryNotice, setLibraryNotice] = useState(false);
   const [incomingArchive, setIncomingArchive] = useState<File | null>(null);
   const [measurement, setMeasurement] = useState<MeasurementSettings>(emptyMeasurement);
+  const [measurementPanelOpen,setMeasurementPanelOpen]=useState(false);
+  const [annotationOpen,setAnnotationOpen]=useState(false);
+  const [annotationActive,setAnnotationActive]=useState(false);
+  const measurementActivated=useRef(false);
   const [measurementGeometry, setMeasurementGeometry] = useState<MeasurementGeometry | null>(null);
   const [sourceUnit, setSourceUnit] = useState<MeasurementUnit>("drawing");
   const [displayUnit, setDisplayUnit] = useState<MeasurementUnit>("drawing");
+  const unitPreferenceRef = useRef<(DrawingUnitPreference & { key?: string }) | null>(null);
   const [measurementFeedback, setMeasurementFeedback] = useState<string | null>(null);
   const viewerRef = useRef<ViewerHandle>(null);
   const requestIdRef = useRef(0);
@@ -120,7 +120,11 @@ export function App() {
     pendingImportRef.current = null;
     setLibraryNotice(false);
     setMeasurement(emptyMeasurement);
+    setMeasurementPanelOpen(false);
+    setAnnotationOpen(false);setAnnotationActive(false);
+    measurementActivated.current=false;
     setMeasurementGeometry(null);
+    unitPreferenceRef.current = null;
     setMeasurementFeedback(null);
     setIncomingArchive(null);
 
@@ -148,7 +152,7 @@ export function App() {
       status: "loading",
       drawing,
       renderFile: null,
-      phase: drawing.format === "dwg" ? "converting" : "reading",
+      phase: "reading",
       progress: null,
     });
 
@@ -162,6 +166,7 @@ export function App() {
           ? await convertDwgToDxf(
               file,
               conversionController?.signal,
+              () => { if (requestId === requestIdRef.current) setState(current => current.status === "loading" ? { ...current, phase: "converting" } : current); },
             )
           : file;
       if (requestId !== requestIdRef.current) {
@@ -344,11 +349,19 @@ export function App() {
     setMeasurement(emptyMeasurement);
     setIncomingArchive(null);
     setState({ status: "home" });
+    setMeasurementPanelOpen(false);
+    setAnnotationOpen(false);setAnnotationActive(false);
   }, []);
 
   const handleBack = useCallback(() => {
     if (libraryOpen) {
       setLibraryOpen(false);
+    } else if(annotationOpen){
+      setAnnotationOpen(false);
+    } else if(annotationActive){
+      setAnnotationActive(false);
+    } else if (measurementPanelOpen) {
+      setMeasurementPanelOpen(false);
     } else if (measurement.enabled) {
       setMeasurement((current) => ({ ...current, enabled: false }));
     } else if (state.status !== "home") {
@@ -356,7 +369,7 @@ export function App() {
     } else if (Capacitor.isNativePlatform()) {
       void incomingDrawingPlugin.exitApp().catch(() => undefined);
     }
-  }, [closeDrawing, libraryOpen, state.status, measurement.enabled]);
+  }, [closeDrawing, libraryOpen, state.status, measurement.enabled,measurementPanelOpen,annotationOpen,annotationActive]);
   useBackNavigation(handleBack);
 
   useEffect(() => {
@@ -392,20 +405,38 @@ export function App() {
   }, []);
 
   const handleMeasurementReady = useCallback((geometry: MeasurementGeometry) => {
+    const display = geometry.displayUnits ?? geometry.units;
+    unitPreferenceRef.current = { key: geometry.unitPreferenceKey, sourceUnit: geometry.units, displayUnit: display };
     setMeasurementGeometry(geometry);
     setSourceUnit(geometry.units);
-    setDisplayUnit(geometry.units);
+    setDisplayUnit(display);
+  }, []);
+  const handleSourceUnit = useCallback((unit: MeasurementUnit) => {
+    setSourceUnit(unit);
+    setDisplayUnit(unit);
+    const current = unitPreferenceRef.current;
+    if (current) {
+      const next = { ...current, sourceUnit: unit, displayUnit: unit };
+      unitPreferenceRef.current = next;
+      saveDrawingUnitPreference(next.key, next);
+    }
+  }, []);
+  const handleDisplayUnit = useCallback((unit: MeasurementUnit) => {
+    setDisplayUnit(unit);
+    const current = unitPreferenceRef.current;
+    if (current) {
+      const next = { ...current, displayUnit: unit };
+      unitPreferenceRef.current = next;
+      saveDrawingUnitPreference(next.key, next);
+    }
   }, []);
   const handleMeasurementPick = useCallback((pick: MeasurementPick) => {
     setMeasurement((current) => {
       if (!current.enabled) return current;
       if (current.mode === "object") return { ...current, entity: pick.entity, points: [] };
-      const limit = current.mode === "distance" ? 2 : current.mode === "angle" ? 3 : 256;
-      const points = current.points.length >= limit && limit <= 3 ? [] : current.points;
-      if (points.length >= limit) return current;
-      return { ...current, points: [...points, pick.point], entity: null };
+      return { ...current, points: measurementPointsAfterPick(current, pick.point, pick.replaceIndex), entity: null };
     });
-    setMeasurementFeedback(pick.entity ? null : measurement.mode === "object" ? t("measureNoObject") : pick.snapped ? t(({ endpoint: "measureEndpoint", midpoint: "measureMidpoint", center: "measureCenter" } as const)[pick.snapped]) : null);
+    setMeasurementFeedback(pick.entity ? null : measurement.mode === "object" ? t("measureNoObject") : pick.snapped ? t(({ endpoint: "measureEndpoint", midpoint: "measureMidpoint", center: "measureCenter", insertion:"measureInsertion", start: "measureStartPoint",perpendicular:"measurePerpendicular" } as const)[pick.snapped]) : null);
   }, [measurement.mode, t]);
 
   const canvasRequestId = requestIdRef.current;
@@ -438,6 +469,9 @@ export function App() {
           measurement={measurement}
           onMeasurementReady={handleMeasurementReady}
           onMeasurementPick={handleMeasurementPick}
+          annotationActive={annotationActive} annotationOpen={annotationOpen} sourceUnit={sourceUnit} displayUnit={displayUnit}
+          onAnnotationHide={()=>setAnnotationOpen(open=>!open)} onAnnotationPause={()=>setAnnotationActive(false)}
+          onAnnotationActivate={()=>{setAnnotationActive(true);setMeasurement(current=>({...current,enabled:false}));setMeasurementPanelOpen(false);}}
         />}
       </Suspense>
     ) : null;
@@ -447,7 +481,7 @@ export function App() {
     content = (
       <>
         <header className="topbar minimal">
-          <div className="wordmark">izCAD</div>
+          <Brand />
           <LanguageSwitch />
         </header>
         <ErrorScreen
@@ -462,81 +496,7 @@ export function App() {
       </>
     );
   } else if (state.status === "home") {
-    content = (
-      <>
-        <header className="topbar">
-          <div className="wordmark">
-            iz<span>CAD</span>
-          </div>
-          <LanguageSwitch />
-        </header>
-
-        <main className="hero">
-          <div className="hero-graphic" aria-hidden="true">
-            <div className="cad-card card-back">
-              <span />
-              <span />
-              <span />
-            </div>
-            <div className="cad-card card-front">
-              <svg viewBox="0 0 220 160">
-                <path d="M26 124V42h56l25 22h87v60H26Z" />
-                <path d="M43 108V60h31l22 18h78v30H43Z" />
-                <circle cx="145" cy="92" r="10" />
-                <path d="M111 78v30M128 78v30" />
-              </svg>
-              <span className="format-chip">DXF</span>
-            </div>
-          </div>
-
-          <section className="hero-copy">
-            <p className="eyebrow">ANDROID CAD VIEWER</p>
-            <h1>{t("tagline")}</h1>
-            <p className="lead">{t("description")}</p>
-            <button
-              type="button"
-              className="open-button"
-              onClick={() => setLibraryOpen(true)}
-            >
-              <FolderIcon />
-              <span>{t("myDrawings")}</span>
-            </button>
-
-            <div className="feature-row">
-              <div>
-                <span className="feature-dot" />
-                <strong>{t("supportedFormats")}</strong>
-              </div>
-              <div>
-                <ShieldIcon />
-                <strong>{t("offline")}</strong>
-              </div>
-            </div>
-            <p className="privacy-copy">{t("privateFiles")}</p>
-            <nav className="legal-links" aria-label={t("privacyAndLicenses")}>
-              <a
-                href="https://sites.google.com/view/izcad-gp-pp/ana-sayfa"
-                target="_blank"
-                rel="noreferrer"
-                onClick={openExternalLink}
-              >
-                {t("privacyAndLicenses")}
-              </a>
-              <span aria-hidden="true">•</span>
-              <a
-                href="https://github.com/orgofjs/izCAD"
-                target="_blank"
-                rel="noreferrer"
-                onClick={openExternalLink}
-              >
-                {t("sourceCode")}
-              </a>
-            </nav>
-            <p className="version-copy">{t("appVersion")} {version.replace(/\.0$/, "")}</p>
-          </section>
-        </main>
-      </>
-    );
+    content = <HomeDashboard onLibrary={()=>setLibraryOpen(true)} onOpen={openFile} onAbout={()=>setAboutOpen(true)}/>;
   } else if (state.status === "loading") {
     content = (
         <LoadingScreen
@@ -551,11 +511,11 @@ export function App() {
     <>
       <header className="viewer-header">
         <div className="file-heading">
-          <span className="file-format">{state.drawing.format}</span>
+          <ArcadMark className="viewer-brand-mark"/>
           <div>
             <strong>{state.drawing.name}</strong>
             <span>
-              {t("fileSize")}: {formatBytes(state.drawing.size, locale)}
+              <b className="file-format">{state.drawing.format}</b> · {formatBytes(state.drawing.size, locale)}
             </span>
           </div>
         </div>
@@ -585,11 +545,16 @@ export function App() {
       <ViewerToolbar onCommand={sendCommand}
         canMeasure={state.drawing.format !== "pdf"}
         measuring={measurement.enabled}
-        onMeasure={() => setMeasurement((current) => ({ ...current, enabled: !current.enabled }))} />
-      {measurement.enabled && state.drawing.format !== "pdf" ? <MeasurementPanel settings={measurement} geometry={measurementGeometry}
+        panelOpen={measurementPanelOpen}
+        editing={annotationActive} editOpen={annotationOpen} onEdit={()=>{setAnnotationOpen(open=>!open);setAnnotationActive(true);setMeasurement(current=>({...current,enabled:false}));setMeasurementPanelOpen(false);}}
+        onMeasure={() => {setAnnotationActive(false);setAnnotationOpen(false);setMeasurementPanelOpen(open=>!open);if(!measurementActivated.current||annotationActive){measurementActivated.current=true;setMeasurement(current=>({...current,enabled:true}));}}} />
+      {state.drawing.format!=="pdf"&&!annotationActive?<MeasurementStatus settings={measurement} sourceUnit={sourceUnit} displayUnit={displayUnit} feedback={measurementFeedback}
+        onShow={()=>setMeasurementPanelOpen(open=>!open)} onToggle={()=>{measurementActivated.current=true;setMeasurement(current=>({...current,enabled:!current.enabled}));}}/>:null}
+      {measurementPanelOpen && state.drawing.format !== "pdf" ? <MeasurementPanel settings={measurement} geometry={measurementGeometry}
         sourceUnit={sourceUnit} displayUnit={displayUnit} feedback={measurementFeedback}
-        onSettings={(settings) => { setMeasurement(settings); setMeasurementFeedback(null); }}
-        onSourceUnit={(unit) => { setSourceUnit(unit); setDisplayUnit(unit); }} onDisplayUnit={setDisplayUnit} /> : null}
+        onHide={()=>setMeasurementPanelOpen(false)}
+        onSettings={(settings) => { if(settings.enabled)measurementActivated.current=true;setMeasurement(settings); setMeasurementFeedback(null); }}
+        onSourceUnit={handleSourceUnit} onDisplayUnit={handleDisplayUnit} /> : null}
       {libraryNotice ? <div className="library-notice" role="status">{t("librarySaveFailed")}</div> : null}
     </>
     );
@@ -597,8 +562,10 @@ export function App() {
 
   return (
     <div className={`app-shell ${state.status === "home" ? "home" : "viewer-shell"}`}>
-      <div className="canvas-layer" inert={libraryOpen} aria-hidden={libraryOpen}>{canvas}</div>
-      <div className="app-content" hidden={libraryOpen}>{content}</div>
+      <div className="canvas-layer" inert={libraryOpen||aboutOpen} aria-hidden={libraryOpen||aboutOpen}>{canvas}</div>
+      <div className="app-content" hidden={libraryOpen} inert={aboutOpen}>{content}</div>
+      {aboutOpen?<AboutPanel onClose={()=>setAboutOpen(false)}/>:null}
+      <AppUpdateCenter/>
       {libraryOpen ? (
         <div className="library-overlay">
           <DrawingLibrary onClose={() => { setLibraryOpen(false); setIncomingArchive(null); }} onOpen={openFile}

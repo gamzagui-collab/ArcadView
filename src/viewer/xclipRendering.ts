@@ -91,12 +91,10 @@ function addClipShader(
       : 1;
   const suffix = `_${clipCount}`;
   const clipPosition = `izcadClipPosition${suffix}`;
-  const clipOffset = `izcadClipOffset${suffix}`;
   const clipPointCount = `izcadClipPointCount${suffix}`;
   const clipPolygon = `izcadClipPolygon${suffix}`;
   const vertexDeclaration = `
 out vec2 ${clipPosition};
-uniform vec2 ${clipOffset};
 `;
   const fragmentDeclaration = `
 in vec2 ${clipPosition};
@@ -141,7 +139,7 @@ uniform vec2 ${clipPolygon}[${MAX_CLIP_POINTS}];
     .replace(
       "vec4 pos = vec4(position, 0.0, 1.0);",
       `vec4 pos = vec4(position, 0.0, 1.0);
-            ${clipPosition} = position + ${clipOffset};`,
+            ${clipPosition} = position;`,
     );
   material.fragmentShader = material.fragmentShader
     .replace(
@@ -150,19 +148,13 @@ uniform vec2 ${clipPolygon}[${MAX_CLIP_POINTS}];
     );
   material.uniforms = {
     ...material.uniforms,
-    [clipOffset]: {
-      value: new Vector2(
-        clip.blockOffset.x,
-        clip.blockOffset.y,
-      ),
-    },
     [clipPointCount]: { value: points.length },
     [clipPolygon]: {
       value: Array.from(
         { length: MAX_CLIP_POINTS },
         (_, index) => {
           const point = points[index] ?? points[0];
-          return new Vector2(point.x, point.y);
+          return new Vector2(point.x - clip.blockOffset.x, point.y - clip.blockOffset.y);
         },
       ),
     },
@@ -297,10 +289,14 @@ export function installXclipRendering(
           childIndex + offset < newChildren.length;
           offset += 1
         ) {
-          applyClipMaterial(
-            newChildren[childIndex + offset] as RenderObject,
-            nestedClip,
-          );
+          let current: SerializedXclip | undefined = nestedClip;
+          const visited = new Set<string>();
+          while (current) {
+            applyClipMaterial(newChildren[childIndex + offset] as RenderObject, current);
+            const parent: string | undefined = current.parent;
+            if (!parent || visited.has(parent)) break;
+            visited.add(parent); current = scene.izcadNestedXclips[parent];
+          }
         }
       }
       childIndex += count;

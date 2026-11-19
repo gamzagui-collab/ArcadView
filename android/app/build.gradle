@@ -1,7 +1,12 @@
 apply plugin: 'com.android.application'
 
+def appMetadata = new groovy.json.JsonSlurper().parse(rootProject.file('../package.json'))
+def releaseMetadata = new groovy.json.JsonSlurper().parse(rootProject.file('../release-config.json'))
+def distribution = providers.gradleProperty('ARCAD_DISTRIBUTION').orElse('github').get()
+if (!(distribution in ['github', 'play'])) throw new GradleException('ARCAD_DISTRIBUTION must be github or play.')
+
 // Override this for the next unused code in Play Console without changing source.
-def releaseVersionCode = providers.gradleProperty('IZCAD_VERSION_CODE').orElse('4').get()
+def releaseVersionCode = providers.gradleProperty('IZCAD_VERSION_CODE').orElse(releaseMetadata.versionCode.toString()).get()
 if (!(releaseVersionCode ==~ /[1-9][0-9]*/) || releaseVersionCode.toLong() <= 3 || releaseVersionCode.toLong() > 2100000000) {
     throw new GradleException('IZCAD_VERSION_CODE must be an integer from 4 to 2100000000, greater than every code already uploaded to Play Console.')
 }
@@ -24,13 +29,19 @@ android {
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode releaseVersionCode.toInteger()
-        versionName "2.0"
+        versionName appMetadata.version
+        buildConfigField 'boolean', 'GITHUB_UPDATES', (distribution == 'github').toString()
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
              // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
+    }
+    buildFeatures { buildConfig true }
+    sourceSets {
+        debug.manifest.srcFile "src/${distribution}/AndroidManifest.xml"
+        release.manifest.srcFile "src/${distribution}/AndroidManifest.xml"
     }
     signingConfigs {
         if (signingSupplied) {

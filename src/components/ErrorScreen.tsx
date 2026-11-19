@@ -41,7 +41,7 @@ export function ErrorScreen({ error, onOpenLibrary, onRetry, onClose }: Props) {
       <div className="error-symbol" aria-hidden="true">
         !
       </div>
-      <p className="eyebrow">izCAD</p>
+      <p className="eyebrow">Arcad View</p>
       <h1>{t("errorTitle")}</h1>
       <p className="error-copy">{t(errorTranslation[error.code])}</p>
       {diagnostic ? (

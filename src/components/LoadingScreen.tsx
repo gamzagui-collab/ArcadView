@@ -1,5 +1,7 @@
 import type { LoadingPhase } from "../types/drawing";
 import { useI18n } from "../i18n/I18nProvider";
+import { useUx } from "../i18n/ux";
+import { ArcadMark, Blueprint } from "./Brand";
 
 type Props = {
   phase: LoadingPhase;
@@ -15,15 +17,13 @@ export function LoadingScreen({
   onCancel,
 }: Props) {
   const { t } = useI18n();
+  const u=useUx();
   const percent = progress === null ? null : Math.round(progress * 100);
 
   return (
     <main className="center-screen loading-screen" aria-live="polite">
-      <div className="loading-mark" aria-hidden="true">
-        <span />
-        <span />
-        <span />
-      </div>
+      <Blueprint/><div className="loading-brand"><ArcadMark/><strong>Arcad View</strong><small>GUI&apos;s Arc Industry</small></div>
+      <span className="loading-caption">{u.loading}</span>
       <p className="eyebrow">{fileName}</p>
       <h1>{t(phase)}</h1>
       <div

@@ -18,16 +18,31 @@ import {
   fitPaddingForViewport,
 } from "./viewerLayout";
 import {
-  nearestEntity, nearestSnap,
+  nearestEntity, nearestSnap, pointSegmentDistance,
   type MeasurementGeometry, type MeasurementSettings,
   type MeasurableEntity, type SnapPoint,
 } from "./measurementGeometry";
 import type { DrawingPoint } from "./savedView";
+import { nearestPackedEntity, nearestPackedSnap } from "./packedMeasurement";
 import { selectInitialDrawingBounds } from "./initialView";
+import { resolveDrawingDisplayUnit, resolveDrawingMeasurementUnit } from "./verifiedDrawingUnits";
+import { getDrawingUnitKey, prepareDrawingUnitKey } from "./drawingUnitPreferences";
+import { installTrianglePrecisionRendering } from "./trianglePrecision";
+import { MeasurementGesture } from "./measurementGesture";
+import { installCadColorRendering } from "./blockColors";
+import { ViewportCuller } from "./viewportCulling";
+import { DWG_CACHE_VERSION } from "../dwg/conversionCache";
+import { referenceDirections } from "./rightAngles";
+import { isDistanceMode, pathIsClosed, snapToPathStart } from "./measurementTools";
+import { perpendicularSnap, segmentFoot } from "./cadPicking";
+import { masked, visibleEntityFragment, type Annotation } from "./annotations";
 
-export type MeasurementPick = { point: DrawingPoint; snapped: SnapPoint["kind"] | null; entity: MeasurableEntity | null };
+export type MeasurementPick = { point: DrawingPoint; snapped: SnapPoint["kind"] | "start" | "perpendicular" | null; entity: MeasurableEntity | null; replaceIndex?: number };
+export type AnnotationInput = {tool:string;snapping:boolean;anchor?:DrawingPoint;points:DrawingPoint[];onPick(pick:MeasurementPick):void;onPreview(pick:MeasurementPick|null):void};
 
 installXclipRendering(DxfViewer);
+installTrianglePrecisionRendering(DxfViewer);
+installCadColorRendering(DxfViewer);
 
 const LOAD_TIMEOUT_MS = 3 * 60 * 1000;
 const HEADER_BYTES = 64 * 1024;
@@ -54,39 +69,89 @@ export class DrawingViewer {
   private initialFitFrame: number | null = null;
   private geometry: MeasurementGeometry = { units: "drawing", entities: [], snaps: [], limited: false, completeBounds: false, fitBounds: [], fitCompleteBounds: false };
   private measurement: MeasurementSettings | null = null;
-  private readonly touches = new Map<number, { x: number; y: number; time: number; moved: boolean }>();
-  private multiTouch = false;
+  private culler: ViewportCuller | null = null;
+  private anchor: DrawingPoint | null = null;
+  private references: DrawingPoint[] = [];
+  private endAnchor: DrawingPoint | null = null;
+  private endReferences: DrawingPoint[] = [];
+  private annotationInput: AnnotationInput | null = null;
+  private userGeometry: MeasurementGeometry = {units:"drawing",entities:[],snaps:[],limited:false,completeBounds:false,fitBounds:[],fitCompleteBounds:false};
+  private masks: Annotation[] = [];
+  private viewListeners = new Set<()=>void>();
+  private precisionIndex: number | undefined;
+  private controlsBeforeHold: { enablePan: boolean; enableZoom: boolean } | null = null;
+  private readonly gesture = new MeasurementGesture({
+    lock: locked => {
+      const controls = (this.viewer as any)?.controls;
+      if (!controls) return;
+      if (locked && !this.controlsBeforeHold) {
+        this.controlsBeforeHold = { enablePan: controls.enablePan, enableZoom: controls.enableZoom };
+        controls.enablePan = false; controls.enableZoom = false;
+      } else if (!locked && this.controlsBeforeHold) {
+        Object.assign(controls, this.controlsBeforeHold); this.controlsBeforeHold = null;
+      }
+    },
+    preview: position => {const pick=position?this.pickAt(position,true):null;if(this.annotationInput)this.annotationInput.onPreview(pick);else this.onPreview?.(pick);},
+    commit: (position, precision) => {const pick=this.pickAt(position,precision);if(this.annotationInput)this.annotationInput.onPick(pick);else this.onPick?.(pick);},
+  });
   private readonly pointerDown = (event: PointerEvent): void => {
-    if (!this.measurement?.enabled || !this.ready) return;
-    this.touches.set(event.pointerId, { x: event.clientX, y: event.clientY, time: performance.now(), moved: false });
+    if ((!this.measurement?.enabled && !this.annotationInput) || !this.ready || (event.button !== 0 && event.pointerType !== "touch")) return;
+    this.precisionIndex = undefined;
+    if (!this.annotationInput && this.measurement && this.measurement.mode !== "object") {
+      const rect = this.viewer.GetCanvas().getBoundingClientRect();
+      const index = this.projectPoints(this.measurement.points).findIndex(p => Math.hypot(p.x + rect.left - event.clientX, p.y + rect.top - event.clientY) <= 16);
+      // Returning to the first point finishes an open path, including a precision hold.
+      const closing = this.measurement.mode === "path" && index === 0 && this.measurement.points.length >= 3 && !pathIsClosed(this.measurement.points);
+      if (index >= 0 && !closing) this.precisionIndex = index;
+    }
+    this.gesture.down(event.pointerId, { x: event.clientX, y: event.clientY });
     try { this.viewer.GetCanvas().setPointerCapture(event.pointerId); } catch { /* Synthetic events or a detached canvas. */ }
-    if (this.touches.size > 1) this.multiTouch = true;
   };
   private readonly pointerMove = (event: PointerEvent): void => {
-    const start = this.touches.get(event.pointerId);
-    if (start && Math.hypot(event.clientX - start.x, event.clientY - start.y) > 8) start.moved = true;
+    this.gesture.move(event.pointerId, { x: event.clientX, y: event.clientY });
   };
   private readonly pointerCancel = (event: PointerEvent): void => {
-    this.touches.delete(event.pointerId);
-    if (!this.touches.size) this.multiTouch = false;
+    this.gesture.cancel(event.pointerId);
   };
   private readonly pointerUp = (event: PointerEvent): void => {
-    const start = this.touches.get(event.pointerId);
-    const canPick = start && !start.moved && Math.hypot(event.clientX - start.x, event.clientY - start.y) <= 8 && !this.multiTouch && performance.now() - start.time < 1000 && (event.button === 0 || event.pointerType === "touch");
-    this.pointerCancel(event);
-    if (!canPick || !this.measurement?.enabled || !this.ready) return;
+    this.gesture.up(event.pointerId, { x: event.clientX, y: event.clientY });
+  };
+  private pickAt(position: { x: number; y: number }, precision: boolean): MeasurementPick {
+    const editor=this.annotationInput;
+    const measurement:MeasurementSettings=editor?{enabled:true,mode:editor.tool==="polyline"?"path":"distance",points:editor.points,snapping:editor.snapping,entity:null}:this.measurement!;
     const canvas = this.viewer.GetCanvas();
     const rect = canvas.getBoundingClientRect();
-    const v = new Vector3((event.clientX - rect.left) * 2 / rect.width - 1, -(event.clientY - rect.top) * 2 / rect.height + 1, 0).unproject(this.viewer.GetCamera());
+    const v = new Vector3((position.x - rect.left) * 2 / rect.width - 1, -(Math.max(rect.top + 20, position.y) - rect.top) * 2 / rect.height + 1, 0).unproject(this.viewer.GetCamera());
     const origin = this.viewer.GetOrigin();
     let point: DrawingPoint = { x: v.x + origin.x, y: v.y + origin.y };
     const camera = this.viewer.GetCamera();
     const tolerance = 18 * (camera.right - camera.left) / camera.zoom / rect.width;
-    const snapped = this.measurement.snapping && this.measurement.mode !== "object" ? nearestSnap(this.geometry.snaps, point, tolerance) : null;
-    if (snapped) point = { x: snapped.x, y: snapped.y };
-    const entity = this.measurement.mode === "object" ? nearestEntity(this.geometry.entities, point, tolerance) : null;
-    this.onPick?.({ point, snapped: snapped?.kind ?? null, entity });
-  };
+    let snapped:SnapPoint|null = measurement.snapping && measurement.mode !== "object" ?
+      this.geometry.packed ? nearestPackedSnap(this.geometry.packed, point, tolerance) : nearestSnap(this.geometry.snaps, point, tolerance) : null;
+    if(snapped&&masked(snapped,this.masks,this.worldTolerance(3)))snapped=null;
+    const own=measurement.snapping?nearestSnap(this.userGeometry.snaps,point,tolerance):null;
+    if(own&&(!snapped||Math.hypot(own.x-point.x,own.y-point.y)<Math.hypot(snapped.x-point.x,snapped.y-point.y)))snapped=own;
+    const replaceIndex = precision ? this.precisionIndex : undefined;
+    const start = snapToPathStart(measurement, point, tolerance, replaceIndex);
+    const anchor=editor?.anchor??(isDistanceMode(measurement.mode)?measurement.points[replaceIndex===0?1:0]:undefined);
+    let perpendicular:DrawingPoint|null=null;
+    if(measurement.snapping&&anchor){
+      const tol=this.worldTolerance(9),accept=(p:DrawingPoint)=>!masked(p,this.masks,this.worldTolerance(3));
+      perpendicular=perpendicularSnap(this.geometry,anchor,point,tol,accept);
+      const ownFoot=perpendicularSnap(this.userGeometry,anchor,point,tol);
+      if(ownFoot&&(!perpendicular||Math.hypot(ownFoot.x-point.x,ownFoot.y-point.y)<Math.hypot(perpendicular.x-point.x,perpendicular.y-point.y)))perpendicular=ownFoot;
+    }
+    if (start) point = start;
+    else if(perpendicular)point=perpendicular;
+    else if (snapped) point = { x: snapped.x, y: snapped.y };
+    let entity = measurement.mode === "object" || editor?.tool==="select"||editor?.tool==="trim" ?
+      this.geometry.packed ? nearestPackedEntity(this.geometry.packed, point, tolerance, pointSegmentDistance) : nearestEntity(this.geometry.entities, point, tolerance) : null;
+    if(entity)entity=visibleEntityFragment(entity,this.masks,point,tolerance);
+    if(entity){let nearest=Infinity,hit=point;for(let i=1;i<entity.points.length;i++){const q=segmentFoot(point,entity.points[i-1],entity.points[i]);if(q&&Math.hypot(q.x-point.x,q.y-point.y)<nearest){hit=q;nearest=Math.hypot(q.x-point.x,q.y-point.y);}}if(masked(hit,this.masks,this.worldTolerance(3)))entity=null;}
+    if(measurement.mode==="object"){const candidate=nearestEntity(this.userGeometry.entities,point,tolerance);if(candidate)entity=candidate;}
+    if(!editor&&isDistanceMode(measurement.mode))this.updateEndReferences(point);
+    return { point, snapped: start ? "start" : perpendicular ? "perpendicular" : snapped?.kind ?? null, entity, ...(replaceIndex !== undefined ? { replaceIndex } : {}) };
+  }
   private readonly onContextLost = (event: Event): void => {
     event.preventDefault();
     if (this.destroyed) {
@@ -109,6 +174,7 @@ export class DrawingViewer {
     private readonly onError?: (error: unknown) => void,
     private readonly onPick?: (pick: MeasurementPick) => void,
     private readonly onViewChanged?: () => void,
+    private readonly onPreview?: (pick: MeasurementPick | null) => void,
   ) {
     this.viewer = new DxfViewer(container, {
       autoResize: true,
@@ -136,7 +202,17 @@ export class DrawingViewer {
     canvas.addEventListener("pointermove", this.pointerMove);
     canvas.addEventListener("pointerup", this.pointerUp);
     canvas.addEventListener("pointercancel", this.pointerCancel);
-    canvas.addEventListener("__dxf_viewChanged", this.viewChanged);
+    const render = this.viewer.Render.bind(this.viewer);
+    this.viewer.Render = () => {
+      // Three normally refreshes this inside renderer.render(). Project the
+      // overlay with the new camera, rather than the previous frame's inverse.
+      this.viewer.GetCamera().updateMatrixWorld();
+      if ((this.viewer as any).options.izcadCulling !== false) this.culler?.update(this.viewer.GetCamera(),this.viewer.GetCanvas().clientWidth);
+      else this.culler?.restore();
+      if (!this.destroyed) this.onViewChanged?.();
+      if (!this.destroyed) for(const listener of this.viewListeners)listener();
+      render();
+    };
   }
 
   async load(file: File, onProgress: ProgressCallback): Promise<void> {
@@ -151,8 +227,9 @@ export class DrawingViewer {
     this.releaseWorker();
     this.releaseObjectUrl();
     this.savedView = getSavedDrawingView(file);
+    const unitController = new AbortController();
     const interrupted = new Promise<never>((_resolve, reject) => {
-      this.cancelLoad = reject;
+      this.cancelLoad = error => { unitController.abort(); reject(error); };
     });
     const timeout = window.setTimeout(() => {
       if (loadId === this.loadId) {
@@ -165,6 +242,7 @@ export class DrawingViewer {
         file.slice(0, HEADER_BYTES).arrayBuffer(),
         interrupted,
       ]);
+      await Promise.race([prepareDrawingUnitKey(file, unitController.signal), interrupted]);
       if (this.destroyed || loadId !== this.loadId) {
         throw abortError();
       }
@@ -174,12 +252,16 @@ export class DrawingViewer {
         options: { fileEncoding: string };
       }).options;
       options.fileEncoding = detectDxfEncoding(new Uint8Array(prefix));
+      const contentKey = getDrawingUnitKey(file);
+      (options as any).izcadPreparedKey = contentKey && file.size >= 1024 * 1024 ? `${contentKey}:${DWG_CACHE_VERSION}:${new URL("../workers/drawing.worker.ts",import.meta.url).href}` : undefined;
       this.objectUrl = URL.createObjectURL(file);
 
       await Promise.race([
         this.viewer.Load({
           url: this.objectUrl,
-          fonts: [new URL("fonts/IzCadSans-Regular.ttf", document.baseURI).href],
+          fonts: [
+            new URL("fonts/IzCadUniversal-Regular.ttf", document.baseURI).href,
+          ],
           progressCbk: (phase, processed, total) => {
             if (!this.destroyed && loadId === this.loadId) {
               onProgress(phase, processed, total);
@@ -213,6 +295,10 @@ export class DrawingViewer {
       }
       const retained = (this.viewer as unknown as { parsedDxf?: { izcadMeasurement?: MeasurementGeometry } }).parsedDxf;
       this.geometry = retained?.izcadMeasurement ?? { units: "drawing", entities: [], snaps: [], limited: false, completeBounds: false, fitBounds: [], fitCompleteBounds: false };
+      this.geometry.units = resolveDrawingMeasurementUnit(file, this.geometry.units);
+      this.geometry.displayUnits = resolveDrawingDisplayUnit(file, this.geometry.units);
+      this.geometry.unitPreferenceKey = getDrawingUnitKey(file);
+      this.culler = new ViewportCuller((this.viewer as any).scene);
       (this.viewer as unknown as { parsedDxf: unknown }).parsedDxf = null;
       if (!this.applySavedView()) {
         this.fit(true);
@@ -244,6 +330,7 @@ export class DrawingViewer {
       }
       throw error;
     } finally {
+      unitController.abort();
       clearTimeout(timeout);
       if (loadId === this.loadId) {
         this.cancelLoad = null;
@@ -276,14 +363,30 @@ export class DrawingViewer {
     }
   }
 
-  private readonly viewChanged = (): void => { this.onViewChanged?.(); };
-
   getMeasurementGeometry(): MeasurementGeometry { return this.geometry; }
 
   configureMeasurement(settings: MeasurementSettings): void {
+    if (!settings.enabled || settings.mode !== this.measurement?.mode) this.gesture.cancel();
     this.measurement = settings;
-    if (!settings.enabled) { this.touches.clear(); this.multiTouch = false; }
+    const anchor=isDistanceMode(settings.mode)?settings.points[0]:undefined;
+    if(anchor && (anchor.x!==this.anchor?.x||anchor.y!==this.anchor?.y)) {
+      this.anchor=anchor;const c=this.viewer.GetCamera(),canvas=this.viewer.GetCanvas();
+      const tolerance=1.5*(c.right-c.left)/c.zoom/Math.max(1,canvas.clientWidth);
+      this.references=[...(!masked(anchor,this.masks,tolerance)?referenceDirections(this.geometry,anchor,tolerance):[]),...referenceDirections(this.userGeometry,anchor,tolerance)];
+    } else if(!anchor){this.anchor=null;this.references=[];}
+    if(isDistanceMode(settings.mode)&&settings.points[1])this.updateEndReferences(settings.points[1]);else{this.endAnchor=null;this.endReferences=[];}
   }
+  getMeasurementReferences(): readonly DrawingPoint[] { return this.references; }
+  getMeasurementEndReferences(): readonly DrawingPoint[] { return this.endReferences; }
+  private updateEndReferences(point:DrawingPoint):void{
+    if(this.endAnchor?.x===point.x&&this.endAnchor.y===point.y)return;
+    this.endAnchor=point;const tolerance=this.worldTolerance(1.5);
+    this.endReferences=[...(!masked(point,this.masks,tolerance)?referenceDirections(this.geometry,point,tolerance):[]),...referenceDirections(this.userGeometry,point,tolerance)];
+  }
+  worldTolerance(pixels:number):number{const c=this.viewer.GetCamera();return pixels*(c.right-c.left)/c.zoom/Math.max(1,this.viewer.GetCanvas().clientWidth);}
+  configureAnnotations(input:AnnotationInput|null):void{if(input?.tool!==this.annotationInput?.tool)this.gesture.cancel();this.annotationInput=input;}
+  setUserGeometry(geometry:MeasurementGeometry,masks:Annotation[]):void{this.userGeometry=geometry;this.masks=masks;this.anchor=null;this.endAnchor=null;if(this.measurement)this.configureMeasurement(this.measurement);}
+  subscribeView(listener:()=>void):()=>void{this.viewListeners.add(listener);return()=>{this.viewListeners.delete(listener);};}
 
   projectPoints(points: readonly DrawingPoint[]): DrawingPoint[] {
     const camera = this.viewer.GetCamera(), origin = this.viewer.GetOrigin();
@@ -300,6 +403,8 @@ export class DrawingViewer {
       return;
     }
     this.destroyed = true;
+    this.viewListeners.clear();this.annotationInput=null;this.masks=[];this.userGeometry.entities=[];this.userGeometry.snaps=[];
+    this.culler?.restore(); this.culler = null;
     this.ready = false;
     this.cancelInitialFit();
     this.cancelLoad?.(abortError());
@@ -313,8 +418,12 @@ export class DrawingViewer {
     canvas.removeEventListener("pointermove", this.pointerMove);
     canvas.removeEventListener("pointerup", this.pointerUp);
     canvas.removeEventListener("pointercancel", this.pointerCancel);
-    canvas.removeEventListener("__dxf_viewChanged", this.viewChanged);
-    this.touches.clear();
+    this.gesture.cancel();
+    // The parent React state may retain the old geometry for one more commit.
+    // The viewer owns these chunks; after destruction they must not keep
+    // hundreds of MiB alive while the next cached scene is being restored.
+    const packed = this.geometry.packed;
+    if (packed) { packed.data.length=0; packed.refs.length=0; packed.points.length=0; packed.snaps.length=0;if(packed.extraSnaps)packed.extraSnaps.length=0;if(packed.snapSegments)packed.snapSegments.length=0; }
     this.geometry = { units: "drawing", entities: [], snaps: [], limited: false, completeBounds: false, fitBounds: [], fitCompleteBounds: false };
     try {
       this.viewer.Destroy();
@@ -379,6 +488,7 @@ export class DrawingViewer {
       this.geometry.fitCompleteBounds ? selectInitialDrawingBounds(this.viewer.GetBounds(), this.geometry.fitBounds) : this.viewer.GetBounds(),
       origin,
       viewportAspect,
+      this.geometry.fitBounds,
     );
     if (!resolved) {
       return false;

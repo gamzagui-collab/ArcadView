@@ -1,4 +1,20 @@
+# Arcad View — modification notice
+
+Arcad View 2.1.0, modified on 2026-11-20 by GUI's Arc Industry.
+Based on orgofjs/izCAD. Original copyright and third-party notices below are retained.
+Source: https://github.com/gamzagui-collab/ArcadView
+License: GPL-3.0-only.
+
+Modifications include Android DWG memory isolation and caches, Korean fonts,
+measurement and snap improvements, overlay markup layers, Arcad View UX,
+and consent-based GitHub APK updates. Drawing processing stays local;
+only the GitHub distribution's update check/download uses the network.
+
+## Original izCAD notice
+
 # izCAD — NOTICE
+
+Drawing text uses the single offline izCAD Universal family, derived from Nanum Gothic and the bundled CAD symbol subset under SIL OFL 1.1. Original font licenses are retained; see `fonts/IzCadUniversal-NOTICE.txt`.
 
 Copyright (C) 2026 İZ
 
@@ -28,6 +44,8 @@ Projeyle birlikte dağıtılan ilgili lisans metinleri:
 - `LICENSE-CAPACITOR-MIT.txt`
 - `LICENSE-DXF-PARSER-MIT.txt`
 - `LICENSE-FONT-OFL-1.1.txt`
+- `LICENSE-NANUM-GOTHIC.txt`
+- `LICENSE-CAD-SYMBOLS-OFL.txt`
 - `LICENSE-MPL-2.0.txt`
 - `LICENSE-REACT-MIT.txt`
 - `LICENSE-THREE-MIT.txt`

@@ -25,6 +25,11 @@ google-services.json
 # Local caches and inspection files
 .npm-cache/
 .inspection/
+.android-ld-debug.local.json
+/debug-artifacts/
+/release-output/
+.env
+.env.*
 
 # Local-only project material
 /Rules/

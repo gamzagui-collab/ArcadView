@@ -12,6 +12,10 @@ import {
   registerSavedDrawingView,
   type SavedDrawingView,
 } from "../viewer/savedView";
+import { Capacitor } from "@capacitor/core";
+import { convertDwgInProcess, dwgConversionPlugin } from "../native/dwgConversion";
+import { convertWithVerifiedDrawingUnits } from "../viewer/verifiedDrawingUnits";
+import { cachedDwgConversion } from "./conversionCache";
 
 type DwgWorkerResponse =
   | {
@@ -162,7 +166,15 @@ function runConversionWorker(
 export async function convertDwgToDxf(
   file: File,
   signal?: AbortSignal,
+  onConversionStart?: () => void,
 ): Promise<File> {
+  return convertWithVerifiedDrawingUnits(file, () => cachedDwgConversion(file, () => convertDwg(file, signal), signal, onConversionStart), signal);
+}
+
+async function convertDwg(file: File, signal?: AbortSignal): Promise<File> {
+  if (Capacitor.getPlatform() === "android" && (await dwgConversionPlugin.supported()).supported) {
+    return convertDwgInProcess(file, signal);
+  }
   try {
     if (signal?.aborted) {
       throw abortError();

@@ -3,6 +3,7 @@ import {
   useEffect,
   useImperativeHandle,
   useRef,
+  useLayoutEffect,
   useState,
 } from "react";
 import {
@@ -12,8 +13,10 @@ import {
   type ViewerHandle,
 } from "../types/drawing";
 import { DrawingViewer, type MeasurementPick } from "../viewer/DrawingViewer";
-import type { MeasurementGeometry, MeasurementSettings } from "../viewer/measurementGeometry";
-import type { DrawingPoint } from "../viewer/savedView";
+import { convertMeasurement, type MeasurementGeometry, type MeasurementSettings, type MeasurementUnit } from "../viewer/measurementGeometry";
+import { drawMeasurementOverlay } from "../viewer/measurementOverlay";
+import { AnnotationEditor } from "./AnnotationEditor";
+import { measurementValue } from "../viewer/measurementTools";
 
 type Props = {
   file: File;
@@ -27,27 +30,40 @@ type Props = {
   measurement: MeasurementSettings;
   onMeasurementPick(pick: MeasurementPick): void;
   onMeasurementReady(geometry: MeasurementGeometry): void;
+  annotationActive:boolean;
+  annotationOpen:boolean;
+  sourceUnit:MeasurementUnit;
+  displayUnit:MeasurementUnit;
+  onAnnotationHide():void;
+  onAnnotationActivate():void;
+  onAnnotationPause():void;
 };
 
 export const DrawingCanvas = forwardRef<ViewerHandle, Props>(
-  function DrawingCanvas({ file, onProgress, onReady, onError, measurement, onMeasurementPick, onMeasurementReady }, ref) {
+  function DrawingCanvas({ file, onProgress, onReady, onError, measurement, onMeasurementPick, onMeasurementReady,annotationActive,annotationOpen,sourceUnit,displayUnit,onAnnotationHide,onAnnotationActivate,onAnnotationPause }, ref) {
     const containerRef = useRef<HTMLDivElement>(null);
     const viewerRef = useRef<DrawingViewer | null>(null);
+    const [readyViewer,setReadyViewer]=useState<DrawingViewer|null>(null);
+    const unitRef=useRef({sourceUnit,displayUnit});unitRef.current={sourceUnit,displayUnit};
     const callbacksRef = useRef({ onProgress, onReady, onError, onMeasurementPick, onMeasurementReady });
     callbacksRef.current = { onProgress, onReady, onError, onMeasurementPick, onMeasurementReady };
     const measurementRef = useRef(measurement);
     measurementRef.current = measurement;
-    const [projected, setProjected] = useState<DrawingPoint[]>([]);
+    const overlayRef = useRef<SVGSVGElement>(null);
+    const previewRef = useRef<MeasurementPick | null>(null);
     const updateProjection = () => {
       const settings = measurementRef.current;
-      if (!viewerRef.current || !settings.enabled) { setProjected([]); return; }
-      setProjected(viewerRef.current.projectPoints(settings.mode === "object" ? settings.entity?.points ?? [] : settings.points));
+      const viewer = viewerRef.current;
+      if (!viewer || !overlayRef.current) return;
+      const value=measurementValue(settings),u=unitRef.current;
+      const label=value===undefined?undefined:settings.mode==="angle"?`${value.toFixed(1)}°`:`${new Intl.NumberFormat("ko",{maximumFractionDigits:3}).format(convertMeasurement(value,u.sourceUnit,u.displayUnit,settings.mode==="area"))} ${u.displayUnit==="drawing"?"":u.displayUnit}${settings.mode==="area"?"²":""}`;
+      drawMeasurementOverlay(overlayRef.current, settings, points => viewer.projectPoints(points), previewRef.current,viewer.getMeasurementReferences(),viewer.getMeasurementEndReferences(),label);
     };
 
-    useEffect(() => {
+    useLayoutEffect(() => {
       viewerRef.current?.configureMeasurement(measurement);
       updateProjection();
-    }, [measurement]);
+    }, [measurement,sourceUnit,displayUnit]);
 
     useImperativeHandle(
       ref,
@@ -79,7 +95,9 @@ export const DrawingCanvas = forwardRef<ViewerHandle, Props>(
           if (active) {
             callbacksRef.current.onError(error);
           }
-        }, (pick) => { if (active) callbacksRef.current.onMeasurementPick(pick); }, () => { if (active) updateProjection(); });
+        }, (pick) => { if (active) callbacksRef.current.onMeasurementPick(pick); }, () => { if (active) updateProjection(); }, pick => {
+          if (active) { previewRef.current = pick; updateProjection(); }
+        });
       } catch (error) {
         callbacksRef.current.onError(error);
         return;
@@ -95,6 +113,7 @@ export const DrawingCanvas = forwardRef<ViewerHandle, Props>(
         .then(() => {
           if (active) {
             viewer.configureMeasurement(measurementRef.current);
+            setReadyViewer(viewer);
             callbacksRef.current.onMeasurementReady(viewer.getMeasurementGeometry());
             callbacksRef.current.onReady();
           }
@@ -107,6 +126,7 @@ export const DrawingCanvas = forwardRef<ViewerHandle, Props>(
 
       return () => {
         active = false;
+        previewRef.current = null;
         viewerRef.current = null;
         viewer.destroy();
       };
@@ -115,15 +135,8 @@ export const DrawingCanvas = forwardRef<ViewerHandle, Props>(
     return (
       <div className={`drawing-canvas ${measurement.enabled ? "measurement-active" : ""}`}>
         <div ref={containerRef} className="drawing-surface" />
-        {measurement.enabled && projected.length > 0 ? (
-          <svg className="measurement-overlay" aria-hidden="true">
-            {measurement.mode === "area" && projected.length >= 3 ? <polygon points={projected.map((p) => `${p.x},${p.y}`).join(" ")} /> :
-              <polyline points={projected.map((p) => `${p.x},${p.y}`).join(" ")} />}
-            {measurement.mode !== "object" ? projected.map((p, i) => (
-              <g key={i}><circle cx={p.x} cy={p.y} r="5" /><text x={p.x + 11} y={p.y - 11}>{i + 1}</text></g>
-            )) : null}
-          </svg>
-        ) : null}
+        {readyViewer?<AnnotationEditor viewer={readyViewer} active={annotationActive} open={annotationOpen} sourceUnit={sourceUnit} displayUnit={displayUnit} onHide={onAnnotationHide} onActivate={onAnnotationActivate} onPause={onAnnotationPause}/>:null}
+        <svg ref={overlayRef} className="measurement-overlay" aria-hidden="true" />
       </div>
     );
   },

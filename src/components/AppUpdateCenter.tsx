@@ -1,0 +1,43 @@
+import{useCallback,useEffect,useRef,useState}from"react";
+import{Capacitor}from"@capacitor/core";
+import{appUpdates,type UpdateOffer,type UpdateState}from"../native/appUpdates";
+import{shouldCheckUpdate,updateProgress}from"../updates/updatePolicy";
+import{useBackNavigation}from"../app/backNavigation";
+import{useI18n}from"../i18n/I18nProvider";
+import{CloseIcon}from"./Icons";import{ArcadMark}from"./Brand";
+
+const copy={
+ ko:{title:"Arcad View 업데이트",available:"새 버전을 사용할 수 있습니다",view:"업데이트 보기",checking:"새 버전을 확인하고 있습니다…",latest:"최신 버전을 사용 중입니다.",offline:"업데이트를 확인하지 못했습니다. 인터넷 연결 후 다시 시도하세요.",approve:"다운로드 및 업데이트",later:"나중에",privacy:"GitHub에서 APK를 내려받아 검증한 뒤 Android 설치 화면을 엽니다. 원본 도면과 저장 데이터는 유지됩니다.",downloading:"다운로드 및 무결성 검증 중…",failed:"업데이트 파일을 내려받거나 검증하지 못했습니다. 다시 확인해 주세요.",permission:"다운로드와 검증이 완료됐습니다. Android 설정에서 Arcad View의 ‘이 출처 허용’을 켜고 돌아오세요.",allow:"설치 권한 허용",installing:"Android 설치 화면에서 업데이트를 승인하세요.",install:"설치 화면 열기",retry:"다시 확인",disabled:"이 배포판의 업데이트는 설치한 스토어에서 관리합니다.",close:"업데이트 창 닫기",cancel:"다운로드 취소"},
+ en:{title:"Arcad View update",available:"A new version is available",view:"View update",checking:"Checking for updates…",latest:"You're up to date.",offline:"Could not check for updates. Try again when connected.",approve:"Download & update",later:"Later",privacy:"Download the APK from GitHub, verify it, then open the Android installer. Original drawings and saved data are preserved.",downloading:"Downloading & verifying…",failed:"The update could not be downloaded or verified. Check again to retry.",permission:"Download verified. Allow Arcad View to install from this source in Android settings, then return here.",allow:"Allow installation",installing:"Approve the update in the Android installer.",install:"Open installer",retry:"Check again",disabled:"Updates for this distribution are managed by its store.",close:"Close update dialog",cancel:"Cancel download"},
+ tr:{title:"Arcad View güncellemesi",available:"Yeni bir sürüm var",view:"Güncellemeyi gör",checking:"Güncellemeler denetleniyor…",latest:"Güncel sürümü kullanıyorsunuz.",offline:"Güncelleme denetlenemedi. Bağlandığınızda tekrar deneyin.",approve:"İndir ve güncelle",later:"Daha sonra",privacy:"APK GitHub'dan indirilip doğrulanır ve Android yükleyicisi açılır. Özgün çizimler ve kayıtlı veriler korunur.",downloading:"İndiriliyor ve doğrulanıyor…",failed:"Güncelleme indirilemedi veya doğrulanamadı. Tekrar denetleyin.",permission:"İndirme doğrulandı. Android ayarlarında bu kaynaktan yüklemeye izin verip geri dönün.",allow:"Yüklemeye izin ver",installing:"Android yükleyicisinde güncellemeyi onaylayın.",install:"Yükleyiciyi aç",retry:"Tekrar denetle",disabled:"Bu dağıtımın güncellemeleri mağaza tarafından yönetilir.",close:"Güncelleme penceresini kapat",cancel:"İndirmeyi iptal et"},
+};
+type Stage="idle"|"checking"|"available"|"latest"|"error"|"downloading"|"permission"|"installing"|"disabled";
+const LAST="arcad.updates.last-check.v1";
+export function AppUpdateCenter(){
+ const{locale}=useI18n(),w=copy[locale],[state,setState]=useState<UpdateState|null>(null),[stage,setStage]=useState<Stage>("idle"),[open,setOpen]=useState(false),[banner,setBanner]=useState(false),[percent,setPercent]=useState<number|null>(null),[networkError,setNetworkError]=useState(false);
+ const stageRef=useRef(stage),offer=useRef<UpdateOffer|undefined>(undefined),checking=useRef(false),cancelled=useRef(false),dialog=useRef<HTMLElement>(null);stageRef.current=stage;
+ const close=useCallback(()=>{if(stageRef.current==="downloading"){cancelled.current=true;void appUpdates.cancel().catch(()=>undefined);}cancelled.current=true;setOpen(false);setBanner(false);setStage(offer.current?"available":"idle");},[]);
+ useBackNavigation(close,open);
+ const check=useCallback(async(manual:boolean,force=false)=>{
+  if(checking.current||["downloading","permission","installing"].includes(stageRef.current))return;
+  if(!manual&&!force){try{const raw=localStorage.getItem(LAST);if(!shouldCheckUpdate(Date.now(),raw===null?null:Number(raw)))return;}catch{}}
+  if(!Capacitor.isNativePlatform()){if(manual){setStage("disabled");setOpen(true);}return;}
+  checking.current=true;if(manual){setStage("checking");setOpen(true);setBanner(false);}
+  try{const s=await appUpdates.check();setState(s);offer.current=s.offer;setStage(!s.enabled?"disabled":s.offer?"available":"latest");if(s.offer&&!manual)setBanner(true);try{localStorage.setItem(LAST,String(Date.now()));}catch{}}
+  catch{if(manual){setNetworkError(true);setStage("error");}}finally{checking.current=false;}
+ },[]);
+ const install=useCallback(async()=>{const o=offer.current;if(!o||cancelled.current)return;try{const r=await appUpdates.install({token:o.token});if(!cancelled.current)setStage(r.permissionRequired?"permission":"installing");}catch{if(!cancelled.current){setNetworkError(false);setStage("error");}}},[]);
+ useEffect(()=>{const manual=()=>void check(true),timer=setTimeout(()=>void check(false,true),2500);window.addEventListener("arcad:check-updates",manual);let live=true;const subscriptions=Capacitor.isNativePlatform()?[appUpdates.addListener("progress",e=>{if(live)setPercent(updateProgress(e.received,e.total));}),appUpdates.addListener("installerResume",()=>{if(!live)return;if(stageRef.current==="permission")void install();else void check(false);})]:[];return()=>{live=false;clearTimeout(timer);window.removeEventListener("arcad:check-updates",manual);for(const p of subscriptions)void p.then(s=>s.remove()).catch(()=>undefined);};},[check,install]);
+ useEffect(()=>{if(!open)return;const previous=document.activeElement as HTMLElement|null;dialog.current?.querySelector<HTMLButtonElement>('button')?.focus();const nodes=[...document.querySelectorAll<HTMLElement>('.app-content,.canvas-layer,.library-overlay,.about-backdrop')].map(e=>({e,prior:e.inert}));for(const {e}of nodes)e.inert=true;return()=>{for(const {e,prior}of nodes)if(e.isConnected)e.inert=prior;previous?.focus();};},[open]);
+ const approve=async()=>{const o=offer.current;if(!o)return;cancelled.current=false;setPercent(null);setStage("downloading");try{await appUpdates.download({token:o.token});if(!cancelled.current)await install();}catch{if(!cancelled.current){setNetworkError(false);setStage("error");}}};
+ const allow=async()=>{try{await appUpdates.openInstallSettings();}catch{setStage("error");}};
+ const o=state?.offer;
+ return <>
+  {banner&&!open&&o?<aside className="update-banner" role="status"><ArcadMark/><div><strong>Arcad View {o.versionName}</strong><span>{w.available}</span></div><button onClick={()=>{setBanner(false);setOpen(true);}}>{w.view}</button><button className="update-dismiss" aria-label={w.later} onClick={()=>setBanner(false)}>×</button></aside>:null}
+  {open?<div className="update-backdrop"><section ref={dialog} className="update-dialog" role="dialog" aria-modal="true" aria-label={w.title} onKeyDown={e=>{if(e.key!=="Tab")return;const items=[...dialog.current!.querySelectorAll<HTMLElement>('button:not(:disabled),a')].filter(e=>e.getClientRects().length);const first=items[0],last=items.at(-1);if(e.shiftKey&&document.activeElement===first){e.preventDefault();last?.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first?.focus();}}}>
+   <header><ArcadMark/><strong>{w.title}</strong><button className="icon-button" aria-label={w.close} onClick={close}><CloseIcon/></button></header>
+   {stage==="available"&&o?<><h2>{w.available}</h2><p className="update-version">{state?.versionName} → <strong>{o.versionName}</strong><small>{(o.size/1024/1024).toFixed(1)} MB</small></p><p>{w.privacy}</p>{o.notes?<pre className="update-notes">{o.notes}</pre>:null}<div className="update-actions"><button onClick={close}>{w.later}</button><button className="update-approve" onClick={()=>void approve()}>{w.approve}</button></div></>:null}
+   {stage!=="available"?<><p className="update-message" role="status">{stage==="checking"?w.checking:stage==="latest"?w.latest:stage==="downloading"?w.downloading:stage==="permission"?w.permission:stage==="installing"?w.installing:stage==="disabled"?w.disabled:networkError?w.offline:w.failed}</p>{stage==="downloading"?<><progress max={100} value={percent??undefined}/><small>{percent===null?"…":`${percent}%`}</small><button onClick={close}>{w.cancel}</button></>:stage==="permission"?<button className="update-approve" onClick={()=>void allow()}>{w.allow}</button>:stage==="installing"?<button className="update-approve" onClick={()=>void install()}>{w.install}</button>:stage==="error"?<button onClick={()=>void check(true)}>{w.retry}</button>:null}{stage==="latest"&&state?<small>Arcad View {state.versionName} ({state.versionCode})</small>:null}</>:null}
+  </section></div>:null}
+ </>;
+}

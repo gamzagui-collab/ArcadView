@@ -1,7 +1,11 @@
+import { Matrix4, Vector3 } from "three";
+
 export type DxfClipPoint = {
   x: number;
   y: number;
 };
+export type SavedDwgSpatialFilter = { inverseTransform: number[]; transform: number[]; enabled: boolean };
+export type SavedDwgSpatialFilters = ReadonlyMap<string, SavedDwgSpatialFilter>;
 
 type Line = {
   start: number;
@@ -18,6 +22,9 @@ type DxfRecord = {
   pendingDictionaryKey?: string;
   clipPointCount?: number;
   clipPoints: DxfClipPoint[];
+  matrices: number[];
+  enabled?: boolean;
+  skipFrontDistance?: boolean;
 };
 
 type Insertion = {
@@ -117,9 +124,9 @@ function applyInsertions(
  * dictionary here and copy its spatial-filter boundary into ordinary XDATA,
  * which survives dxf-viewer's entity parser.
  */
-export function annotateDxfXclips(source: Uint8Array): Uint8Array {
+export function annotateDxfXclips(source: Uint8Array, savedFilters?: SavedDwgSpatialFilters | null): Uint8Array {
   const dictionaries = new Map<string, Map<string, string>>();
-  const spatialFilters = new Map<string, DxfClipPoint[]>();
+  const spatialFilters = new Map<string, DxfClipPoint[] | null>();
   const inserts: Array<{
     end: number;
     handle: string;
@@ -146,10 +153,12 @@ export function annotateDxfXclips(source: Uint8Array): Uint8Array {
     ) {
       const pointCount =
         current.clipPointCount ?? current.clipPoints.length;
-      spatialFilters.set(
-        current.handle.toLocaleUpperCase("en-US"),
-        current.clipPoints.slice(0, pointCount),
-      );
+      const handle = current.handle.toLocaleUpperCase("en-US"), saved = savedFilters?.get(handle);
+      const metadata = saved ?? (current.matrices.length === 24 ? {
+        inverseTransform: current.matrices.slice(0, 12), transform: current.matrices.slice(12), enabled: current.enabled !== false,
+      } : null);
+      spatialFilters.set(handle, current.enabled === false || metadata?.enabled === false ? null :
+        spatialFilterBlockPoints(current.clipPoints.slice(0, pointCount), metadata));
     } else if (
       current.type === "INSERT" &&
       current.handle &&
@@ -183,6 +192,7 @@ export function annotateDxfXclips(source: Uint8Array): Uint8Array {
         end: source.byteLength,
         dictionaryEntries: new Map(),
         clipPoints: [],
+        matrices: [],
       };
       continue;
     }
@@ -222,6 +232,13 @@ export function annotateDxfXclips(source: Uint8Array): Uint8Array {
 
     if (current.type !== "SPATIAL_FILTER") {
       continue;
+    }
+
+    if (code === 71) current.enabled = value !== "0";
+    if (code === 72 && value === "1") current.skipFrontDistance = true;
+    if (code === 40) {
+      if (current.skipFrontDistance) current.skipFrontDistance = false;
+      else { const n = Number(value); if (Number.isFinite(n)) current.matrices.push(n); }
     }
 
     if (code === 70 && current.clipPointCount === undefined) {
@@ -272,6 +289,24 @@ export function annotateDxfXclips(source: Uint8Array): Uint8Array {
   }
 
   return applyInsertions(source, insertions);
+}
+
+/** Clip-space -> original WCS -> block definition coordinates. Native LibreDWG
+ * omits these matrices from its DXF, so recover them from the same DWG database.
+ * See Autodesk SPATIAL_FILTER DXF reference and ezdxf XClip.get_block_clipping_path.
+ */
+export function spatialFilterBlockPoints(points: readonly DxfClipPoint[], filter: SavedDwgSpatialFilter | null): DxfClipPoint[] {
+  let polygon = [...points];
+  if (polygon.length === 2) {
+    const [a, b] = polygon;
+    polygon = [a, { x: b.x, y: a.y }, b, { x: a.x, y: b.y }];
+  }
+  if (!filter) return polygon;
+  const matrix = (a: number[]) => new Matrix4().set(...[...a.slice(0, 12), 0, 0, 0, 1] as Parameters<Matrix4["set"]>);
+  const clipToWorld = matrix(filter.transform);
+  if (Math.abs(clipToWorld.determinant()) < 1e-15) throw new Error("XCLIP boundary transform is singular.");
+  const toBlock = matrix(filter.inverseTransform).multiply(clipToWorld.invert());
+  return polygon.map(p => { const v = new Vector3(p.x, p.y, 0).applyMatrix4(toBlock); return { x: v.x, y: v.y }; });
 }
 
 export function parseDxfXclip(

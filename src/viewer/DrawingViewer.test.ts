@@ -56,6 +56,16 @@ class FakeErrorEvent extends Event {
 }
 
 describe("drawing viewer lifecycle", () => {
+  it("releases owned packed buffers even when a parent still holds the old geometry", async () => {
+    const viewer = new DrawingViewer({} as HTMLElement);
+    await viewer.load(new File(["0\nEOF\n"], "test.dxf"), vi.fn());
+    const previous = viewer.getMeasurementGeometry();
+    previous.packed = {data:[new Float64Array(7)],refs:[new Uint32Array(3)],points:[new Float64Array(4)],snaps:[new Float64Array(3)],extraSnaps:[new Float64Array(3)],extraSnapCount:1,snapSegments:[new Float64Array(4)],snapSegmentCount:1,kinds:["LINE"],entityCount:1,pointCount:2,snapCount:1};
+    viewer.destroy();
+    expect(previous.packed.data).toHaveLength(0); expect(previous.packed.points).toHaveLength(0);
+    expect(previous.packed.refs).toHaveLength(0); expect(previous.packed.snaps).toHaveLength(0);
+    expect(previous.packed.extraSnaps).toHaveLength(0);expect(previous.packed.snapSegments).toHaveLength(0);
+  });
   beforeEach(() => {
     state.hasRenderer = true;
     state.load.mockReset().mockResolvedValue(undefined);
@@ -266,15 +276,17 @@ describe("drawing viewer lifecycle", () => {
     viewer.destroy();
   });
 
-  it("updates measurement projections after pan and removes the listener on close", async () => {
+  it("updates measurement projections synchronously in the drawing Render call and stops on close", async () => {
     const changed = vi.fn();
     const viewer = new DrawingViewer({} as HTMLElement, undefined, undefined, changed);
     await viewer.load(new File(["0\nEOF\n"], "test.dxf"), vi.fn());
     changed.mockClear();
-    state.current.canvas.dispatchEvent(new Event("__dxf_viewChanged"));
+    state.current.camera.position.x = 100;
+    state.current.Render();
     expect(changed).toHaveBeenCalledOnce();
+    expect(state.current.camera.matrixWorldInverse.elements[12]).toBe(-100);
     viewer.destroy();
-    state.current.canvas.dispatchEvent(new Event("__dxf_viewChanged"));
+    state.current.Render();
     expect(changed).toHaveBeenCalledOnce();
   });
 });

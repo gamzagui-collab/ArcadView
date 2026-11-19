@@ -19,9 +19,9 @@ const libreDwgMetadata = JSON.parse(
   ),
 );
 
-if (libreDwgMetadata.version !== "0.7.9") {
+if (libreDwgMetadata.version !== "0.9.0") {
   throw new Error(
-    `Expected @mlightcad/libredwg-web 0.7.9, found ${libreDwgMetadata.version}.`,
+    `Expected @mlightcad/libredwg-web 0.9.0, found ${libreDwgMetadata.version}.`,
   );
 }
 
@@ -72,6 +72,8 @@ const distributableLicenseFiles = [
   "LICENSE-CAPACITOR-MIT.txt",
   "LICENSE-DXF-PARSER-MIT.txt",
   "LICENSE-FONT-OFL-1.1.txt",
+  "LICENSE-NANUM-GOTHIC.txt",
+  "LICENSE-CAD-SYMBOLS-OFL.txt",
   "LICENSE-FFLATE-MIT.txt",
   "LICENSE-PDFJS-THIRD-PARTY.txt",
   "LICENSE-LIBARCHIVE-WASM-MIT.txt",

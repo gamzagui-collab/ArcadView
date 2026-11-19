@@ -12,6 +12,7 @@ import {
   type Locale,
   type TranslationKey,
 } from "./translations";
+import { resolveLocale } from "./locale";
 
 const STORAGE_KEY = "izcad.locale";
 
@@ -30,11 +31,7 @@ function getInitialLocale(): Locale {
   } catch {
     // The interface remains usable when device storage is unavailable.
   }
-  if (stored === "en" || stored === "tr") {
-    return stored;
-  }
-
-  return navigator.language.toLowerCase().startsWith("tr") ? "tr" : "en";
+  return resolveLocale(navigator.language, stored);
 }
 
 export function I18nProvider({ children }: PropsWithChildren) {

@@ -9,6 +9,11 @@ function header(version: string, codePage: string, newline = "\r\n"): Uint8Array
 }
 
 describe("DXF text encoding", () => {
+  it("decodes Korean legacy DXF using Windows-949", () => {
+    const encoding = detectDxfEncoding(header("AC1018", "ANSI_949"));
+    expect(encoding).toBe("euc-kr");
+    expect(new TextDecoder(encoding).decode(new Uint8Array([0xc7, 0xd1, 0xb1, 0xdb]))).toBe("한글");
+  });
   it("uses the saved Turkish code page for an older drawing", () => {
     expect(detectDxfEncoding(header("AC1018", "ANSI_1254"))).toBe("windows-1254");
     expect(new TextDecoder(detectDxfEncoding(header("AC1018", "ANSI_1254")))

@@ -9,7 +9,7 @@ function RecoveryScreen({ onReset }: { onReset(): void }) {
     <div className="app-shell">
       <main className="center-screen error-screen" role="alert">
         <div className="error-symbol" aria-hidden="true">!</div>
-        <p className="eyebrow">izCAD</p>
+        <p className="eyebrow">Arcad View</p>
         <h1>{t("errorTitle")}</h1>
         <p className="error-copy">{t("renderFailed")}</p>
         <button type="button" className="open-button" onClick={onReset}>{t("retryDrawing")}</button>

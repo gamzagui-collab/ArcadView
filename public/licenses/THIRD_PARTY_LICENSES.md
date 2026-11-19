@@ -1,5 +1,7 @@
 # izCAD — Üçüncü Taraf Açık Kaynak Bildirimleri
 
+izCAD Universal is a renamed, derived SIL OFL 1.1 font combining the bundled Nanum Gothic and CAD symbol subset. See `fonts/IzCadUniversal-NOTICE.txt`, `LICENSE-NANUM-GOTHIC.txt`, and `LICENSE-CAD-SYMBOLS-OFL.txt`.
+
 Son güncelleme: 10 Ekim 2026 — uygulama sürümü 2.0
 
 Bu belge, izCAD Android uygulamasının çalışma zamanında kullanılan başlıca
@@ -16,7 +18,7 @@ projeden ve dağıtım varlıklarından kaldırılmıştır.
 | dxf-viewer içindeki dxf-parser türevi | 1.0.48 ile birlikte | MIT | `LICENSE-DXF-PARSER-MIT.txt` |
 | @capacitor/core ve @capacitor/android | 8.4.3 | MIT | `LICENSE-CAPACITOR-MIT.txt` |
 | @capacitor/browser | 8.0.4 | MIT | `LICENSE-CAPACITOR-MIT.txt` |
-| @mlightcad/libredwg-web | 0.7.9 | GPL-3.0-only | `LICENSE` |
+| @mlightcad/libredwg-web | 0.9.0 | GPL-3.0-only | `LICENSE` |
 | PDF.js (`pdfjs-dist`) | 6.4.299 | Apache License 2.0; ek varlık lisansları aşağıda | `LICENSE-APACHE-2.0.txt`, `LICENSE-PDFJS-THIRD-PARTY.txt` |
 | fflate | 0.8.3 | MIT | `LICENSE-FFLATE-MIT.txt` |
 | libarchive-wasm JavaScript bağları | 1.2.0 | MIT | `LICENSE-LIBARCHIVE-WASM-MIT.txt` |
@@ -27,6 +29,8 @@ projeden ve dağıtım varlıklarından kaldırılmıştır.
 | XZ Utils liblzma (arşiv WASM içinde) | 5.6.4 | BSD Zero Clause (0BSD) | `LICENSE-XZ-0BSD.txt` |
 | Emscripten JavaScript/WASM çalışma zamanı ve musl/LLVM yardımcıları | libarchive-wasm derlemesindeki Emscripten 4.0.5 | MIT/NCSA; musl bileşen bildirimleri; Apache-2.0 WITH LLVM-exception ve ilgili eski LLVM lisansları | `LICENSE-EMSCRIPTEN.txt`, `LICENSE-MUSL.txt`, `LICENSE-LLVM.txt` |
 | Liberation Sans tabanlı IzCadSans-Regular.ttf | 2.1.5 | SIL Open Font License 1.1 | `LICENSE-FONT-OFL-1.1.txt` |
+| Nanum Gothic Regular (çevrimdışı Korece CAD yazı tipi) | 3.020 | SIL Open Font License 1.1 | `LICENSE-NANUM-GOTHIC.txt` |
+| izCAD Symbols (Noto Sans KR tabanlı, U+2205/U+33A1 alt kümesi) | 1.0; Noto 2.004 | SIL Open Font License 1.1 | `LICENSE-CAD-SYMBOLS-OFL.txt` |
 | AndroidX, Android Core SplashScreen ve Apache Cordova Android çalışma zamanı | Gradle dosyalarında sabitlenen sürümler | Apache License 2.0 | `LICENSE-APACHE-2.0.txt` |
 
 Bağımlılıkların kaynak depoları:
@@ -35,8 +39,10 @@ Bağımlılıkların kaynak depoları:
 - Three.js: https://github.com/mrdoob/three.js
 - dxf-viewer: https://github.com/vagran/dxf-viewer
 - Capacitor: https://github.com/ionic-team/capacitor
-- LibreDWG WebAssembly: https://github.com/mlightcad/libredwg-web
+- LibreDWG WebAssembly: https://github.com/mlightcad/libredwg-web/tree/v0.9.0
 - GNU LibreDWG: https://github.com/LibreDWG/libredwg
+- Nanum Gothic: https://github.com/google/fonts/tree/5bd87dfc525c8a0d1d8529d3684716e00c3fc59a/ofl/nanumgothic
+- izCAD Symbols kaynak yazı tipi: https://github.com/notofonts/noto-cjk/blob/523d033d6cb47f4a80c58a35753646f5c3608a78/Sans/Variable/TTF/Subset/NotoSansKR-VF.ttf
 - PDF.js: https://github.com/mozilla/pdf.js/tree/v6.4.299
 - fflate: https://github.com/101arrowz/fflate
 - libarchive-wasm: https://github.com/ofk/libarchive-wasm/tree/v1.2.0
@@ -50,6 +56,9 @@ Bağımlılıkların kaynak depoları:
 - Apache Cordova Android: https://github.com/apache/cordova-android
 
 ## Telif bildirimleri
+
+- Nanum Gothic: NHN Corporation; Sandoll Communications Inc. SIL OFL 1.1; özgün bildirim `LICENSE-NANUM-GOTHIC.txt` dosyasındadır.
+- izCAD Symbols: Noto Sans KR kaynak telif bildirimi font metadata içinde korunur; SIL OFL 1.1. Yeniden üretim: `scripts/build-cad-symbol-font.py`.
 
 - React: Copyright (c) Meta Platforms, Inc. and affiliates.
 - Three.js: Copyright © 2010-2024 three.js authors.
@@ -119,14 +128,14 @@ koşulları korunur.
 
 ## GPL-3.0-only dağıtım notu
 
-izCAD'in DWG motoru `@mlightcad/libredwg-web@0.7.9` ve uygulamanın ana lisansı
+izCAD'in DWG motoru `@mlightcad/libredwg-web@0.9.0` ve uygulamanın ana lisansı
 GPL-3.0-only'dir. Bir APK başka kişilere verildiğinde, APK ile birebir eşleşen
 tam ve karşılık gelen kaynak kodun erişilebilir olması gerekir. GitHub yayını
 en az şunları içermelidir:
 
 - izCAD kaynak kodunun APK ile eşleşen sürüm etiketi,
 - `package-lock.json` ve kullanılan tüm derleme betikleri,
-- `libredwg-web` 0.7.9 ve temel aldığı LibreDWG kaynak sürümü/commit'i,
+- `libredwg-web` 0.9.0 ve temel aldığı LibreDWG kaynak sürümü/commit'i,
 - Varsa izCAD veya LibreDWG için yapılan değişiklikler ve yamalar,
 - Dağıtılan WebAssembly dosyasını yeniden üretmek için gereken talimatlar.
 

@@ -83,6 +83,14 @@ function clippedInsert() {
 }
 
 describe("XCLIP scene preparation", () => {
+  it("keeps a root block with nested clipping instanced when it would otherwise flatten", () => {
+    installXclipScenePreparation(FakeDxfScene);
+    const scene = new FakeDxfScene();
+    scene.blocks.set("PARENT", { flatten: true, offset: {x:0,y:0}, data: {name:"PARENT"} });
+    scene.izcadNestedXclips = { nested: { rootBlockName: "PARENT", points: [{x:0,y:0},{x:10,y:10}] } };
+    scene._ProcessInsert({ type:"INSERT", name:"PARENT" });
+    expect(scene.blocks.get("PARENT").flatten).toBe(false);
+  });
   it("gives a clipped insert an individual non-flattened block", async () => {
     installXclipScenePreparation(FakeDxfScene);
     const scene = new FakeDxfScene();

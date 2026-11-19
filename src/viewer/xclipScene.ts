@@ -28,6 +28,7 @@ type ParsedDxf = {
 export type SerializedXclip = {
   points: DxfClipPoint[];
   blockOffset: DxfClipPoint;
+  parent?: string;
 };
 
 type SerializedScene = {
@@ -61,6 +62,7 @@ type DxfSceneInstance = {
     {
       rootBlockName: string;
       points: DxfClipPoint[];
+      parent?: string;
     }
   >;
   izcadNestedClipSequence?: number;
@@ -168,8 +170,8 @@ export function installXclipScenePreparation(
     blockContext?: BlockContext | null,
   ): void {
     if (
-      !blockContext &&
-      entity.name?.startsWith(XCLIP_BLOCK_PREFIX)
+      !blockContext && entity.name &&
+      (entity.name.startsWith(XCLIP_BLOCK_PREFIX) || Object.values(this.izcadNestedXclips ?? {}).some(clip => clip.rootBlockName === entity.name))
     ) {
       const block = this.blocks.get(entity.name);
       if (block) {
@@ -203,6 +205,7 @@ export function installXclipScenePreparation(
         nestedContext.izcadNestedClip = marker;
         this.izcadNestedXclips![marker] = {
           rootBlockName: blockContext.block.data.name,
+          parent: inheritedClip,
           points: clipPoints.map(({ x, y }) => {
             const point = new Vector2(x, y).applyMatrix3(
               nestedContext.transform,
@@ -293,6 +296,7 @@ export function installXclipScenePreparation(
       serializedNested[marker] = {
         points: clip.points,
         blockOffset: { x: offset.x, y: offset.y },
+        parent: clip.parent,
       };
     }
     if (Object.keys(serializedNested).length > 0) {

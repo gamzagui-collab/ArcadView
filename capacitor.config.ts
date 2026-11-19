@@ -2,7 +2,7 @@ import type { CapacitorConfig } from "@capacitor/cli";
 
 const config: CapacitorConfig = {
   appId: "com.izcad.viewer",
-  appName: "izCAD",
+  appName: "Arcad View",
   webDir: "dist",
   plugins: {
     SystemBars: {

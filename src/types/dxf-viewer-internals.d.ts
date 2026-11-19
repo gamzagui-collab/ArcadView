@@ -37,3 +37,19 @@ declare module "dxf-viewer/src/parser/DxfParser.js" {
     };
   }
 }
+
+declare module "dxf-viewer/src/TextRenderer.js" {
+  export class TextRenderer {
+    constructor(fontFetchers: Array<() => Promise<unknown>>);
+    FetchFonts(text: string): Promise<boolean>;
+    Render(options: {
+      text: string; startPos: { x: number; y: number }; fontSize: number; color: number;
+    }): Iterable<{ vertices: Array<{ x: number; y: number }> }>;
+  }
+}
+declare module "dxf-viewer/src/parser/entities/attribute.js" {
+  export default class AttributeParser {}
+}
+declare module "dxf-viewer/src/DxfWorker.js" {
+  export class DxfWorker {}
+}

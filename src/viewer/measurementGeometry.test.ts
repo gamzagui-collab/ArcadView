@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import DxfParser from "dxf-viewer/src/parser/DxfParser.js";
+import { nearestPackedSnap, packedEntity } from "./packedMeasurement";
 import { selectInitialDrawingBounds } from "./initialView";
 import {
   buildMeasurementGeometry,
@@ -198,7 +199,7 @@ describe("measurement source geometry", () => {
   it("rejects a line crossing a concave clipped gap even when both endpoints are visible", () => {
     const geometry = buildMeasurementGeometry(clipped([{ x: 0.5, y: 3 }, { x: 3.5, y: 3 }], "0,0;4,0;4,4;3,4;3,1;1,1;1,4;0,4"));
     expect(geometry.entities).toHaveLength(0);
-    expect(geometry.snaps).toHaveLength(2);
+    expect(geometry.snaps.filter(p=>p.kind!=="insertion")).toHaveLength(2);
   });
 
   it("bounds points, snaps, recursion and tessellation work without returning a partial object length", () => {
@@ -263,7 +264,7 @@ describe("measurement worker preparation", () => {
     await scene.Build(dxf);
     expect(scene.calls).toBe(1);
     expect(Object.keys(dxf)).toEqual(["izcadMeasurement"]);
-    expect(dxf.izcadMeasurement?.entities[0].length).toBe(5);
+    expect(packedEntity(dxf.izcadMeasurement!.packed!, 0).length).toBe(5);
   });
 
   it("captures actual decomposed text triangles once and transforms nested text fit bounds", async () => {
@@ -312,7 +313,7 @@ describe("measurement worker preparation", () => {
     expect(geometry.fitBounds[1]).toEqual({ minX: 0, minY: -4, maxX: 5, maxY: 0 });
     expect(geometry.fitBounds[2]).toEqual({ minX: 50, minY: 60, maxX: 50, maxY: 60 });
     expect(geometry.entities).toHaveLength(0);
-    expect(geometry.snaps).toEqual([{ x: 50, y: 60, kind: "endpoint" }]);
+    expect(nearestPackedSnap(geometry.packed!, { x: 50, y: 60 }, 0)).toEqual({ x: 50, y: 60, kind: "endpoint" });
   });
 
   it("fits normal text-bearing CAD around a remote point while keeping a significant text-only sheet", () => {

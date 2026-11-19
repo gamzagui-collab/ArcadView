@@ -1,3 +1,15 @@
+# Arcad View changes
+
+## 2.1.0 — 2026-11-20
+
+- Arcad View / GUI's Arc Industry 브랜드와 남색·파랑 UX
+- 오버레이 레이어·그리기·텍스트·치수·선택·이동·삭제·트림
+- 대형 DWG 반복 열기, 변환/화면 캐시, 단위 기억과 블록·해치 스냅
+- GitHub 승인 업데이트, APK 해시·패키지·버전·서명 검증
+- 서명 APK·전체 소스·해시를 게시하는 GitHub Actions
+
+## Upstream history
+
 # izCAD 2.0 — 10 Ekim 2026
 
 Mevcut koyu tema, renkler, ikonlar ve ana ekran tasarımı korunmuştur.

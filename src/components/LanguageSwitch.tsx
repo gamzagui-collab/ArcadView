@@ -7,6 +7,15 @@ export function LanguageSwitch() {
     <div className="language-switch" aria-label={t("language")}>
       <button
         type="button"
+        className={locale === "ko" ? "active" : ""}
+        aria-pressed={locale === "ko"}
+        onClick={() => setLocale("ko")}
+      >
+        한국어
+      </button>
+      <span aria-hidden="true" />
+      <button
+        type="button"
         className={locale === "tr" ? "active" : ""}
         aria-pressed={locale === "tr"}
         onClick={() => setLocale("tr")}

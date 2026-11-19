@@ -1,0 +1,9 @@
+izCAD Symbols Regular 1.0
+Derived from Noto Sans KR 2.004; original copyright/license metadata retained.
+Licensed under SIL OFL 1.1; see licenses/LICENSE-CAD-SYMBOLS-OFL.txt.
+
+This renamed, static TrueType subset contains U+2205 and U+33A1.
+Reproduce with scripts/build-cad-symbol-font.py and fonttools==4.68.0.
+Source: https://raw.githubusercontent.com/notofonts/noto-cjk/523d033d6cb47f4a80c58a35753646f5c3608a78/Sans/Variable/TTF/Subset/NotoSansKR-VF.ttf
+Source SHA-256: 9e1d729e7e2b36f9ef439da102f8c134c10aabe46f1c843bf0aca5c043b86f76
+Subset SHA-256: 9d237b2e3d115f50cc971fbb762bf63b9324c843abff3b7cb8154333bfbc55ab

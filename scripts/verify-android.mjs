@@ -106,6 +106,8 @@ const requiredPackagedNotices = [
   "LICENSE",
   "LICENSE-APACHE-2.0.txt",
   "LICENSE-MPL-2.0.txt",
+  "LICENSE-NANUM-GOTHIC.txt",
+  "LICENSE-CAD-SYMBOLS-OFL.txt",
   "LICENSE-FFLATE-MIT.txt",
   "LICENSE-PDFJS-THIRD-PARTY.txt",
   "LICENSE-LIBARCHIVE-WASM-MIT.txt",
@@ -148,10 +150,10 @@ check(
   "Google Play app updates require target API 36 from August 31, 2026.",
 );
 check(
-  "Release version 2.0",
-  /versionName\s+"2\.0"/.test(appGradle) && packageJson.version === "2.0.0" &&
-    (/versionCode\s+4\b/.test(appGradle) || /IZCAD_VERSION_CODE/.test(appGradle) && /orElse\('4'\)/.test(appGradle)),
-  "Package version must be 2.0.0; Android versionName 2.0 and default versionCode 4 (override above the highest Play code).",
+  "Release version metadata",
+  /versionName\s+appMetadata\.version/.test(appGradle) && /^\d+\.\d+\.\d+$/.test(packageJson.version) && /releaseMetadata\.versionCode/.test(appGradle),
+  "Version name and code come from package.json and release-config.json."
+
 );
 check(
   "Stable application identity",
@@ -160,8 +162,8 @@ check(
 );
 check(
   "Application name",
-  /<string name="app_name">izCAD<\/string>/.test(strings),
-  'Android launcher name must be "izCAD".',
+  /<string name="app_name">Arcad View<\/string>/.test(strings) && capacitorConfig.appName === "Arcad View",
+  'Android launcher and Capacitor app names must be "Arcad View".',
 );
 check(
   "No broad storage permissions",
@@ -169,9 +171,9 @@ check(
   "Use Android file picker URI grants without shared-storage permissions.",
 );
 check(
-  "No Android internet permission",
+  "Offline base manifest",
   !/android\.permission\.INTERNET/.test(manifest),
-  "The offline application must not request INTERNET permission.",
+  "The base manifest stays offline; GitHub updater permissions belong only to its distribution overlay.",
 );
 check(
   "Private library backup disabled",
@@ -184,6 +186,20 @@ check(
   "Restricted file sharing provider",
   !/<(?:root|external)-path\b/.test(filePaths) && /<cache-path\b[^>]*path="shared\/"/.test(filePaths),
   "FileProvider may expose only the explicit shared drawing cache directory.",
+);
+check(
+  "Debug-only native WebView inspection",
+  /super\.onCreate\(savedInstanceState\);[\s\S]*WebView\.setWebContentsDebuggingEnabled\(\s*\(getApplicationInfo\(\)\.flags & ApplicationInfo\.FLAG_DEBUGGABLE\) != 0\s*\)/.test(mainActivity),
+  "Native inspection follows the installed debuggable flag after Capacitor initializes; release remains disabled.",
+);
+const isolatedConverter = await readFile(resolve("android/app/src/main/java/com/izcad/viewer/DwgConversionService.java"), "utf8");
+check(
+  "Private isolated DWG conversion process",
+  /<service\b[^>]*android:name="\.DwgConversionService"[^>]*android:process=":dwg_converter"[^>]*android:exported="false"/.test(manifest) &&
+    /setDataDirectorySuffix\("dwg_converter"\)/.test(isolatedConverter) &&
+    /FLAG_DEBUGGABLE/.test(isolatedConverter) && /MIXED_CONTENT_NEVER_ALLOW/.test(isolatedConverter) &&
+    /setAllowFileAccess\(false\)/.test(isolatedConverter) && /setAllowContentAccess\(false\)/.test(isolatedConverter),
+  "The private converter uses a separate WebView profile, no file/content access or mixed content, and debug-only inspection.",
 );
 check(
   "Production WebView security",
@@ -309,6 +325,14 @@ check(
   ),
   "Run npm run android:sync to copy the offline drawing font.",
 );
+check(
+  "Offline Korean drawing font",
+  await exists(resolve("public", "fonts", "NanumGothic-Regular.ttf")) &&
+    await exists(resolve(androidWebRoot, "fonts", "NanumGothic-Regular.ttf")) &&
+    await exists(resolve(androidWebRoot, "fonts", "IzCadSymbols-Regular.ttf")),
+  "Bundle Nanum Gothic and CAD symbols for offline Korean TEXT and MTEXT rendering.",
+);
+  check("Universal offline drawing font", await exists(resolve(androidWebRoot, "fonts", "IzCadUniversal-Regular.ttf")), "Bundle the single renamed OFL font family with Korean and CAD symbols.");
 check(
   "Android open-source notices",
   await Promise.all(

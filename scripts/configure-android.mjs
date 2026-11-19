@@ -49,11 +49,11 @@ manifest = replaceRequired(manifest, /<application\b[^>]*>/, (tag) => {
 }, "offline application manifest");
 
 let gradle = await readFile(gradlePath, "utf8");
-gradle = replaceRequired(gradle, /versionName\s+"[^"]+"/, 'versionName "2.0"', "Android version name");
+gradle = replaceRequired(gradle, /versionName\s+(?:"[^"]+"|appMetadata\.version)/, 'versionName appMetadata.version', "Android version name from package metadata");
 // Existing builds keep their release-code override and optional signing settings.
 gradle = gradle.replace(/versionCode\s+([0-3])\b/, "versionCode 4");
 
 await writeFile(variablesPath, variables, "utf8");
 await writeFile(manifestPath, manifest, "utf8");
 await writeFile(gradlePath, gradle, "utf8");
-console.log("Android 2.0 configured: API 26+, target/compile API 36, offline permissions, private library backup disabled.");
+console.log("Android configured: API 26+, target/compile API 36, offline permissions, private library backup disabled.");

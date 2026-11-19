@@ -32,7 +32,7 @@
 .measurement-panel { position: absolute; z-index: 3; right: 14px; left: 14px; bottom: calc(94px + env(safe-area-inset-bottom)); max-width: 480px; max-height: calc(100dvh - 190px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); margin: 0 auto; overflow: auto; padding: 12px 14px; border: 1px solid var(--line); border-radius: 18px; background: rgba(13, 23, 32, 0.96); backdrop-filter: blur(18px); box-shadow: 0 10px 32px rgba(0, 0, 0, 0.32); }
 .measurement-title { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: .85rem; }
 .measurement-title .icon-button { width: 32px; height: 32px; border-radius: 9px; }
-.measurement-modes { display: grid; grid-template-columns: repeat(5, 1fr); gap: 3px; margin: 8px 0; }
+.measurement-modes { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 3px; margin: 8px 0; }
 .measurement-modes button, .measurement-actions button { min-height: 34px; padding: 5px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); color: var(--text); font-size: .63rem; cursor: pointer; }
 .measurement-modes button[aria-pressed="true"] { border-color: var(--accent); background: rgba(255, 181, 71, .13); color: var(--accent-bright); }
 .measurement-result { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; min-height: 30px; color: var(--accent-bright); font-variant-numeric: tabular-nums; }
@@ -1560,3 +1560,100 @@ a:focus-visible {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Compact measurement picker; hiding it never changes the active tool. */
+.viewer-shell .measurement-panel { left: 14px; right: auto; bottom: calc(140px + env(safe-area-inset-bottom)); width: min(340px, calc(100% - 28px)); max-width: none; margin: 0; padding: 8px 10px; border-radius: 12px; max-height: calc(100dvh - 235px); backdrop-filter: none; background: rgba(13,23,32,.98); }
+.viewer-shell .measurement-title { gap: 7px; font-size: .72rem; }
+.viewer-shell .measurement-title .icon-button { flex: 0 0 28px; width: 28px; height: 28px; }
+.viewer-shell .measurement-result { flex: 1; min-height: 0; justify-content: flex-end; gap: 2px 6px; padding-right: 22px; }
+.viewer-shell .measurement-result strong { font-size: 1rem; }
+.viewer-shell .measurement-result span { font-size: .59rem; }
+.viewer-shell .measurement-modes { margin: 5px 0; }
+.measurement-linear-axis { display: flex; align-items: center; gap: 8px; margin: 4px 0; font-size: .62rem; color: var(--muted); }
+.measurement-linear-axis select { min-height: 28px; padding: 2px 5px; background: var(--surface-2); color: var(--text); border: 1px solid var(--line); border-radius: 6px; }
+.viewer-shell .measurement-modes button, .viewer-shell .measurement-actions button { min-height: 32px; padding: 3px 6px; }
+.viewer-shell .measurement-options { gap: 5px 8px; justify-content: space-between; }
+.viewer-shell .measurement-options label { gap: 3px; font-size: .59rem; }
+.viewer-shell .measurement-options select { min-height: 30px; max-width: 75px; }
+.viewer-shell .measurement-actions { margin-top: 5px; gap: 5px; }
+.viewer-shell .measurement-actions .measurement-feedback { display: none; }
+.viewer-shell .measurement-snap { display: flex; align-items: center; gap: 5px; font-size: .62rem; color: var(--muted); margin-right: auto; }
+.viewer-shell .measurement-snap input { width: 18px; height: 18px; accent-color: var(--accent); margin: 0; }
+.measurement-help summary { position: absolute; top: 12px; right: 45px; font-size: 0; cursor: pointer; }
+.measurement-help summary::after { content: '?'; font-size: 12px; display: grid; place-items: center; width: 19px; height: 19px; border: 1px solid var(--line); border-radius: 50%; color: var(--muted); }
+.measurement-help summary::marker { content: ''; }
+.measurement-help .measurement-instruction { font-size: .62rem; margin: 5px 0; }
+.measurement-status { position: absolute; left: 14px; bottom: calc(94px + env(safe-area-inset-bottom)); z-index: 3; display: flex; gap: 3px; align-items: stretch; max-width: calc(100% - 28px); padding: 3px; border: 1px solid var(--line); border-radius: 9px; background: rgba(13,23,32,.96); color: var(--muted); }
+.measurement-status.is-active { border-color: rgba(255,181,71,.45); }
+.measurement-status button { border: 0; background: transparent; cursor: pointer; color: inherit; }
+.measurement-status-copy { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 9px; padding: 4px 6px; text-align: left; font-size: .62rem; }
+.measurement-status-result { color: var(--accent-bright); font-size: .8rem; }
+.measurement-status-copy small { color: #65e3a4; font-size: .6rem; }
+.measurement-status .measurement-toggle { min-width: 32px; min-height: 32px; border-left: 1px solid var(--line); color: var(--accent-bright); }
+/* Two bright rails over a dark halo remain readable on dense CAD linework. */
+.measurement-overlay .measurement-line-halo { stroke: #020a11; stroke-width: 12; fill: none; }
+.measurement-overlay .measurement-line-rails { stroke: #63d5ff; stroke-width: 8; fill: none; }
+.measurement-overlay .measurement-line-core { stroke: #082c46; stroke-width: 3; fill: none; }
+.measurement-overlay .measurement-line-highlight { stroke: #ecfbff; stroke-width: 1; fill: none; }
+.measurement-overlay .measurement-value-badge { fill:#06375a; stroke:#99eaff; stroke-width:1.5; }
+.measurement-overlay .measurement-value-label { fill:#fff; stroke:none; font-size:14px; font-weight:800; }
+.measurement-overlay .measurement-area-fill { stroke: none; fill: rgba(57,183,255,.1); }
+.measurement-overlay .measurement-extension-halo { stroke: #03101d; stroke-width: 4; fill: none; stroke-dasharray: 5 4; }
+.measurement-overlay .measurement-extension { stroke: #b3eaff; stroke-width: 1.5; fill: none; stroke-dasharray: 5 4; }
+.measurement-overlay .measurement-point-border { stroke: #03101d; stroke-width: 3; fill: none; }
+.measurement-overlay .measurement-point-ring { stroke: #86e2ff; stroke-width: 2; fill: none; }
+.measurement-overlay .measurement-point-dot { stroke: #03101d; stroke-width: 1; fill: #effcff; }
+.measurement-overlay .measurement-target, .measurement-overlay .measurement-target-cross { stroke: #86e2ff; stroke-width: 2; fill: none; }
+.measurement-overlay text { fill: #b6edff; }
+.measurement-overlay .measurement-right-angle-halo { fill: none; stroke: #03101d; stroke-width: 5; stroke-linejoin: miter; }
+.measurement-overlay .measurement-right-angle { fill: none; stroke: #65e3a4; stroke-width: 2.5; stroke-linejoin: miter; }
+@media (min-width: 700px) and (min-height: 600px) {
+  .viewer-shell .measurement-panel { bottom: calc(65px + env(safe-area-inset-bottom)); }
+  .measurement-status { bottom: calc(20px + env(safe-area-inset-bottom)); }
+}
+
+.viewer-toolbar.with-edit { grid-template-columns:repeat(6,minmax(0,1fr)); }
+.annotation-overlay { position:absolute;inset:0;width:100%;height:100%;z-index:1;pointer-events:none;overflow:hidden; }
+.annotation-target-overlay { z-index:2; }
+.annotation-overlay polyline { fill:none;stroke-linejoin:round;stroke-linecap:round; }
+.annotation-line { stroke-width:2; }
+.annotation-line.selected { stroke-width:3.5;stroke-dasharray:8 3; }
+.annotation-halo { stroke-width:5; }
+.annotation-extension { stroke-width:1.2; }
+.annotation-mask { stroke-width:7; }
+.annotation-mask-selected { stroke-width:2;stroke-dasharray:5 4; }
+.annotation-dimension-text { font-family:system-ui,sans-serif;font-weight:700;stroke:#07111b;stroke-width:3;paint-order:stroke;stroke-linejoin:round; }
+.annotation-panel { position:absolute;z-index:4;left:14px;bottom:calc(140px + env(safe-area-inset-bottom));width:min(360px,calc(100% - 28px));max-height:calc(100dvh - 245px);overflow:auto;padding:10px;background:rgba(12,26,39,.98);border:1px solid #355069;border-radius:12px;color:var(--text);font-size:.65rem; }
+.annotation-panel header { display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:.75rem; }
+.annotation-panel header span { margin-left:auto;color:var(--muted); }
+.annotation-panel button { min-height:30px;padding:4px 7px;background:#142d42;color:var(--text);border:1px solid #355069;border-radius:6px;cursor:pointer; }
+.annotation-panel button:disabled { opacity:.4;cursor:default; }
+.annotation-panel button[aria-pressed=true] { border-color:#68d5ff;background:#07416b; }
+.user-layers>div { display:flex;align-items:center;gap:6px;padding:3px 4px;border:1px solid transparent;border-radius:6px; }
+.user-layers>div.active { border-color:#4ba6db; }
+.user-layers input { accent-color:#3ab6ff; }
+.user-layers .layer-name { min-width:0;flex:1;width:100%;background:#102638;color:var(--text);border:1px solid #355069;border-radius:4px;padding:3px;font-size:.65rem; }
+.user-layers input[type=color] { padding:0;width:25px;height:25px;border:0;background:transparent; }
+.add-user-layer { width:100%;margin:5px 0; }
+.annotation-tools { display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px; }
+.annotation-tools button { font-size:.6rem; }
+@font-face { font-family:ArcadAnnotation;src:url('/fonts/NanumGothic-Regular.ttf') format('truetype');font-display:swap; }
+.annotation-user-text { font-family:ArcadAnnotation,system-ui,sans-serif;font-weight:400;stroke:#07111b;stroke-width:2;paint-order:stroke;white-space:pre; }
+.annotation-text-selection { stroke-width:1;stroke-dasharray:4 3; }
+.annotation-text-options { display:flex;flex-wrap:wrap;gap:6px;align-items:end;padding-top:7px; }
+.annotation-text-options label { display:flex;flex-direction:column;gap:4px;flex:1;min-width:100px; }
+.annotation-text-options label:first-child { flex-basis:100%; }
+.annotation-text-options textarea,.annotation-text-options input { width:100%;padding:5px;min-height:30px;background:#102638;color:var(--text);border:1px solid #355069;border-radius:5px;font-size:.7rem; }
+.annotation-panel:focus-within { bottom:8px;max-height:calc(100dvh - 110px); }
+.annotation-options,.annotation-actions { display:flex;gap:7px;align-items:center;margin-top:7px; }
+.annotation-options label { display:flex;gap:4px;align-items:center; }
+.annotation-options label:last-child { margin-left:auto; }
+.annotation-options input[type=number] { width:60px;min-height:27px;background:#102638;color:var(--text);border:1px solid #355069;border-radius:4px; }
+.annotation-help { color:#afc9da;font-size:.6rem;line-height:1.4;margin:6px 0; }
+.annotation-actions button { flex:1; }
+.annotation-save,.annotation-restore { display:block;font-size:.57rem;color:#79d5ff;margin-top:5px; }
+.annotation-restore { color:var(--muted); }
+.annotation-status { position:absolute;left:14px;bottom:calc(94px + env(safe-area-inset-bottom));z-index:4;display:flex;background:#0c2031;border:1px solid #3b91bc;border-radius:8px;padding:3px;color:#b5ecff;max-width:calc(100% - 28px);font-size:.65rem; }
+.annotation-status button { border:0;background:transparent;color:inherit;padding:4px 7px;min-height:32px;cursor:pointer; }
+.annotation-status small { margin-left:8px;color:#7dc0d8; }
+@media (min-width:700px) and (min-height:600px) { .annotation-panel { bottom:calc(65px + env(safe-area-inset-bottom)); } .annotation-status { bottom:calc(20px + env(safe-area-inset-bottom)); } }

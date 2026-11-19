@@ -85,6 +85,7 @@ export function resolveSavedDrawingView(
   bounds: DrawingBounds | null,
   origin: DrawingPoint,
   viewportAspect: number,
+  entityBounds: readonly DrawingBounds[] = [],
 ): ResolvedDrawingView | null {
   if (
     !view ||
@@ -150,6 +151,37 @@ export function resolveSavedDrawingView(
     width / fitWidth > MAX_SAVED_VIEW_FIT_RATIO
   ) {
     return null;
+  }
+
+  // A viewport can intersect the overall extents while sitting in the empty
+  // gap between distant blocks. Keep the saved zoom, but anchor that empty
+  // view to a dense group of actual geometry. This only moves the camera;
+  // the fit-all command and all drawing coordinates remain unchanged.
+  const visibleBounds = entityBounds.filter((box) =>
+    Object.values(box).every(isFiniteNumber) &&
+    box.minX <= box.maxX && box.minY <= box.maxY,
+  );
+  if (visibleBounds.length > 0 && !visibleBounds.some((box) =>
+    viewMaxX >= box.minX && viewMinX <= box.maxX &&
+    viewMaxY >= box.minY && viewMinY <= box.maxY,
+  )) {
+    const cells = new Map<string, { count: number; x: number; y: number }>();
+    let densest: { count: number; x: number; y: number } | undefined;
+    for (const box of visibleBounds) {
+      if (box.maxX - box.minX > halfWidth || box.maxY - box.minY > halfHeight) continue;
+      const x = box.minX + (box.maxX - box.minX) / 2;
+      const y = box.minY + (box.maxY - box.minY) / 2;
+      const key = `${Math.floor(x / halfWidth)},${Math.floor(y / halfHeight)}`;
+      const cell = cells.get(key) ?? { count: 0, x: 0, y: 0 };
+      cell.count++;
+      cell.x += x;
+      cell.y += y;
+      cells.set(key, cell);
+      if (!densest || cell.count > densest.count) densest = cell;
+    }
+    if (!densest) return null;
+    center.x = densest.x / densest.count - origin.x;
+    center.y = densest.y / densest.count - origin.y;
   }
 
   return {

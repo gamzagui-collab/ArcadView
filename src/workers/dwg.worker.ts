@@ -9,7 +9,7 @@ import {
   type SavedDwgLayerState,
   type SavedDwgLayerStates,
 } from "../dwg/layerVisibility";
-import { annotateDxfXclips } from "../dwg/xclipMetadata";
+import { annotateDxfXclips, type SavedDwgSpatialFilters } from "../dwg/xclipMetadata";
 import { MAX_DRAWING_FILE_BYTES } from "../files/fileTypes";
 import type {
   AppErrorCode,
@@ -62,6 +62,9 @@ type LibreDwgModule = {
   dwg_obj_layer_get_name(layer: number): string;
   dwg_obj_table_get_name(table: number): string;
   dwg_object_get_fixedtype(object: number): number;
+  dwg_object_get_dxfname(object: number): string;
+  dwg_object_get_handle_object(object: number): { value: bigint | number };
+  dwg_ptr_to_double_array(pointer: number, count: number): number[];
   dwg_object_to_object_tio(object: number): number;
   dwg_read_file(inputPath: string): {
     data: number;
@@ -172,6 +175,7 @@ function dynapiPoint(
 type SavedDwgMetadata = {
   layerStates: SavedDwgLayerStates | null;
   savedView: SavedDrawingView | null;
+  spatialFilters: SavedDwgSpatialFilters | null;
 };
 
 function readSavedDwgMetadata(
@@ -185,21 +189,34 @@ function readSavedDwgMetadata(
   try {
     const result = runtime.dwg_read_file(inputPath);
     data = result.data;
-    const fatalReadErrorMask = 1024 | 2048 | 4096 | 8192;
-    if (!data || (result.error & fatalReadErrorMask) !== 0) {
+    // LibreDWG defines CLASSESNOTFOUND (128) and larger codes as critical.
+    // Optional layer/view metadata must not traverse an incomplete database.
+    if (!data || result.error >= 128) {
       return {
         layerStates: null,
         savedView: null,
+        spatialFilters: null,
       };
     }
 
     const states = new Map<string, SavedDwgLayerState>();
+    const spatialFilters = new Map<string, { inverseTransform: number[]; transform: number[]; enabled: boolean }>();
     let savedView: SavedDrawingView | null = null;
     let activeViewportView: SavedDrawingView | null = null;
     const objectCount = runtime.dwg_get_num_objects(data);
     for (let index = 0; index < objectCount; index += 1) {
       const object = runtime.dwg_get_object(data, index);
       const fixedType = runtime.dwg_object_get_fixedtype(object);
+      if (fixedType > 500 && runtime.dwg_object_get_dxfname(object) === "SPATIAL_FILTER") {
+        const filter = runtime.dwg_object_to_object_tio(object);
+        const array = (field: string) => { const pointer = dynapiNumber(runtime, filter, field); return pointer ? runtime.dwg_ptr_to_double_array(pointer, 12) : []; };
+        const inverseTransform = array("inverse_transform"), transform = array("transform");
+        if (inverseTransform.length === 12 && transform.length === 12 && [...inverseTransform, ...transform].every(Number.isFinite)) {
+          const handle = runtime.dwg_object_get_handle_object(object).value.toString(16).toUpperCase();
+          spatialFilters.set(handle, { inverseTransform, transform, enabled: dynapiBoolean(runtime, filter, "display_boundary_on") });
+        }
+        continue;
+      }
       if (fixedType === viewportType) {
         const viewport = runtime.dwg_object_to_object_tio(object);
         const center = dynapiPoint(runtime, viewport, "VIEWCTR");
@@ -280,11 +297,13 @@ function readSavedDwgMetadata(
     return {
       layerStates: states.size > 0 ? states : null,
       savedView: activeViewportView ?? savedView,
+      spatialFilters,
     };
   } catch {
     return {
       layerStates: null,
       savedView: null,
+      spatialFilters: null,
     };
   } finally {
     if (data) {
@@ -375,7 +394,6 @@ async function convertWithLibreDwg(
 
   try {
     runtime.FS.writeFile(inputPath, new Uint8Array(input));
-    const savedMetadata = readSavedDwgMetadata(runtime, inputPath);
     const errorValue = runtime.dwg_write_dxf(inputPath, outputPath);
     const diagnosticWithEngineCode: DwgDiagnostic = {
       ...diagnostic,
@@ -398,11 +416,16 @@ async function convertWithLibreDwg(
       );
     }
     const rawOutput = runtime.FS.readFile(outputPath);
+    // Export from a fresh runtime before optional metadata decoding/freeing.
+    // Release the MEMFS copy before reading the source a second time.
+    unlinkIfPresent(runtime.FS, outputPath);
+    const savedMetadata = readSavedDwgMetadata(runtime, inputPath);
     const output = annotateDxfXclips(
       restoreDxfLayerStates(
         rawOutput,
         savedMetadata.layerStates,
       ),
+      savedMetadata.spatialFilters,
     );
     const outputPrefix = output.subarray(
       0,

@@ -111,4 +111,27 @@ describe("saved drawing view", () => {
       2,
     )).toBeNull();
   });
+
+  it("recenters a saved viewport in an empty gap without changing its zoom or source coordinates", () => {
+    const visible = [
+      { minX: 10, maxX: 12, minY: 10, maxY: 12 },
+      { minX: 12, maxX: 14, minY: 12, maxY: 14 },
+      { minX: 900, maxX: 902, minY: 900, maxY: 902 },
+    ];
+    const resolved = resolveSavedDrawingView(
+      { center: { x: 500, y: 500 }, viewHeight: 40, aspectRatio: 2 },
+      { minX: 0, minY: 0, maxX: 1000, maxY: 1000 },
+      { x: 5, y: 5 }, 2, visible,
+    );
+    expect(resolved).toEqual({ center: { x: 7, y: 7 }, width: 80 });
+    expect(visible[0]).toEqual({ minX: 10, maxX: 12, minY: 10, maxY: 12 });
+  });
+
+  it("keeps a saved viewport that already reaches indexed geometry", () => {
+    expect(resolveSavedDrawingView(
+      { center: { x: 50, y: 50 }, viewHeight: 40 }, bounds,
+      { x: 0, y: 0 }, 1,
+      [{ minX: 40, maxX: 45, minY: 40, maxY: 45 }],
+    )).toEqual({ center: { x: 50, y: 50 }, width: 40 });
+  });
 });

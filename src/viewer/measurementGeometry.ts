@@ -1,10 +1,13 @@
 import { Matrix3, Vector2 } from "three";
 import { parseDxfXclip } from "../dwg/xclipMetadata";
 import type { DrawingBounds, DrawingPoint } from "./savedView";
+import { MeasurementPacker, SupplementalSnaps, type PackedMeasurement } from "./packedMeasurement";
+import { collectSnapFeatures, type SnapEntity, type SplineInterpolator } from "./snapFeatures";
 
-export type MeasurementMode = "distance" | "path" | "area" | "angle" | "object";
+export type MeasurementMode = "distance" | "linear" | "path" | "area" | "angle" | "object";
+export type LinearAxis = "auto" | "x" | "y";
 export type MeasurementUnit = "drawing" | "mm" | "cm" | "m" | "in" | "ft";
-export type SnapPoint = DrawingPoint & { kind: "endpoint" | "midpoint" | "center" };
+export type SnapPoint = DrawingPoint & { kind: "endpoint" | "midpoint" | "center" | "insertion" };
 export type MeasurableEntity = {
   kind: string;
   points: DrawingPoint[];
@@ -14,6 +17,9 @@ export type MeasurableEntity = {
   approximate: boolean;
 };
 export type MeasurementGeometry = {
+  unitPreferenceKey?: string;
+  displayUnits?: MeasurementUnit;
+  packed?: PackedMeasurement;
   units: MeasurementUnit;
   entities: MeasurableEntity[];
   snaps: SnapPoint[];
@@ -21,12 +27,17 @@ export type MeasurementGeometry = {
   completeBounds: boolean;
   fitBounds: DrawingBounds[];
   fitCompleteBounds: boolean;
+  snapSegments?:Array<[DrawingPoint,DrawingPoint]>;
+  snapLimited?:boolean;
+  snapFeatureCounts?:{blocks:number;hatches:number;faces:number;splines:number};
 };
 export type MeasurementGeometryLimits = {
   maxEntities?: number;
   maxPoints?: number;
   maxSnaps?: number;
   maxVisits?: number;
+  maxSupplementalSnaps?:number;
+  maxSnapSegments?:number;
 };
 export type MeasurementSettings = {
   enabled: boolean;
@@ -34,10 +45,11 @@ export type MeasurementSettings = {
   points: DrawingPoint[];
   snapping: boolean;
   entity: MeasurableEntity | null;
+  linearAxis?: LinearAxis;
 };
 
 type Point = DrawingPoint & { bulge?: number; startWidth?: number; endWidth?: number };
-type Entity = {
+type Entity = SnapEntity & {
   type?: string; layer?: string; hidden?: boolean; inPaperSpace?: boolean;
   vertices?: Point[]; position?: Point; center?: Point; name?: string;
   radius?: number; startAngle?: number; endAngle?: number; rotation?: number;
@@ -173,14 +185,43 @@ export function buildMeasurementGeometry(
   dxf: MeasurementDxf,
   requestedLimits: MeasurementGeometryLimits = {},
   renderedEntityBounds?: WeakMap<object, DrawingBounds | null>,
+  packed = false,
+  interpolateSpline?:SplineInterpolator,
 ): MeasurementGeometry {
   const limit = (requested: number | undefined, maximum: number) => Number.isFinite(requested) && requested! > 0 ? Math.min(maximum, Math.floor(requested!)) : maximum;
-  const maxEntities = limit(requestedLimits.maxEntities, MAX_ENTITIES);
-  const maxPoints = limit(requestedLimits.maxPoints, MAX_POINTS);
-  const maxSnaps = limit(requestedLimits.maxSnaps, MAX_POINTS);
-  const maxVisits = limit(requestedLimits.maxVisits, MAX_ENTITIES * 4);
+  // Packed doubles have a bounded byte cost without a retained point-object graph.
+  const maxEntities = limit(requestedLimits.maxEntities, packed ? 500_000 : MAX_ENTITIES);
+  // Correct XCLIP transforms expose 15,919,696 outline points / 2,221,046
+  // snaps in the reviewed BASE drawing. Packed buffers keep this bounded
+  // (about 325 MiB for its complete index) without a point-object graph.
+  const maxPoints = limit(requestedLimits.maxPoints, packed ? 16_000_000 : MAX_POINTS);
+  const maxSnaps = limit(requestedLimits.maxSnaps, packed ? 2_500_000 : MAX_POINTS);
+  const maxVisits = limit(requestedLimits.maxVisits, packed ? 2_000_000 : MAX_ENTITIES * 4);
+  const packer = packed ? new MeasurementPacker() : null;
+  let unpackedSnapCount=0;
+  const supplement=new SupplementalSnaps(limit(requestedLimits.maxSupplementalSnaps,750000),limit(requestedLimits.maxSnapSegments,300000));
+  let extraCount=0,extraLines=0;
+  const entityCount = () => packer ? packer.value.entityCount : result.entities.length;
+  const snapCount = () => packer ? packer.value.snapCount : unpackedSnapCount;
   const result: MeasurementGeometry = { units: unitFromInsunits(dxf.header?.$INSUNITS), entities: [], snaps: [], limited: false, completeBounds: true, fitBounds: [], fitCompleteBounds: true };
   const layers = dxf.tables?.layer?.layers ?? {};
+  result.snapFeatureCounts={blocks:0,hatches:0,faces:0,splines:0};
+  const supplementalPoint=(p:DrawingPoint,kind:SnapPoint["kind"],matrix:Matrix3,clips:DrawingPoint[][])=>{
+    const q=transformed(p,matrix);if(!validPoint(q)||!clips.every(c=>contains(q,c)))return;
+    if(packer)supplement.add({...q,kind});else if(extraCount++<supplement.maxSnaps)result.snaps.push({...q,kind});else supplement.limited=true;
+  };
+  const supplementalLine=(a:DrawingPoint,b:DrawingPoint,clips:DrawingPoint[][])=>{
+    if(!validPoint(a)||!validPoint(b)||distance(a,b)<1e-10)return;
+    let spans:Array<[DrawingPoint,DrawingPoint]>=[[a,b]];
+    for(const clip of clips){const visible:Array<[DrawingPoint,DrawingPoint]>=[];
+      for(const [a,b]of spans){const dx=b.x-a.x,dy=b.y-a.y,values=[0,1];
+        for(let i=0;i<clip.length;i++){const c=clip[i],d=clip[(i+1)%clip.length],ex=d.x-c.x,ey=d.y-c.y,den=dx*ey-dy*ex;if(Math.abs(den)<1e-12)continue;const cx=c.x-a.x,cy=c.y-a.y,t=(cx*ey-cy*ex)/den,u=(cx*dy-cy*dx)/den;if(t>0&&t<1&&u>=0&&u<=1)values.push(t);}
+        values.sort((a,b)=>a-b);const at=(t:number)=>({x:a.x+dx*t,y:a.y+dy*t});
+        for(let i=1;i<values.length;i++)if(values[i]-values[i-1]>1e-12&&contains(at((values[i]+values[i-1])/2),clip))visible.push([at(values[i-1]),at(values[i])]);
+      }spans=visible;
+    }
+    for(const[a,b]of spans){if(packer)supplement.line(a,b);else if(extraLines++<supplement.maxSegments)(result.snapSegments??=[]).push([a,b]);else supplement.limited=true;}
+  };
   let totalPoints = 0;
   let visited = 0;
   const incomplete = () => { result.completeBounds = false; result.fitCompleteBounds = false; };
@@ -193,18 +234,21 @@ export function buildMeasurementGeometry(
   const addSnaps = (snaps: SnapPoint[], clips: DrawingPoint[][]) => {
     for (const point of snaps) {
       if (!validPoint(point) || !clips.every((clip) => contains(point, clip))) continue;
-      if (result.snaps.length >= maxSnaps) { reachedLimit(); break; }
-      result.snaps.push(point);
+      if (snapCount() >= maxSnaps) { reachedLimit(); break; }
+      if (packer) packer.addSnap(point); else {result.snaps.push(point);unpackedSnapCount++;}
     }
   };
   const add = (entity: MeasurableEntity, snaps: SnapPoint[], clips: DrawingPoint[][], curved: boolean) => {
     const visible = (p: DrawingPoint) => clips.every((clip) => contains(p, clip));
-    if (result.entities.length >= maxEntities || totalPoints + entity.points.length > maxPoints) { reachedLimit(); return; }
+    if (entityCount() >= maxEntities || totalPoints + entity.points.length > maxPoints) { reachedLimit(); return; }
     if (!entity.points.every(validPoint) || !Number.isFinite(entity.length) || (entity.area !== undefined && !Number.isFinite(entity.area)) || !Object.values(entity.bounds).every(Number.isFinite)) { incomplete(); return; }
     addSnaps(snaps, clips);
     // A clipped object's full length would describe hidden content. Keep taps/snaps available,
     // but omit object measurements unless its sampled outline lies within every clip boundary.
-    if (!entity.points.every(visible) || !clips.every((clip) => entity.points.slice(1).every((point, index) => segmentInsideClip(entity.points[index], point, clip)))) { incomplete(); return; }
+    if (!entity.points.every(visible) || !clips.every((clip) => entity.points.slice(1).every((point, index) => segmentInsideClip(entity.points[index], point, clip)))) {
+      if(!curved)for(let i=1;i<entity.points.length;i++)supplementalLine(entity.points[i-1],entity.points[i],clips);
+      incomplete(); return;
+    }
     if (curved && clips.length > 0) {
       // A chord approximation can fit inside a boundary while the actual arc
       // between samples crosses it. Require its entire analytic box to fit.
@@ -212,7 +256,7 @@ export function buildMeasurementGeometry(
       if (!clips.every((clip) => box.every((point, index) => segmentInsideClip(point, box[(index + 1) % box.length], clip)))) { incomplete(); return; }
     }
     if (clips.length > 0) incomplete();
-    result.entities.push(entity);
+    if (packer) packer.addEntity(entity); else result.entities.push(entity);
     addFitBounds(entity.bounds);
     totalPoints += entity.points.length;
   };
@@ -231,7 +275,8 @@ export function buildMeasurementGeometry(
     const extrusion = entity.extrusionDirection;
     if (extrusion && (![extrusion.x, extrusion.y, extrusion.z].every(Number.isFinite) || Math.abs(extrusion.x) > 1e-9 || Math.abs(extrusion.y) > 1e-9)) { incomplete(); return; }
     if (entity.type === "INSERT") {
-      if (!entity.name || !validPoint(entity.position) || stack.includes(entity.name) || stack.length >= 24 || (entity.columnCount ?? 1) > 1 || (entity.rowCount ?? 1) > 1) { incomplete(); return; }
+      if (!entity.name || !validPoint(entity.position) || stack.includes(entity.name) || stack.length >= 24) { incomplete(); return; }
+      if((entity.columnCount??1)>1||(entity.rowCount??1)>1)incomplete(); // Pinned renderer draws the first MINSERT cell.
       const block = dxf.blocks?.[entity.name] ?? Object.values(dxf.blocks ?? {}).find((b) => b.name === entity.name);
       if (!block) { incomplete(); return; }
       if (![entity.xScale ?? 1, entity.yScale ?? 1, entity.rotation ?? 0].every(Number.isFinite) || entity.xScale === 0 || entity.yScale === 0) { incomplete(); return; }
@@ -244,6 +289,8 @@ export function buildMeasurementGeometry(
       const matrix = new Matrix3().multiplyMatrices(parent, insert);
       const clip = parseDxfXclip(entity);
       const nextClips = clip ? [...clips, normalizeClip(clip).map((p) => transformed(p, matrix))] : clips;
+      result.snapFeatureCounts!.blocks++;
+      supplementalPoint(base,"insertion",matrix,nextClips);
       if (clip) incomplete();
       for (const child of block.entities ?? []) {
         if (result.limited) break;
@@ -263,6 +310,13 @@ export function buildMeasurementGeometry(
     }
     let matrix = parent;
     if (extrusion && extrusion.z < 0 && entity.type !== "LINE") matrix = parent.clone().multiply(new Matrix3().scale(-1, 1));
+    if(["HATCH","SOLID","TRACE","3DFACE","SPLINE"].includes(entity.type??"")){
+      const key=entity.type==="HATCH"?"hatches":entity.type==="SPLINE"?"splines":"faces";
+      result.snapFeatureCounts![key]++;
+      const complete=collectSnapFeatures(entity,(p,kind)=>supplementalPoint(p,kind,matrix,clips),(a,b)=>supplementalLine(transformed(a,matrix),transformed(b,matrix),clips),interpolateSpline,Number(dxf.header?.$ANGBASE??0));
+      if(!complete)supplement.limited=true;
+      incomplete();return;
+    }
     const e = matrix.elements;
     const scaleX = Math.hypot(e[0], e[1]), scaleY = Math.hypot(e[3], e[4]);
     const uniform = scaleX > 0 && scaleY > 0 &&
@@ -271,7 +325,7 @@ export function buildMeasurementGeometry(
     const determinant = Math.abs(e[0] * e[4] - e[1] * e[3]);
     const snaps: SnapPoint[] = [];
     const snap = (p: DrawingPoint, kind: SnapPoint["kind"]) => {
-      if (snaps.length >= maxSnaps - result.snaps.length) { reachedLimit(); return; }
+      if (snaps.length >= maxSnaps - snapCount()) { reachedLimit(); return; }
       const point = transformed(p, matrix);
       if (validPoint(point)) snaps.push({ ...point, kind });
     };
@@ -384,6 +438,8 @@ export function buildMeasurementGeometry(
   };
   for (const entity of dxf.entities ?? []) { if (result.limited) break; visit(entity, new Matrix3(), "0", [], []); }
   result.snaps.sort((a, b) => a.x - b.x);
+  if (packer){result.packed = packer.finish();supplement.finish(result.packed);}
+  result.snapLimited=supplement.limited;
   return result;
 }
 
@@ -422,6 +478,7 @@ type MeasurementScene = {
   [RENDERED_BOUND_COUNT]?: number;
   _DecomposeText?(entity: Entity, context: unknown): Iterable<{ vertices?: DrawingPoint[] }>;
   _DecomposeMText?(entity: Entity, context: unknown): Iterable<{ vertices?: DrawingPoint[] }>;
+  _InterpolateSpline?:SplineInterpolator;
 };
 export function installMeasurementPreparation(constructor: object): void {
   if (patchedConstructors.has(constructor)) return;
@@ -454,7 +511,7 @@ export function installMeasurementPreparation(constructor: object): void {
     this[RENDERED_ENTITY_BOUNDS] = new WeakMap();
     this[RENDERED_BOUND_COUNT] = 0;
     await original.call(this, dxf, fonts);
-    const geometry = buildMeasurementGeometry(dxf, {}, this[RENDERED_ENTITY_BOUNDS]);
+    const geometry = buildMeasurementGeometry(dxf, {}, this[RENDERED_ENTITY_BOUNDS], true,this._InterpolateSpline?.bind(this));
     for (const key of Object.keys(dxf)) delete (dxf as Record<string, unknown>)[key];
     (dxf as Record<string, unknown>).izcadMeasurement = geometry;
     delete this[RENDERED_ENTITY_BOUNDS];
