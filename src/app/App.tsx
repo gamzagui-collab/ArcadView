@@ -562,7 +562,7 @@ export function App() {
 
   return (
     <div className={`app-shell ${state.status === "home" ? "home" : "viewer-shell"}`}>
-      <div className="canvas-layer" inert={libraryOpen||aboutOpen} aria-hidden={libraryOpen||aboutOpen}>{canvas}</div>
+      {canvas ? <div className="canvas-layer" inert={libraryOpen||aboutOpen} aria-hidden={libraryOpen||aboutOpen}>{canvas}</div> : null}
       <div className="app-content" hidden={libraryOpen} inert={aboutOpen}>{content}</div>
       {aboutOpen?<AboutPanel onClose={()=>setAboutOpen(false)}/>:null}
       <AppUpdateCenter/>
