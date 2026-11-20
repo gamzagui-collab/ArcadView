@@ -2,7 +2,7 @@ import { distance, pathLength, pointSegmentDistance, type MeasurableEntity, type
 import type { DrawingPoint } from "./savedView";
 import { segmentFoot, type Segment } from "./cadPicking";
 type P = DrawingPoint;
-export type AnnotationTool = "select"|"move"|"text"|"polyline"|"circle"|"rectangle"|"dimension-aligned"|"dimension-linear"|"trim";
+export type AnnotationTool = "select"|"move"|"offset"|"text"|"polyline"|"circle"|"rectangle"|"dimension-aligned"|"dimension-linear"|"trim";
 export type Annotation = {id:string;layerId:string;kind:"text"|"polyline"|"circle"|"arc"|"rectangle"|"dimension-aligned"|"dimension-linear"|"mask";points:P[];scale?:number;start?:number;sweep?:number;text?:string;textHeight?:number;color?:string;approximate?:boolean};
 export type UserLayer = {id:string;name:string;color:string;visible:boolean};
 export type AnnotationDocument = {version:1;layers:UserLayer[];activeLayer:string;objects:Annotation[];dimensionScale:number;textHeight?:number};
@@ -42,6 +42,10 @@ export function translateAnnotation(o:Annotation,base:P,destination:P):Annotatio
 /** Moving source geometry adds a reversible erasure and a translated user object. */
 export function sourceMoveObjects(entity:MeasurableEntity,layerId:string,base:P,destination:P):Annotation[]{
   const mask:Annotation={id:uid(),layerId,kind:"mask",points:entity.points.map(p=>({...p}))};
+  return[mask,translateAnnotation(sourceAnnotation(entity,layerId),base,destination)];
+}
+/** A separate overlay copy; never changes the original geometry. */
+export function sourceAnnotation(entity:MeasurableEntity,layerId:string):Annotation{
   let copy:Annotation={id:uid(),layerId,kind:"polyline",points:entity.points.map(p=>({...p})),approximate:entity.approximate};
   if(entity.kind==="CIRCLE"&&!entity.approximate){const c={x:(entity.bounds.minX+entity.bounds.maxX)/2,y:(entity.bounds.minY+entity.bounds.maxY)/2},r=entity.length/(Math.PI*2);copy={...copy,kind:"circle",points:[c,{x:c.x+r,y:c.y}]};}
   if(entity.kind==="ARC"&&!entity.approximate&&entity.points.length>=3){
@@ -53,7 +57,7 @@ export function sourceMoveObjects(entity:MeasurableEntity,layerId:string,base:P,
       copy={...copy,kind:"arc",points:[c,{x:c.x+radius,y:c.y}],start,sweep};
     }else copy.approximate=true;
   }
-  return[mask,translateAnnotation(copy,base,destination)];
+  return copy;
 }
 export function annotationGeometry(objects:Annotation[]):MeasurementGeometry{
   const entities:MeasurableEntity[]=[],snaps:SnapPoint[]=[];
@@ -63,7 +67,7 @@ export function annotationGeometry(objects:Annotation[]):MeasurementGeometry{
     const points=annotationPoints(o);if(!points.length)continue;
     const xs=points.map(p=>p.x),ys=points.map(p=>p.y);
     const radius=(o.kind==="circle"||o.kind==="arc")?distance(o.points[0],o.points[1]):0;
-    entities.push({kind:o.kind==="circle"?"CIRCLE":o.kind==="arc"?"ARC":"LWPOLYLINE",points,bounds:{minX:Math.min(...xs),maxX:Math.max(...xs),minY:Math.min(...ys),maxY:Math.max(...ys)},length:o.kind==="circle"?Math.PI*2*radius:o.kind==="arc"?radius*(o.sweep??Math.PI*2):pathLength(points),area:o.kind==="circle"?Math.PI*radius*radius:undefined,approximate:!!o.approximate||o.kind==="arc"||o.kind==="circle"});
+    entities.push({kind:o.kind==="circle"?"CIRCLE":o.kind==="arc"?"ARC":"LWPOLYLINE",points,bounds:{minX:Math.min(...xs),maxX:Math.max(...xs),minY:Math.min(...ys),maxY:Math.max(...ys)},length:o.kind==="circle"?Math.PI*2*radius:o.kind==="arc"?radius*(o.sweep??Math.PI*2):pathLength(points),area:o.kind==="circle"?Math.PI*radius*radius:undefined,approximate:!!o.approximate});
     if(o.kind==="circle"||o.kind==="arc"){
       const[c,r]=o.points,radius=distance(c,r);snaps.push({...c,kind:"center"});
       if(o.kind==="circle")for(let i=0;i<4;i++)snaps.push({x:c.x+radius*Math.cos(i*Math.PI/2),y:c.y+radius*Math.sin(i*Math.PI/2),kind:"endpoint"});

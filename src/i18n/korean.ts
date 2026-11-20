@@ -98,6 +98,7 @@ export const korean = {
   measureDistance: "정렬",
   editTools:"그리기",
   measurePerpendicular:"수직 스냅 ⊥",
+  measureIntersection:"교차점 스냅",
   measureInsertion:"블록 삽입점 스냅",
   measureLinear: "선형",
   measureLinearAxis: "선형 방향",

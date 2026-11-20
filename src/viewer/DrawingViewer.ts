@@ -36,10 +36,11 @@ import { ViewportCuller } from "./viewportCulling";
 import { DWG_CACHE_VERSION } from "../dwg/conversionCache";
 import { referenceDirections } from "./rightAngles";
 import { isDistanceMode, pathIsClosed, snapToPathStart } from "./measurementTools";
+import { intersectionSnap } from "./intersectionSnapping";
 import { perpendicularSnap, segmentFoot } from "./cadPicking";
 import { masked, visibleEntityFragment, type Annotation } from "./annotations";
 
-export type MeasurementPick = { point: DrawingPoint; snapped: SnapPoint["kind"] | "start" | "perpendicular" | null; entity: MeasurableEntity | null; replaceIndex?: number };
+export type MeasurementPick = { point: DrawingPoint; snapped: SnapPoint["kind"] | "start" | "perpendicular" | "intersection" | null; entity: MeasurableEntity | null; replaceIndex?: number };
 export type AnnotationInput = {tool:string;snapping:boolean;anchor?:DrawingPoint;points:DrawingPoint[];onPick(pick:MeasurementPick):void;onPreview(pick:MeasurementPick|null):void};
 
 installXclipRendering(DxfViewer);
@@ -134,6 +135,7 @@ export class DrawingViewer {
     const own=measurement.snapping?nearestSnap(this.userGeometry.snaps,point,tolerance):null;
     if(own&&(!snapped||Math.hypot(own.x-point.x,own.y-point.y)<Math.hypot(snapped.x-point.x,snapped.y-point.y)))snapped=own;
     const replaceIndex = precision ? this.precisionIndex : undefined;
+    const intersection=editor?.tool==="move"&&measurement.snapping?intersectionSnap([this.geometry,this.userGeometry],point,this.worldTolerance(10),p=>!masked(p,this.masks,this.worldTolerance(3))):null;
     const start = snapToPathStart(measurement, point, tolerance, replaceIndex);
     const anchor=editor?.anchor??(isDistanceMode(measurement.mode)?measurement.points[replaceIndex===0?1:0]:undefined);
     let perpendicular:DrawingPoint|null=null;
@@ -144,6 +146,7 @@ export class DrawingViewer {
       if(ownFoot&&(!perpendicular||Math.hypot(ownFoot.x-point.x,ownFoot.y-point.y)<Math.hypot(perpendicular.x-point.x,perpendicular.y-point.y)))perpendicular=ownFoot;
     }
     if (start) point = start;
+    else if(intersection)point=intersection;
     else if(perpendicular)point=perpendicular;
     else if (snapped) point = { x: snapped.x, y: snapped.y };
     let entity = measurement.mode === "object" || editor?.tool==="select"||editor?.tool==="trim" ?
@@ -152,7 +155,7 @@ export class DrawingViewer {
     if(entity){let nearest=Infinity,hit=point;for(let i=1;i<entity.points.length;i++){const q=segmentFoot(point,entity.points[i-1],entity.points[i]);if(q&&Math.hypot(q.x-point.x,q.y-point.y)<nearest){hit=q;nearest=Math.hypot(q.x-point.x,q.y-point.y);}}if(masked(hit,this.masks,this.worldTolerance(3)))entity=null;}
     if(measurement.mode==="object"){const candidate=nearestEntity(this.userGeometry.entities,point,tolerance);if(candidate)entity=candidate;}
     if(!editor&&isDistanceMode(measurement.mode))this.updateEndReferences(point);
-    return { point, snapped: start ? "start" : perpendicular ? "perpendicular" : snapped?.kind ?? null, entity, ...(replaceIndex !== undefined ? { replaceIndex } : {}) };
+    return { point, snapped: start ? "start" : intersection ? "intersection" : perpendicular ? "perpendicular" : snapped?.kind ?? null, entity, ...(replaceIndex !== undefined ? { replaceIndex } : {}) };
   }
   private readonly onContextLost = (event: Event): void => {
     event.preventDefault();
