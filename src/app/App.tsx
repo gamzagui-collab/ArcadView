@@ -1,4 +1,5 @@
 import { isLikelyMemoryError } from "../dwg/diagnostics";
+import { readPrecision, savePrecision } from "../viewer/displayPrecision";
 import {
   lazy,
   Suspense,
@@ -104,6 +105,8 @@ export function App() {
   const [measurementGeometry, setMeasurementGeometry] = useState<MeasurementGeometry | null>(null);
   const [sourceUnit, setSourceUnit] = useState<MeasurementUnit>("drawing");
   const [displayUnit, setDisplayUnit] = useState<MeasurementUnit>("drawing");
+  const [precision,setPrecision]=useState(readPrecision);
+  const handlePrecision=(value:number)=>{setPrecision(value);savePrecision(value);};
   const unitPreferenceRef = useRef<(DrawingUnitPreference & { key?: string }) | null>(null);
   const [measurementFeedback, setMeasurementFeedback] = useState<string | null>(null);
   const viewerRef = useRef<ViewerHandle>(null);
@@ -491,6 +494,7 @@ export function App() {
           onMeasurementPick={handleMeasurementPick}
           onEditHistory={setEditHistory}
           annotationActive={annotationActive} annotationOpen={annotationOpen} sourceUnit={sourceUnit} displayUnit={displayUnit}
+          precision={precision} onPrecision={handlePrecision}
           onAnnotationHide={()=>setAnnotationOpen(open=>!open)} onAnnotationPause={()=>setAnnotationActive(false)}
           onAnnotationActivate={()=>{setAnnotationActive(true);setMeasurement(current=>({...current,enabled:false}));setMeasurementPanelOpen(false);}}
         />}
@@ -572,10 +576,10 @@ export function App() {
         panelOpen={measurementPanelOpen}
         editing={annotationActive} editOpen={annotationOpen} onEdit={()=>{setAnnotationOpen(open=>!open);setAnnotationActive(true);setMeasurement(current=>({...current,enabled:false}));setMeasurementPanelOpen(false);}}
         onMeasure={() => {setAnnotationActive(false);setAnnotationOpen(false);setMeasurementPanelOpen(open=>!open);if(!measurementActivated.current||annotationActive){measurementActivated.current=true;setMeasurement(current=>({...current,enabled:true}));}}} />
-      {state.drawing.format!=="pdf"&&!annotationActive?<MeasurementStatus settings={measurement} sourceUnit={sourceUnit} displayUnit={displayUnit} feedback={measurementFeedback}
+      {state.drawing.format!=="pdf"&&!annotationActive?<MeasurementStatus settings={measurement} sourceUnit={sourceUnit} displayUnit={displayUnit} feedback={measurementFeedback} precision={precision}
         onShow={()=>setMeasurementPanelOpen(open=>!open)} onToggle={()=>{measurementActivated.current=true;setMeasurement(current=>({...current,enabled:!current.enabled}));}}/>:null}
       {measurementPanelOpen && state.drawing.format !== "pdf" ? <MeasurementPanel settings={measurement} geometry={measurementGeometry}
-        sourceUnit={sourceUnit} displayUnit={displayUnit} feedback={measurementFeedback}
+        sourceUnit={sourceUnit} displayUnit={displayUnit} feedback={measurementFeedback} precision={precision} onPrecision={handlePrecision}
         onHide={()=>setMeasurementPanelOpen(false)}
         onSettings={(settings) => {const current=measurementRef.current;if(settings.mode!==current.mode)measurementHistory.current.clear();else if((settings.points!==current.points&&(settings.points.length>0||current.points.length>0))||settings.entity!==current.entity)measurementHistory.current.record(current);measurementRef.current=settings;if(settings.enabled)measurementActivated.current=true;setMeasurement(settings); setMeasurementFeedback(null); }}
         onSourceUnit={handleSourceUnit} onDisplayUnit={handleDisplayUnit} /> : null}

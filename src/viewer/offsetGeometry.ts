@@ -1,11 +1,11 @@
 import type { DrawingPoint as P } from "./savedView";
-import { annotationPoints, lineIntersection, segments, type Annotation } from "./annotations";
+import { annotationPoints, isPointAnnotation, lineIntersection, segments, type Annotation } from "./annotations";
 import { distance, UNIT_METERS, type MeasurementUnit } from "./measurementGeometry";
 import { segmentFoot } from "./cadPicking";
 
 export type OffsetGuide={anchor:P;normal:P;radial:boolean};
 export function offsetGuide(object:Annotation,pick:P):OffsetGuide|null{
-  if(["mask","text","dimension-aligned","dimension-linear"].includes(object.kind)||object.approximate)return null;
+  if(isPointAnnotation(object)||["mask","text","dimension-aligned","dimension-linear"].includes(object.kind)||object.approximate)return null;
   if(object.kind==="circle"||object.kind==="arc"){
     const c=object.points[0],r=distance(c,object.points[1]),d=distance(c,pick);
     if(r<1e-10)return null;

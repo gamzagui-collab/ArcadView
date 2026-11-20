@@ -41,7 +41,7 @@ import { perpendicularSnap, segmentFoot } from "./cadPicking";
 import { masked, visibleEntityFragment, type Annotation } from "./annotations";
 
 export type MeasurementPick = { point: DrawingPoint; snapped: SnapPoint["kind"] | "start" | "perpendicular" | "intersection" | null; entity: MeasurableEntity | null; replaceIndex?: number };
-export type AnnotationInput = {tool:string;snapping:boolean;anchor?:DrawingPoint;points:DrawingPoint[];onPick(pick:MeasurementPick):void;onPreview(pick:MeasurementPick|null):void};
+export type AnnotationInput = {tool:string;snapping:boolean;anchor?:DrawingPoint;points:DrawingPoint[];referenceSnaps?:SnapPoint[];onPick(pick:MeasurementPick):void;onPreview(pick:MeasurementPick|null):void};
 
 installXclipRendering(DxfViewer);
 installTrianglePrecisionRendering(DxfViewer);
@@ -134,6 +134,10 @@ export class DrawingViewer {
     if(snapped&&masked(snapped,this.masks,this.worldTolerance(3)))snapped=null;
     const own=measurement.snapping?nearestSnap(this.userGeometry.snaps,point,tolerance):null;
     if(own&&(!snapped||Math.hypot(own.x-point.x,own.y-point.y)<Math.hypot(snapped.x-point.x,snapped.y-point.y)))snapped=own;
+    // Markup is excluded from CAD measurement. A selected mark may still use
+    // its own exact anchors when choosing the base of a move operation.
+    const reference=measurement.snapping&&editor?.referenceSnaps?nearestSnap(editor.referenceSnaps,point,tolerance):null;
+    if(reference&&(!snapped||Math.hypot(reference.x-point.x,reference.y-point.y)<Math.hypot(snapped.x-point.x,snapped.y-point.y)))snapped=reference;
     const replaceIndex = precision ? this.precisionIndex : undefined;
     const intersection=editor?.tool==="move"&&measurement.snapping?intersectionSnap([this.geometry,this.userGeometry],point,this.worldTolerance(10),p=>!masked(p,this.masks,this.worldTolerance(3))):null;
     const start = snapToPathStart(measurement, point, tolerance, replaceIndex);

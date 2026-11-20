@@ -2,12 +2,26 @@ import { distance, pathLength, pointSegmentDistance, type MeasurableEntity, type
 import type { DrawingPoint } from "./savedView";
 import { segmentFoot, type Segment } from "./cadPicking";
 type P = DrawingPoint;
-export type AnnotationTool = "select"|"move"|"offset"|"text"|"polyline"|"circle"|"rectangle"|"dimension-aligned"|"dimension-linear"|"trim";
-export type Annotation = {id:string;layerId:string;kind:"text"|"polyline"|"circle"|"arc"|"rectangle"|"dimension-aligned"|"dimension-linear"|"mask";points:P[];scale?:number;start?:number;sweep?:number;text?:string;textHeight?:number;color?:string;approximate?:boolean};
+export const POINT_LAYER_ID="arcad-point-layer",POINT_LAYER_NAME="포인트그리기";
+export const POINT_TOOLS=["point-arrow","point-cloud","point-circle","point-rectangle","point-leader"]as const;
+export type PointTool=typeof POINT_TOOLS[number];
+export const isPointTool=(tool:string):tool is PointTool=>(POINT_TOOLS as readonly string[]).includes(tool);
+export type AnnotationTool = "select"|"move"|"offset"|"text"|"polyline"|"circle"|"rectangle"|"dimension-aligned"|"dimension-linear"|"trim"|PointTool;
+export type Annotation = {id:string;layerId:string;kind:"text"|"polyline"|"circle"|"arc"|"rectangle"|"dimension-aligned"|"dimension-linear"|"mask"|PointTool;points:P[];scale?:number;start?:number;sweep?:number;text?:string;textHeight?:number;color?:string;approximate?:boolean;screenWidth?:number;screenFontSize?:number};
+export const isPointAnnotation=(object:Annotation)=>isPointTool(object.kind);
 export type UserLayer = {id:string;name:string;color:string;visible:boolean};
 export type AnnotationDocument = {version:1;layers:UserLayer[];activeLayer:string;objects:Annotation[];dimensionScale:number;textHeight?:number};
 export const uid=()=>crypto.randomUUID();
 export function newAnnotationDocument():AnnotationDocument{return{version:1,layers:[{id:"base",name:"기본",color:"#49cfff",visible:true}],activeLayer:"base",objects:[],dimensionScale:20};}
+export const drawingLayers=(doc:AnnotationDocument)=>doc.layers.filter(l=>l.id!==POINT_LAYER_ID);
+export const pointLayer=(doc:AnnotationDocument):UserLayer=>doc.layers.find(l=>l.id===POINT_LAYER_ID)??{id:POINT_LAYER_ID,name:POINT_LAYER_NAME,color:"#ff586d",visible:true};
+export function ensurePointLayer(doc:AnnotationDocument):AnnotationDocument{return doc.layers.some(l=>l.id===POINT_LAYER_ID)?doc:{...doc,layers:[...doc.layers,pointLayer(doc)]};}
+/** The active drawing layer never becomes the reserved markup layer. */
+export function removeDrawingLayer(doc:AnnotationDocument,id:string):AnnotationDocument{
+  if(id===POINT_LAYER_ID||!doc.layers.some(l=>l.id===id))return doc;
+  const normal=drawingLayers(doc).filter(l=>l.id!==id),layers=[...(normal.length?normal:newAnnotationDocument().layers),...doc.layers.filter(l=>l.id===POINT_LAYER_ID)];
+  return{...doc,layers,activeLayer:layers.some(l=>l.id===doc.activeLayer&&l.id!==POINT_LAYER_ID)?doc.activeLayer:layers[0].id,objects:doc.objects.filter(o=>o.layerId!==id)};
+}
 export const visibleAnnotations=(d:AnnotationDocument)=>d.objects.filter(o=>d.layers.some(l=>l.id===o.layerId&&l.visible));
 export function annotationPoints(o:Annotation):P[]{
   if(o.kind==="rectangle"){const[a,b]=o.points;return[a,{x:b.x,y:a.y},b,{x:a.x,y:b.y},a];}
@@ -61,7 +75,7 @@ export function sourceAnnotation(entity:MeasurableEntity,layerId:string):Annotat
 }
 export function annotationGeometry(objects:Annotation[]):MeasurementGeometry{
   const entities:MeasurableEntity[]=[],snaps:SnapPoint[]=[];
-  for(const o of objects){if(o.kind==="mask")continue;
+  for(const o of objects){if(o.kind==="mask"||isPointAnnotation(o))continue;
     if(o.kind.startsWith("dimension")){const d=dimensionGeometry(o,"drawing");for(const p of o.points.slice(0,2))snaps.push({...p,kind:"endpoint"});if(d)snaps.push({...d.first,kind:"endpoint"},{...d.second,kind:"endpoint"},{x:(d.first.x+d.second.x)/2,y:(d.first.y+d.second.y)/2,kind:"midpoint"});continue;}
     if(o.kind==="text"){snaps.push({...o.points[0],kind:"endpoint"});continue;}
     const points=annotationPoints(o);if(!points.length)continue;
@@ -123,6 +137,7 @@ export function dimensionGeometry(o:Annotation,sourceUnit:MeasurementUnit){
 export function annotationHit(objects:Annotation[],point:P,tolerance:number,sourceUnit:MeasurementUnit):Annotation|null{
   let best=tolerance,found:Annotation|null=null;
   for(const o of [...objects].reverse()){
+    if(isPointAnnotation(o))continue;
     if(o.kind==="text"){
       const b=textBounds(o),d=Math.hypot(Math.max(b.minX-point.x,0,point.x-b.maxX),Math.max(b.minY-point.y,0,point.y-b.maxY));
       if(d<best){best=d;found=o;}continue;
@@ -152,7 +167,8 @@ function circleCircle(c:P,r:number,d:P,s:number):P[]{
   return[{x:x-h*(d.y-c.y)/l,y:y+h*(d.x-c.x)/l},{x:x+h*(d.y-c.y)/l,y:y-h*(d.x-c.x)/l}];
 }
 export function trimAnnotation(target:Annotation,cutters:Annotation[],cad:Segment[],click:P):{kept:Annotation[];removed:P[]}|null{
-  if(target.kind==="mask"||target.kind==="text"||target.kind.startsWith("dimension"))return null;
+  if(target.kind==="mask"||target.kind==="text"||target.kind.startsWith("dimension")||isPointAnnotation(target))return null;
+  cutters=cutters.filter(o=>!isPointAnnotation(o));
   const circles=cutters.filter(o=>o.id!==target.id&&o.kind==="circle");
   const lines=[...cad,...cutters.filter(o=>o.id!==target.id&&!o.kind.startsWith("dimension")&&o.kind!=="mask"&&o.kind!=="circle").flatMap(o=>segments(annotationPoints(o)))];
   const points=annotationPoints(target),c=target.points[0];
@@ -188,16 +204,25 @@ export function trimAnnotation(target:Annotation,cutters:Annotation[],cad:Segmen
   return{kept:remaining.map(p=>({...target,id:uid(),kind:"polyline",points:p})),removed:part(lo,hi)};
 }
 const PREFIX="arcad.annotations.v1.";
+function validateDocument(d:AnnotationDocument):void{
+  if(d.version!==1||!Array.isArray(d.layers)||d.layers.length<1||d.layers.length>4||!Array.isArray(d.objects)||d.objects.length>3000||!d.layers.some(l=>l.id===d.activeLayer&&l.id!==POINT_LAYER_ID)||drawingLayers(d).length>3||!Number.isFinite(d.dimensionScale)||d.dimensionScale<1||d.dimensionScale>10000)throw Error();
+  const ids=new Set(d.layers.map(l=>l.id));if(ids.size!==d.layers.length)throw Error();
+  for(const l of d.layers)if(typeof l.id!=="string"||typeof l.name!=="string"||!/^#[a-f0-9]{6}$/i.test(l.color)||typeof l.visible!=="boolean"||(l.id===POINT_LAYER_ID&&(l.name!==POINT_LAYER_NAME||l!==d.layers.at(-1))))throw Error();
+  if(d.textHeight!==undefined&&(!Number.isFinite(d.textHeight)||d.textHeight<=0||d.textHeight>1e6))throw Error();
+  for(const o of d.objects){
+    if(!ids.has(o.layerId)||typeof o.id!=="string"||!["text","polyline","circle","arc","rectangle","dimension-aligned","dimension-linear","mask",...POINT_TOOLS].includes(o.kind)||!Array.isArray(o.points)||o.points.length<(o.kind==="text"?1:2)||o.points.length>30000||o.points.some(p=>!Number.isFinite(p.x)||!Number.isFinite(p.y))||((o.kind==="rectangle"||o.kind==="circle"||o.kind==="arc")&&o.points.length!==2)||(o.kind.startsWith("dimension")&&(o.points.length!==3||!Number.isFinite(o.scale)||o.scale!<1||o.scale!>10000))||(o.kind==="arc"&&(!Number.isFinite(o.start)||!Number.isFinite(o.sweep)||o.sweep!<=0||o.sweep!>TAU))||(o.kind==="text"&&(o.points.length!==1||typeof o.text!=="string"||!o.text.trim()||o.text.length>500||!Number.isFinite(o.textHeight)||o.textHeight!<=0||o.textHeight!>1e6)))throw Error();
+    if(o.color!==undefined&&!/^#[a-f0-9]{6}$/i.test(o.color))throw Error();
+    if(isPointAnnotation(o)!==(o.layerId===POINT_LAYER_ID))throw Error();
+    if(isPointAnnotation(o)&&(o.points.length!==2||!Number.isFinite(o.screenWidth)||o.screenWidth!<1||o.screenWidth!>12||!o.color))throw Error();
+    if(o.kind==="point-leader"&&(typeof o.text!=="string"||!o.text.trim()||o.text.length>500||!Number.isFinite(o.screenFontSize)||o.screenFontSize!<10||o.screenFontSize!>48))throw Error();
+  }
+}
 export function readAnnotations(key:string|undefined):AnnotationDocument{
   if(!key)return newAnnotationDocument();try{const raw=localStorage.getItem(PREFIX+key);if(!raw||raw.length>4_000_000)return newAnnotationDocument();const d=JSON.parse(raw)as AnnotationDocument;
-    if(d.version!==1||!Array.isArray(d.layers)||d.layers.length<1||d.layers.length>3||!Array.isArray(d.objects)||d.objects.length>3000||!d.layers.some(l=>l.id===d.activeLayer)||!Number.isFinite(d.dimensionScale)||d.dimensionScale<1||d.dimensionScale>10000)throw Error();
-    const ids=new Set(d.layers.map(l=>l.id));for(const l of d.layers)if(typeof l.id!=="string"||typeof l.name!=="string"||!/^#[a-f0-9]{6}$/i.test(l.color)||typeof l.visible!=="boolean")throw Error();
-    if(d.textHeight!==undefined&&(!Number.isFinite(d.textHeight)||d.textHeight<=0||d.textHeight>1e6))throw Error();
-    for(const o of d.objects)if(!ids.has(o.layerId)||typeof o.id!=="string"||!["text","polyline","circle","arc","rectangle","dimension-aligned","dimension-linear","mask"].includes(o.kind)||!Array.isArray(o.points)||o.points.length<(o.kind==="text"?1:2)||o.points.length>30000||o.points.some(p=>!Number.isFinite(p.x)||!Number.isFinite(p.y))||((o.kind==="rectangle"||o.kind==="circle"||o.kind==="arc")&&o.points.length!==2)||(o.kind.startsWith("dimension")&&(o.points.length!==3||!Number.isFinite(o.scale)||o.scale!<1||o.scale!>10000))||(o.kind==="arc"&&(!Number.isFinite(o.start)||!Number.isFinite(o.sweep)||o.sweep!<=0||o.sweep!>TAU))||(o.kind==="text"&&(o.points.length!==1||typeof o.text!=="string"||!o.text.trim()||o.text.length>500||!Number.isFinite(o.textHeight)||o.textHeight!<=0||o.textHeight!>1e6)))throw Error();
-    if(d.objects.some(o=>o.color!==undefined&&!/^#[a-f0-9]{6}$/i.test(o.color)))throw Error();
+    validateDocument(d);
     return d;
   }catch{return newAnnotationDocument();}
 }
 export function saveAnnotations(key:string|undefined,doc:AnnotationDocument):boolean{
-  if(!key)return false;try{const raw=JSON.stringify(doc);if(raw.length>4_000_000)throw Error("Annotation storage limit");localStorage.setItem(PREFIX+key,raw);return true;}catch{return false;}
+  if(!key)return false;try{validateDocument(doc);const raw=JSON.stringify(doc);if(raw.length>4_000_000)throw Error("Annotation storage limit");localStorage.setItem(PREFIX+key,raw);return true;}catch{return false;}
 }

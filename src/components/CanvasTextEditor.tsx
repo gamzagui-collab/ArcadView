@@ -6,7 +6,7 @@ import { PaletteIcon } from "./Icons";
 
 const colors=["#ffffff","#c0c8d2","#808a98","#202a36","#49cfff","#218bff","#3155df","#9a74ff","#fa68df","#ff526d","#ff944d","#ffd65c","#8ce56d","#25c795","#39d9d1","#b99975"];
 let textMetrics:CanvasRenderingContext2D|null|undefined;
-function inputBaseline(size:number):number{
+export function inputBaseline(size:number):number{
   textMetrics??=document.createElement("canvas").getContext("2d");
   if(!textMetrics)return size*1.05;
   textMetrics.font=`${size}px ArcadAnnotation`;

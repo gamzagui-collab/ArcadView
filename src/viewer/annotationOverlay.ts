@@ -1,8 +1,10 @@
 import { convertMeasurement, type MeasurementUnit } from "./measurementGeometry";
 import type { DrawingPoint } from "./savedView";
-import { annotationPoints, dimensionGeometry, textBounds, visibleAnnotations, type Annotation, type AnnotationDocument } from "./annotations";
+import { annotationPoints, dimensionGeometry, isPointAnnotation, textBounds, visibleAnnotations, type Annotation, type AnnotationDocument } from "./annotations";
+import { drawPointAnnotation } from "./pointMarkup";
+import { formatCadNumber } from "./displayPrecision";
 const NS="http://www.w3.org/2000/svg";
-export function drawAnnotations(svg:SVGSVGElement,doc:AnnotationDocument,selected:string|null,draft:Annotation|null,project:(p:readonly DrawingPoint[])=>DrawingPoint[],source:MeasurementUnit,display:MeasurementUnit):void{
+export function drawAnnotations(svg:SVGSVGElement,doc:AnnotationDocument,selected:string|null,draft:Annotation|null,project:(p:readonly DrawingPoint[])=>DrawingPoint[],source:MeasurementUnit,display:MeasurementUnit,precision=3,locale="ko"):void{
   const children:SVGElement[]=[];
   const el=(tag:string,attrs:Record<string,string|number>)=>{const e=document.createElementNS(NS,tag);for(const[k,v]of Object.entries(attrs))e.setAttribute(k,String(v));children.push(e);return e;};
   const line=(points:DrawingPoint[],color:string,css:string,id:string)=>el("polyline",{points:project(points).map(p=>`${p.x},${p.y}`).join(" "),stroke:color,class:css,"data-object":id});
@@ -12,10 +14,11 @@ export function drawAnnotations(svg:SVGSVGElement,doc:AnnotationDocument,selecte
     line(o.points,"#0b1118","annotation-mask",o.id);
     if(o.id===selected)line(o.points,"#ff8e9b","annotation-mask-selected",o.id);
   }
-  for(const o of [...objects.filter(o=>o.kind!=="mask"),...(draft?[draft]:[])]){
+  for(const o of [...objects.filter(o=>o.kind!=="mask"&&!isPointAnnotation(o)),...objects.filter(isPointAnnotation),...(draft?[draft]:[])]){
     const color=o.color??doc.layers.find(l=>l.id===o.layerId)?.color??"#49cfff",active=o.id===selected;
     const dim=o.kind.startsWith("dimension")?dimensionGeometry(o,source):null;
-    if(o.kind==="text"){
+    if(isPointAnnotation(o))drawPointAnnotation(o,project,el);
+    else if(o.kind==="text"){
       const p=o.points[0],h=o.textHeight??50,[a,b]=project([p,{x:p.x,y:p.y+h}]),height=Math.max(.1,Math.hypot(a.x-b.x,a.y-b.y));
       const text=el("text",{x:a.x,y:a.y,"font-size":height,fill:color,class:"annotation-user-text","data-object":o.id,"xml:space":"preserve"});
       for(const [i,line]of(o.text??"").split("\n").entries()){
@@ -32,7 +35,7 @@ export function drawAnnotations(svg:SVGSVGElement,doc:AnnotationDocument,selecte
       let degrees=Math.atan2(dy,dx)*180/Math.PI;if(degrees>90)degrees-=180;if(degrees< -90)degrees+=180;
       const x=(a.x+b.x)/2,y=(a.y+b.y)/2;
       const text=el("text",{x,y,transform:`rotate(${degrees} ${x} ${y})`,"text-anchor":"middle",dy:-height*.35,"font-size":height,fill:color,class:"annotation-dimension-text","data-object":o.id});
-      text.textContent=new Intl.NumberFormat("ko",{maximumFractionDigits:3}).format(convertMeasurement(dim.value,source,display))+(display==="drawing"?"":` ${display}`);
+      text.textContent=formatCadNumber(convertMeasurement(dim.value,source,display),precision,locale)+(display==="drawing"?"":` ${display}`);
     }else{
       const points=annotationPoints(o);line(points,"#03101d","annotation-halo",o.id);line(points,color,active?"annotation-line selected":"annotation-line",o.id);
     }

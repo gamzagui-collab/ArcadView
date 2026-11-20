@@ -1,6 +1,8 @@
 import { useI18n } from "../i18n/I18nProvider";
 import { CloseIcon } from "./Icons";
 import { ToolIcon } from "./ToolIcon";
+import { PrecisionSelect } from "./PrecisionSelect";
+import { formatCadNumber } from "../viewer/displayPrecision";
 import {
   convertMeasurement, pathLength,
   type LinearAxis, type MeasurementGeometry, type MeasurementMode, type MeasurementSettings, type MeasurementUnit,
@@ -13,6 +15,8 @@ type Props = {
   sourceUnit: MeasurementUnit;
   displayUnit: MeasurementUnit;
   feedback: string | null;
+  precision:number;
+  onPrecision(value:number):void;
   onHide(): void;
   onSettings(settings: MeasurementSettings): void;
   onSourceUnit(unit: MeasurementUnit): void;
@@ -21,16 +25,16 @@ type Props = {
 const unitOptions: MeasurementUnit[] = ["drawing", "mm", "cm", "m", "in", "ft"];
 const modeKeys = { distance: "measureDistance", linear: "measureLinear", path: "measurePath", area: "measureArea", angle: "measureAngle", object: "measureObject" } as const;
 
-export function MeasurementPanel({ settings, geometry, sourceUnit, displayUnit, feedback, onHide, onSettings, onSourceUnit, onDisplayUnit }: Props) {
+export function MeasurementPanel({ settings, geometry, sourceUnit, displayUnit, feedback,precision,onPrecision, onHide, onSettings, onSourceUnit, onDisplayUnit }: Props) {
   const { t, locale } = useI18n();
-  const format = (value: number, area = false) => `${new Intl.NumberFormat(locale, { maximumFractionDigits: 3 }).format(convertMeasurement(value, sourceUnit, displayUnit, area))} ${displayUnit === "drawing" ? t("drawingUnit") : displayUnit}${area ? "²" : ""}`;
+  const format = (value: number, area = false) => `${formatCadNumber(convertMeasurement(value, sourceUnit, displayUnit, area),precision,locale)} ${displayUnit === "drawing" ? t("drawingUnit") : displayUnit}${area ? "²" : ""}`;
   const value = measurementValue(settings);
   const instruction = settings.mode === "object" ? t("measurePickObject") : settings.mode === "angle" ? t("measurePickAngle") : settings.mode === "area" ? t("measurePickArea") : settings.mode === "path" ? t("measurePickPath") : settings.mode === "linear" ? t("measurePickLinear") : t("measurePickDistance");
   return (
     <section className="measurement-panel" aria-label={t("measure")}>
       <div className="measurement-title"><strong>{t("measure")}</strong>
       <div className="measurement-result" role="status">
-        <strong>{value === undefined ? "—" : `${settings.entity?.approximate && settings.mode === "object" ? "≈ " : ""}${settings.mode === "angle" ? `${new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(value)}°` : format(value, settings.mode === "area")}`}</strong>
+        <strong>{value === undefined ? "—" : `${settings.entity?.approximate && settings.mode === "object" ? "≈ " : ""}${settings.mode === "angle" ? `${formatCadNumber(value,precision,locale)}°` : format(value, settings.mode === "area")}`}</strong>
         {settings.mode === "area" && settings.points.length >= 3 ? <span>{t("measurePerimeter")}: {format(pathLength(settings.points, true))}</span> : null}
         {settings.mode === "object" && settings.entity?.area !== undefined ? <span>{t("measureArea")}: {format(settings.entity.area, true)}</span> : null}
       </div>
@@ -48,6 +52,7 @@ export function MeasurementPanel({ settings, geometry, sourceUnit, displayUnit, 
         <label>{t("drawingUnitLabel")}<select value={sourceUnit} onChange={(e) => { const unit = e.target.value as MeasurementUnit; onSourceUnit(unit); if (displayUnit === "drawing") onDisplayUnit(unit); }}>{unitOptions.map((unit) => <option key={unit} value={unit}>{unit === "drawing" ? t("drawingUnit") : unit}</option>)}</select></label>
         <label>{t("displayUnitLabel")}<select value={displayUnit} onChange={(e) => onDisplayUnit(e.target.value as MeasurementUnit)}>{unitOptions.filter((unit) => sourceUnit !== "drawing" || unit === "drawing").map((unit) => <option key={unit} value={unit}>{unit === "drawing" ? t("drawingUnit") : unit}</option>)}</select></label>
       </div>
+      <PrecisionSelect value={precision} onChange={onPrecision}/>
       {sourceUnit === "drawing" ? <p className="measurement-hint">{t("measureUnknownUnit")}</p> : null}
       {geometry?.limited||geometry?.snapLimited ? <p className="measurement-hint">{t("measureIndexLimited")}</p> : null}
       <div className="measurement-actions">
@@ -60,11 +65,11 @@ export function MeasurementPanel({ settings, geometry, sourceUnit, displayUnit, 
   );
 }
 
-export function MeasurementStatus({settings,sourceUnit,displayUnit,feedback,onShow,onToggle}:Pick<Props,"settings"|"sourceUnit"|"displayUnit"|"feedback">&{onShow():void;onToggle():void}) {
+export function MeasurementStatus({settings,sourceUnit,displayUnit,feedback,precision,onShow,onToggle}:Pick<Props,"settings"|"sourceUnit"|"displayUnit"|"feedback"|"precision">&{onShow():void;onToggle():void}) {
   const {t,locale}=useI18n();
   const value=measurementValue(settings);
   const unit=displayUnit==="drawing"?t("drawingUnit"):displayUnit;
-  const result=value===undefined?"—":settings.mode==="angle"?new Intl.NumberFormat(locale,{maximumFractionDigits:2}).format(value)+"°":`${new Intl.NumberFormat(locale,{maximumFractionDigits:3}).format(convertMeasurement(value,sourceUnit,displayUnit,settings.mode==="area"))} ${unit}${settings.mode==="area"?"²":""}`;
+  const result=value===undefined?"—":settings.mode==="angle"?formatCadNumber(value,precision,locale)+"°":`${formatCadNumber(convertMeasurement(value,sourceUnit,displayUnit,settings.mode==="area"),precision,locale)} ${unit}${settings.mode==="area"?"²":""}`;
   const direction=settings.mode==="linear"?linearMeasurement(settings.points,settings.linearAxis)?.axis:undefined;
   const mode=t(modeKeys[settings.mode])+(direction?` · ${t(direction==="x"?"measureHorizontal":"measureVertical")}`:"");
   return <div className={`measurement-status ${settings.enabled?"is-active":""}`} role="status">

@@ -2,7 +2,7 @@ import { forwardRef, useImperativeHandle, useLayoutEffect, useMemo, useRef, useS
 import type { DrawingViewer, MeasurementPick } from "../viewer/DrawingViewer";
 import type { DrawingPoint } from "../viewer/savedView";
 import { distance, type MeasurableEntity, type MeasurementUnit } from "../viewer/measurementGeometry";
-import { annotationGeometry, annotationHit, annotationPoints, defaultTextHeight, newAnnotationDocument, readAnnotations, saveAnnotations, segments, sourceAnnotation, sourceMoveObjects, translateAnnotation, trimAnnotation, uid, visibleAnnotations, type Annotation, type AnnotationDocument, type AnnotationTool } from "../viewer/annotations";
+import { annotationGeometry, annotationHit, annotationPoints, defaultTextHeight, drawingLayers, ensurePointLayer, isPointAnnotation, isPointTool, POINT_LAYER_ID, POINT_TOOLS, pointLayer, readAnnotations, removeDrawingLayer, saveAnnotations, segments, sourceAnnotation, sourceMoveObjects, translateAnnotation, trimAnnotation, uid, visibleAnnotations, type Annotation, type AnnotationDocument, type AnnotationTool } from "../viewer/annotations";
 import { drawAnnotations } from "../viewer/annotationOverlay";
 import { drawMeasurementOverlay } from "../viewer/measurementOverlay";
 import { visitCadSegments, type Segment } from "../viewer/cadPicking";
@@ -15,6 +15,9 @@ import { CanvasTextEditor } from "./CanvasTextEditor";
 import { HOLD_MS } from "../viewer/measurementGesture";
 import { editNumber, offsetAnnotation, offsetGuide, parseEditNumber, readOffsetDistance, saveOffsetDistance, type OffsetGuide } from "../viewer/offsetGeometry";
 import { GeometryDistanceDialog, OffsetDirections } from "./GeometryEditControls";
+import { PrecisionSelect } from "./PrecisionSelect";
+import { addPointObject, badgeForeground, completePointText, pointHit, pointMoveSnaps, readPointStyle, savePointStyle, type PointStyle, type PointTextSession } from "../viewer/pointMarkup";
+import { PointLeaderEditor, PointStyleControls } from "./PointControls";
 const words={
   ko:{title:"레이어 · 그리기",add:"레이어 추가",remove:"레이어 삭제",layer:"레이어",select:"선택",polyline:"폴리라인",circle:"원",rectangle:"사각형","dimension-aligned":"정렬 치수","dimension-linear":"선형 치수",trim:"라인 삭제 (트림)",erase:"객체 삭제",finish:"완료",cancel:"취소",undo:"실행 취소",snap:"스냅",scale:"치수 배율",saved:"자동 저장됨",unsaved:"저장 실패 — 공간을 확인하세요",close:"그리기 창 닫기",pause:"그리기 중지",pick:"원본 선 또는 추가 객체를 선택하세요",polyHelp:"점을 차례로 찍고 완료를 누르세요. 시작점 스냅으로 닫을 수 있습니다.",twoHelp:"두 점을 선택하세요. 길게 누르면 위쪽 조준점으로 정밀하게 찍습니다.",dimHelp:"기준점 2개 → 치수선 위치를 선택하세요.",trimHelp:"제거할 구간을 누르세요. 보이는 선·원과의 교차점이 절단 경계입니다.",noBoundary:"절단할 교차 경계가 없습니다.",hidden:"숨긴 레이어입니다. 표시를 켜세요.",noHit:"선택할 객체가 없습니다.",masked:"원본 가림 추가",deleted:"객체 삭제됨",trimmed:"선 구간 제거됨",source:"원본 객체",need:"점을 더 선택하세요",limit:"객체 또는 경계 수 한도를 초과했습니다.",scaleHelp:"새 치수와 선택한 치수에 적용",restore:"레이어를 숨기거나 삭제하면 가린 원본이 다시 보입니다."},
   en:{title:"Layers · Draw",add:"Add layer",remove:"Delete layer",layer:"Layer",select:"Select",polyline:"Polyline",circle:"Circle",rectangle:"Rectangle","dimension-aligned":"Aligned dim","dimension-linear":"Linear dim",trim:"Trim line",erase:"Delete object",finish:"Finish",cancel:"Cancel",undo:"Undo",snap:"Snap",scale:"Dim scale",saved:"Auto saved",unsaved:"Save failed — check storage",close:"Close drawing tools",pause:"Stop editing",pick:"Select original geometry or a user object",polyHelp:"Pick vertices, then Finish. Snap back to the start to close.",twoHelp:"Pick two points. Hold for the precision target above your finger.",dimHelp:"Pick two references, then the dimension position.",trimHelp:"Tap the segment to remove. Visible intersections are cutting boundaries.",noBoundary:"No cutting intersection found.",hidden:"Show the active layer first.",noHit:"No selectable object here.",masked:"Original masked",deleted:"Object deleted",trimmed:"Segment trimmed",source:"Original object",need:"Pick more points",limit:"Too many objects or cutting edges.",scaleHelp:"Applies to new and selected dimensions",restore:"Hide or delete a layer to reveal masked originals."},
@@ -33,10 +36,16 @@ const geometryWords={
 };
 type OffsetChoice={object:Annotation;guide:OffsetGuide};
 type PendingEdit={kind:"move";base:DrawingPoint;target:DrawingPoint}|{kind:"offset";object:Annotation;side:1|-1};
-type Props={viewer:DrawingViewer;active:boolean;open:boolean;sourceUnit:MeasurementUnit;displayUnit:MeasurementUnit;onHide():void;onActivate():void;onPause():void;onHistoryState(state:EditHistoryState):void};
-export const AnnotationEditor=forwardRef<AnnotationEditorHandle,Props>(function AnnotationEditor({viewer,active,open,sourceUnit,displayUnit,onHide,onActivate,onPause,onHistoryState},ref){
-  const {locale,t}=useI18n(),w={...words[locale],...additions[locale],...geometryWords[locale]},u=useUx();
-  const [tab,setTab]=useState<"layers"|"draw"|"dimensions">("draw");
+const editorTabs=["layers","draw","dimensions","points"]as const;
+const pointWords={
+ ko:{points:"포인트","point-arrow":"화살표","point-cloud":"구름마크","point-circle":"원형 표시","point-rectangle":"사각형 표시","point-leader":"텍스트 지시선",pointHelp:"두 점으로 표시합니다. 화살표는 두 번째 점이 화살촉이고, 구름·사각형은 대각선 모서리를 찍습니다.",leaderHelp:"가리킬 지점 → 문자 위치를 찍고 입력하세요. 바깥을 누르면 완료, 문자를 길게 누르면 편집합니다.",reserved:"포인트 도구 전용 · 자동 선택",currentLayer:"현재 레이어",pointInvalid:"지시문자는 1~500자로 입력하세요."},
+ en:{points:"Points","point-arrow":"Arrow","point-cloud":"Cloud","point-circle":"Circle mark","point-rectangle":"Rectangle mark","point-leader":"Text leader",pointHelp:"Pick two anchors. Arrowheads use the second point; cloud/rectangle use opposite corners.",leaderHelp:"Pick the detail, then label position and type. Tap outside to finish; hold the label to edit.",reserved:"Point tools only · automatic",currentLayer:"Current layer",pointInvalid:"Enter a label of 1–500 characters."},
+ tr:{points:"İşaret","point-arrow":"Ok","point-cloud":"Bulut","point-circle":"Daire işareti","point-rectangle":"Dikdörtgen işareti","point-leader":"Yazılı ok",pointHelp:"İki nokta seçin. İkinci nokta ok ucudur; bulut/dikdörtgende karşı köşeleri seçin.",leaderHelp:"Ayrıntı ve yazı konumunu seçip yazın. Dışarıya dokunarak bitirin; yazıya basılı tutarak düzenleyin.",reserved:"Yalnızca işaret araçları · otomatik",currentLayer:"Etkin katman",pointInvalid:"1–500 karakter girin."},
+};
+type Props={viewer:DrawingViewer;active:boolean;open:boolean;sourceUnit:MeasurementUnit;displayUnit:MeasurementUnit;precision:number;onPrecision(value:number):void;onHide():void;onActivate():void;onPause():void;onHistoryState(state:EditHistoryState):void};
+export const AnnotationEditor=forwardRef<AnnotationEditorHandle,Props>(function AnnotationEditor({viewer,active,open,sourceUnit,displayUnit,precision,onPrecision,onHide,onActivate,onPause,onHistoryState},ref){
+  const {locale,t}=useI18n(),w={...words[locale],...additions[locale],...geometryWords[locale],...pointWords[locale]},u=useUx();
+  const [tab,setTab]=useState<typeof editorTabs[number]>("draw");
   const key=viewer.getMeasurementGeometry().unitPreferenceKey;
   const [doc,setDoc]=useState<AnnotationDocument>(()=>{const d=readAnnotations(key);return{...d,activeLayer:d.layers[0].id};});
   const [tool,setTool]=useState<AnnotationTool>("select"),[draft,setDraft]=useState<DrawingPoint[]>([]),[snapping,setSnapping]=useState(true);
@@ -44,6 +53,7 @@ export const AnnotationEditor=forwardRef<AnnotationEditorHandle,Props>(function 
   const [scaleInput,setScaleInput]=useState(String(doc.dimensionScale));
   const [pending,setPending]=useState<PendingEdit|null>(null),[editValues,setEditValues]=useState<string[]>([]),[editError,setEditError]=useState("");
   const [offsetChoice,setOffsetChoice]=useState<OffsetChoice|null>(null);
+  const [pointStyle,setPointStyle]=useState(readPointStyle),[pointSession,setPointSession]=useState<PointTextSession|null>(null),pointSessionRef=useRef(pointSession);pointSessionRef.current=pointSession;
   const [heightInput,setHeightInput]=useState(String(doc.textHeight??defaultTextHeight(sourceUnit))),[textColor,setTextColor]=useState<string|undefined>();
   const [textSession,setTextSession]=useState<TextEditSession|null>(null),textSessionRef=useRef(textSession);textSessionRef.current=textSession;
   const docRef=useRef(doc);docRef.current=doc;
@@ -57,11 +67,17 @@ export const AnnotationEditor=forwardRef<AnnotationEditorHandle,Props>(function 
   const originalText=textSession?.originalId?doc.objects.find(o=>o.id===textSession.originalId):undefined;
   const textChanged=!!textSession&&(originalText?
     textSession.text.replace(/\r\n?/g,"\n")!==originalText.text||textSession.height!==originalText.textHeight||textSession.color!==originalText.color:!!textSession.text.trim());
-  const current=doc.layers.find(l=>l.id===doc.activeLayer)!;
+  const normal=drawingLayers(doc),reserved=pointLayer(doc),current=isPointTool(tool)&&active?{...reserved,color:doc.layers.some(l=>l.id===POINT_LAYER_ID)?reserved.color:pointStyle.color}:doc.layers.find(l=>l.id===doc.activeLayer)!;
+  const currentNumber=current.id===POINT_LAYER_ID?4:normal.findIndex(l=>l.id===current.id)+1;
   const commit=(next:AnnotationDocument)=>{if(next.objects.length>3000||next.objects.some(o=>o.points.length>30000)){setNotice(w.limit);return false;}if(next===docRef.current)return true;history.current.record(docRef.current);redoDraft.current=[];docRef.current=next;setDoc(next);setSelected(null);setOriginal(null);setPending(null);setOffsetChoice(null);setNotice("");return true;};
-  const make=(points:DrawingPoint[],kind:Annotation["kind"]):Annotation=>({id:uid(),layerId:doc.activeLayer,kind,points,scale:doc.dimensionScale});
-  const add=(o:Annotation)=>{if(o.points.length<2||distance(o.points[0],o.points[1])<1e-10){setNotice(w.need);return;}commit({...doc,objects:[...doc.objects,o]});setDraft([]);};
-  const choose=(value:AnnotationTool)=>{cancelTextHold.current();preview.current=null;redoDraft.current=[];setPending(null);setOffsetChoice(null);setEditError("");setTool(value);if(value.startsWith("dimension"))setTab("dimensions");else if(["polyline","circle","rectangle","text"].includes(value))setTab("draw");setDraft([]);setNotice(value==="offset"?w.offsetPick:"");if(value!=="move"){setSelected(null);setOriginal(null);}onActivate();if((value==="text"||value==="offset")&&open)onHide();};
+  const make=(points:DrawingPoint[],kind:Annotation["kind"]):Annotation=>({id:uid(),layerId:isPointTool(kind)?POINT_LAYER_ID:doc.activeLayer,kind,points,scale:doc.dimensionScale,...(isPointTool(kind)?{color:pointStyle.color,screenWidth:pointStyle.width,screenFontSize:pointStyle.fontSize}:{})});
+  const add=(o:Annotation)=>{if(o.points.length<2||distance(o.points[0],o.points[1])<1e-10){setNotice(w.need);return;}if(commit(isPointAnnotation(o)?addPointObject(doc,o):{...doc,objects:[...doc.objects,o]}))setDraft([]);};
+  const choose=(value:AnnotationTool)=>{cancelTextHold.current();if(pointSessionRef.current)finishPointText(document.querySelector<HTMLTextAreaElement>('.point-leader-input')?.value??pointSessionRef.current.object.text??'');preview.current=null;redoDraft.current=[];setPending(null);setOffsetChoice(null);setEditError("");setTool(value);if(isPointTool(value))setTab("points");else if(value.startsWith("dimension"))setTab("dimensions");else if(["polyline","circle","rectangle","text"].includes(value))setTab("draw");setDraft([]);setNotice(value==="offset"?w.offsetPick:"");if(value!=="move"){setSelected(null);setOriginal(null);}onActivate();if((value==="text"||value==="offset"||isPointTool(value))&&open)onHide();};
+  const updatePointStyle=(style:PointStyle)=>{setPointStyle(style);savePointStyle(style);if(style.color!==pointStyle.color&&doc.layers.some(l=>l.id===POINT_LAYER_ID)){const id=selected;commit({...doc,layers:doc.layers.map(l=>l.id===POINT_LAYER_ID?{...l,color:style.color}:l)});setSelected(id);}};
+  const applyPointStyle=()=>{if(!selectedObject||!isPointAnnotation(selectedObject))return;const id=selectedObject.id;commit({...doc,objects:doc.objects.map(o=>o.id===id?{...o,color:pointStyle.color,screenWidth:pointStyle.width,screenFontSize:pointStyle.fontSize}:o)});setSelected(id);};
+  const beginPointText=(object:Annotation,originalId?:string)=>{viewer.cancelInteraction();textSessionRef.current=null;setTextSession(null);const session={object,originalId};pointSessionRef.current=session;setPointSession(session);setTool("point-leader");setTab("points");setDraft([]);preview.current=null;setSelected(null);setOriginal(null);onActivate();if(open)onHide();};
+  const finishPointText=(text:string,cancel=false)=>{const session=pointSessionRef.current;if(!session)return;if(!cancel){try{const next=completePointText(docRef.current,session,text);if(!commit(next))return;}catch{setNotice(w.pointInvalid);return;}}pointSessionRef.current=null;setPointSession(null);preview.current=null;};
+  const updatePointText=(text:string)=>{const current=pointSessionRef.current;if(current){const next={...current,object:{...current.object,text}};pointSessionRef.current=next;setPointSession(next);}};
   const cancelEdit=()=>{setPending(null);setOffsetChoice(null);setDraft([]);redoDraft.current=[];preview.current=null;setEditError("");};
   const moveDestination=()=>{
     if(pending?.kind!=="move")return null;
@@ -101,7 +117,8 @@ export const AnnotationEditor=forwardRef<AnnotationEditorHandle,Props>(function 
   const editCommand=(command:EditCommand)=>{
     cancelTextHold.current();viewer.cancelInteraction();preview.current=null;
     if(pending||offsetChoice){cancelEdit();if(command!=="cancel")return;}
-    if(command==="cancel"){finishText("",true);setDraft([]);redoDraft.current=[];setSelected(null);setOriginal(null);setNotice("");return;}
+    if(command==="cancel"){finishText("",true);finishPointText("",true);setDraft([]);redoDraft.current=[];setSelected(null);setOriginal(null);setNotice("");return;}
+    if(pointSessionRef.current)finishPointText(pointSessionRef.current.object.text??"");
     if(textSessionRef.current)finishText(textSessionRef.current.text);
     if(command==="undo"&&draft.length){redoDraft.current.push(draft.at(-1)!);setDraft(draft.slice(0,-1));return;}
     if(command==="redo"&&redoDraft.current.length){setDraft([...draft,redoDraft.current.pop()!]);return;}
@@ -109,23 +126,23 @@ export const AnnotationEditor=forwardRef<AnnotationEditorHandle,Props>(function 
     const next=history.current[command](docRef.current);
     if(next){docRef.current=next;setDoc(next);setDraft([]);redoDraft.current=[];setSelected(null);setOriginal(null);setNotice("");}
   };
-  useImperativeHandle(ref,()=>({execute:editCommand,finishText(){const current=textSessionRef.current;if(!current)return false;finishText(document.querySelector<HTMLTextAreaElement>(".canvas-text-input")?.value??current.text);return true;}}));
+  useImperativeHandle(ref,()=>({execute:editCommand,finishText(){const point=pointSessionRef.current;if(point){finishPointText(document.querySelector<HTMLTextAreaElement>('.point-leader-input')?.value??point.object.text??'');return true;}const current=textSessionRef.current;if(!current)return false;finishText(document.querySelector<HTMLTextAreaElement>(".canvas-text-input")?.value??current.text);return true;}}));
   const erase=()=>{
-    if(!current.visible){setNotice(w.hidden);return;}
+    if(!current.visible&&!selected){setNotice(w.hidden);return;}
     if(selected){commit({...doc,objects:doc.objects.filter(o=>o.id!==selected)});setNotice(w.deleted);}
     else if(original){add(make(original.points,"mask"));setNotice(w.masked);}
   };
   const pick=(pick:MeasurementPick)=>{
     if(tool==="offset"){
       if(!current.visible){setNotice(w.hidden);return;}
-      const hit=annotationHit(visible,pick.point,viewer.worldTolerance(18),sourceUnit),source=hit?null:pick.entity;
+      const hit=pointHit(visible,pick.point,18,p=>viewer.projectPoints(p))??annotationHit(visible,pick.point,viewer.worldTolerance(18),sourceUnit),source=hit?null:pick.entity;
       if(!hit&&!source){setNotice(w.noHit);return;}
       if((hit?.points.length??source?.points.length??0)>3000){setNotice(w.limit);return;}
       const object=hit??sourceAnnotation(source!,doc.activeLayer),guide=offsetGuide(object,pick.point);
       if(!guide){setNotice(w.unsupported);return;}
       setSelected(hit?.id??null);setOriginal(source);setOffsetChoice({object,guide});preview.current=null;setNotice(w.offsetDirection);if(open)onHide();return;
     }
-    if(tool==="select"||(tool==="move"&&!selected&&!original)){const hit=annotationHit(visible,pick.point,viewer.worldTolerance(18),sourceUnit);if(tool==="move"&&hit?.kind==="mask"){setNotice(w.maskMove);return;}setSelected(hit?.id??null);if(!hit&&pick.entity&&pick.entity.points.length>30000){setOriginal(null);setNotice(w.limit);return;}setOriginal(hit?null:pick.entity);setNotice(hit?hit.kind:pick.entity?w.source:w.noHit);return;}
+    if(tool==="select"||(tool==="move"&&!selected&&!original)){const hit=pointHit(visible,pick.point,18,p=>viewer.projectPoints(p))??annotationHit(visible,pick.point,viewer.worldTolerance(18),sourceUnit);if(tool==="move"&&hit?.kind==="mask"){setNotice(w.maskMove);return;}if(hit&&isPointAnnotation(hit))setPointStyle({width:hit.screenWidth??3,color:hit.color??"#ff586d",fontSize:hit.screenFontSize??18});setSelected(hit?.id??null);if(!hit&&pick.entity&&pick.entity.points.length>30000){setOriginal(null);setNotice(w.limit);return;}setOriginal(hit?null:pick.entity);setNotice(hit?isPointTool(hit.kind)?w[hit.kind]:hit.kind:pick.entity?w.source:w.noHit);return;}
     if(!current.visible&&!(tool==="move"&&selectedObject)){setNotice(w.hidden);return;}
     if(tool==="text"){
       beginText(pick.point);return;
@@ -137,6 +154,7 @@ export const AnnotationEditor=forwardRef<AnnotationEditorHandle,Props>(function 
       return;
     }
     if(tool==="trim"){
+      if(pointHit(visible,pick.point,18,p=>viewer.projectPoints(p))){setNotice(w.unsupported);return;}
       const hit=annotationHit(visible.filter(o=>o.kind!=="mask"&&o.kind!=="text"&&!o.kind.startsWith("dimension")),pick.point,viewer.worldTolerance(18),sourceUnit);
       const source=hit?null:pick.entity;
       const candidate=hit??(source?{...make(source.points,"polyline"),id:"original"}:null);
@@ -158,7 +176,9 @@ export const AnnotationEditor=forwardRef<AnnotationEditorHandle,Props>(function 
       }catch{setNotice(w.limit);}return;
     }
     redoDraft.current=[];const points=[...draft,pick.point];
-    if(tool==="polyline"){
+    if(isPointTool(tool)){
+      if(points.length===2){if(["point-cloud","point-rectangle"].includes(tool)&&(Math.abs(points[1].x-points[0].x)<1e-10||Math.abs(points[1].y-points[0].y)<1e-10)){setNotice(w.need);return;}const object=make(points,tool);if(tool==="point-leader")beginPointText(object);else add(object);}else setDraft(points);
+    }else if(tool==="polyline"){
       if(points.length>=4&&pick.snapped==="start")add(make(points,"polyline"));else setDraft(points);
     }else if(tool==="circle"||tool==="rectangle"){
       if(points.length===2)add(make(points,tool));else setDraft(points);
@@ -171,6 +191,7 @@ export const AnnotationEditor=forwardRef<AnnotationEditorHandle,Props>(function 
     const kind=tool==="select"||tool==="trim"||tool==="move"||tool==="offset"?"polyline":tool;
     let temporary:Annotation|null=points.length>=2?{...make(points,kind),id:"draft"}:null;
     if((kind==="rectangle"||kind==="circle")&&points.length!==2)temporary=null;
+    if(isPointTool(kind)&&points.length!==2)temporary=null;
     if(kind.startsWith("dimension")&&points.length!==3)temporary=null;
     if(kind==="text")temporary=null;
     let renderingDoc=textSession?.originalId?{...doc,objects:doc.objects.filter(o=>o.id!==textSession.originalId)}:doc,renderingSelected=selected;
@@ -181,8 +202,9 @@ export const AnnotationEditor=forwardRef<AnnotationEditorHandle,Props>(function 
       else if(original){const[m,c]=sourceMoveObjects(original,doc.activeLayer,draft[0],destination!);renderingDoc={...doc,objects:[...doc.objects,m]};temporary=c;renderingSelected=c.id;}
     }else if(tool==="move")temporary=null;
     if(tool==="offset"){const value=parseEditNumber(editValues[0]??"");temporary=pending?.kind==="offset"&&value!==null?offsetAnnotation(pending.object,value,pending.side):null;if(temporary)temporary={...temporary,id:"offset-preview",layerId:doc.activeLayer};}
+    if(pointSession){if(pointSession.originalId)renderingDoc={...renderingDoc,objects:renderingDoc.objects.filter(o=>o.id!==pointSession.originalId)};temporary={...pointSession.object,text:""};}
     const originalOutline=original&&active&&!moving?{...make(original.points,"polyline"),id:"source-selection"}:null;
-    drawAnnotations(overlay.current,originalOutline?{...renderingDoc,objects:[...renderingDoc.objects,originalOutline]}:renderingDoc,active?(originalOutline?.id??renderingSelected):null,active?temporary:null,p=>viewer.projectPoints(p),sourceUnit,displayUnit);
+    drawAnnotations(overlay.current,originalOutline?{...renderingDoc,objects:[...renderingDoc.objects,originalOutline]}:renderingDoc,active?(originalOutline?.id??renderingSelected):null,active?temporary:null,p=>viewer.projectPoints(p),sourceUnit,displayUnit,precision,locale);
     drawMeasurementOverlay(target.current,{enabled:active&&tool!=="select"&&tool!=="trim"&&tool!=="offset"&&(tool!=="move"||!!selected||!!original),mode:"path",points:pending?.kind==="move"&&destination?[pending.base,destination]:draft,snapping,entity:null},p=>viewer.projectPoints(p),preview.current);
   };
   const renderRef=useRef(render);renderRef.current=render;
@@ -191,21 +213,23 @@ export const AnnotationEditor=forwardRef<AnnotationEditorHandle,Props>(function 
   useLayoutEffect(()=>{viewer.setUserGeometry(geometry,pickingMasks);return()=>viewer.setUserGeometry(annotationGeometry([]),[]);},[viewer,geometry,pickingMasks]);
   useLayoutEffect(()=>{
     const selecting=tool==="select"||tool==="offset"||(tool==="move"&&!selected&&!original);
-    viewer.configureAnnotations(active&&!textSession&&!pending&&!offsetChoice?{tool:selecting?"select":tool,snapping:snapping&&!selecting&&tool!=="trim",points:draft,anchor:tool.startsWith("dimension")?draft[0]:draft.at(-1),onPick:pick,onPreview:p=>{preview.current=p;renderRef.current();}}:null);
+    viewer.configureAnnotations(active&&!textSession&&!pointSession&&!pending&&!offsetChoice?{tool:selecting?"select":tool,snapping:snapping&&!selecting&&tool!=="trim",points:draft,anchor:tool.startsWith("dimension")?draft[0]:draft.at(-1),referenceSnaps:tool==="move"&&selectedObject&&!draft.length?pointMoveSnaps(selectedObject):undefined,onPick:pick,onPreview:p=>{preview.current=p;renderRef.current();}}:null);
     renderRef.current();return()=>viewer.configureAnnotations(null);
-  },[viewer,active,tool,draft,snapping,doc,selected,original,sourceUnit,displayUnit,textSession,heightInput,pending,offsetChoice,editValues]);
-  useLayoutEffect(()=>{if(!active)cancelEdit();},[active]);
+  },[viewer,active,tool,draft,snapping,doc,selected,original,sourceUnit,displayUnit,textSession,heightInput,pending,offsetChoice,editValues,pointSession,pointStyle,precision,locale]);
+  useLayoutEffect(()=>{if(!active){cancelEdit();pointSessionRef.current=null;setPointSession(null);}},[active]);
   useLayoutEffect(()=>{setSaved(saveAnnotations(key,doc));},[key,doc]);
   useLayoutEffect(()=>setScaleInput(String(doc.dimensionScale)),[doc.dimensionScale]);
   useLayoutEffect(()=>{if(!textSessionRef.current&&doc.textHeight!==undefined)setHeightInput(String(doc.textHeight));},[doc.textHeight]);
-  const interaction=useRef({visible,beginText});interaction.current={visible,beginText};
+  const interaction=useRef({visible,beginText,beginPointText});interaction.current={visible,beginText,beginPointText};
   useLayoutEffect(()=>{
     const canvas=viewer.getCanvasElement(),pointers=new Set<number>();let hold:ReturnType<typeof setTimeout>|undefined,start:{x:number;y:number}|null=null;
     const clear=()=>{clearTimeout(hold);hold=undefined;start=null;};
     cancelTextHold.current=clear;
     const down=(event:PointerEvent)=>{
       pointers.add(event.pointerId);clear();if(pointers.size!==1||(event.button!==0&&event.pointerType!=="touch"))return;
-      const point=viewer.clientToDrawing({x:event.clientX,y:event.clientY}),hit=annotationHit(interaction.current.visible.filter(o=>o.kind==="text"),point,viewer.worldTolerance(5),sourceUnit);
+      const point=viewer.clientToDrawing({x:event.clientX,y:event.clientY}),label=pointHit(interaction.current.visible,point,4,p=>viewer.projectPoints(p),true);
+      if(label){start={x:event.clientX,y:event.clientY};hold=setTimeout(()=>{clear();interaction.current.beginPointText(label,label.id);},HOLD_MS);return;}
+      const hit=annotationHit(interaction.current.visible.filter(o=>o.kind==="text"),point,viewer.worldTolerance(5),sourceUnit);
       if(!hit)return;start={x:event.clientX,y:event.clientY};hold=setTimeout(()=>{clear();interaction.current.beginText(hit.points[0],hit);},HOLD_MS);
     };
     const move=(event:PointerEvent)=>{if(start&&Math.hypot(event.clientX-start.x,event.clientY-start.y)>8)clear();};
@@ -213,10 +237,12 @@ export const AnnotationEditor=forwardRef<AnnotationEditorHandle,Props>(function 
     canvas.addEventListener("pointerdown",down,true);canvas.addEventListener("pointermove",move,true);canvas.addEventListener("pointerup",end,true);canvas.addEventListener("pointercancel",end,true);
     return()=>{clear();cancelTextHold.current=()=>{};canvas.removeEventListener("pointerdown",down,true);canvas.removeEventListener("pointermove",move,true);canvas.removeEventListener("pointerup",end,true);canvas.removeEventListener("pointercancel",end,true);};
   },[viewer,sourceUnit]);
-  useLayoutEffect(()=>{onHistoryState({canUndo:!!draft.length||textChanged||history.current.canUndo,canRedo:!textChanged&&(!!redoDraft.current.length||(!draft.length&&history.current.canRedo))});},[doc,draft,textChanged,onHistoryState]);
+  useLayoutEffect(()=>{onHistoryState({canUndo:!!draft.length||textChanged||!!pointSession?.object.text?.trim()||history.current.canUndo,canRedo:!textChanged&&!pointSession&&(!!redoDraft.current.length||(!draft.length&&history.current.canRedo))});},[doc,draft,textChanged,pointSession,onHistoryState]);
   const updateScale=()=>{const scale=Number(scaleInput);if(!Number.isFinite(scale)||scale<1||scale>10000){setScaleInput(String(doc.dimensionScale));return;}if(scale===doc.dimensionScale&&!selected)return;const id=selected;commit({...doc,dimensionScale:scale,objects:doc.objects.map(o=>o.id===selected&&o.kind.startsWith("dimension")?{...o,scale}:o)});setSelected(id);};
   return <>
     <svg ref={overlay} className="annotation-overlay" aria-hidden="true"/><svg ref={target} className="measurement-overlay annotation-target-overlay" aria-hidden="true"/>
+    <div className={`active-layer-badge ${current.visible?"":"layer-hidden"}`} role="status" aria-label={`${w.currentLayer} ${currentNumber} ${current.name}`} title={`${w.currentLayer} ${currentNumber} · ${current.name}`} style={{background:current.color,color:badgeForeground(current.color)}} data-layer={currentNumber}>{currentNumber}</div>
+    {active&&pointSession?<PointLeaderEditor viewer={viewer} session={pointSession} onText={updatePointText} onFinish={finishPointText}/>:null}
     {active&&offsetChoice&&!pending?<OffsetDirections viewer={viewer} guide={offsetChoice.guide} onChoose={side=>{setEditValues([editNumber(readOffsetDistance(sourceUnit))]);setEditError("");setPending({kind:"offset",object:offsetChoice.object,side});}}/>:null}
     {active&&pending?<GeometryDistanceDialog kind={pending.kind} values={editValues} unit={sourceUnit==="drawing"?w.drawingUnit:sourceUnit} error={editError} onChange={values=>{setEditValues(values);setEditError("");}} onApply={applyEdit} onCancel={cancelEdit}/>:null}
     <CanvasTextEditor viewer={viewer} session={textSession} active={active&&tool==="text"&&!open} height={textSession?.height??+heightInput}
@@ -225,22 +251,25 @@ export const AnnotationEditor=forwardRef<AnnotationEditorHandle,Props>(function 
     {active?<div className="annotation-status" role="status"><button onClick={onHide}>{current.name} · {w[tool]} {draft.length?`· ${draft.length}`:""}<small>{notice||(!saved?w.unsaved:w.saved)}</small></button><button onClick={onPause} aria-label={w.pause}>Ⅱ</button></div>:null}
     {open?<section className="annotation-panel" data-current-tool={tool} aria-label={w.title}>
       <header><strong>{u.tools}</strong><span><ToolIcon name="shield"/>{u.original}</span><button onClick={onHide} aria-label={w.close}>×</button></header>
-      <div className="annotation-tabs" role="tablist" aria-label={w.title}>{(["layers","draw","dimensions"]as const).map((name,i)=><button id={`arcad-tab-${name}`} role="tab" aria-selected={tab===name} aria-controls={`arcad-section-${name}`} key={name} onClick={()=>setTab(name)} onKeyDown={e=>{if(["ArrowLeft","ArrowRight","Home","End"].includes(e.key)){e.preventDefault();const keys=["layers","draw","dimensions"]as const,next=e.key==="Home"?0:e.key==="End"?2:(i+(e.key==="ArrowRight"?1:2))%3;setTab(keys[next]);document.getElementById(`arcad-tab-${keys[next]}`)?.focus();}}} tabIndex={tab===name?0:-1}><ToolIcon name={name==="layers"?"layers":name==="draw"?"polyline":"dimension-linear"}/>{name==="layers"?u.layers:name==="draw"?u.drawing:u.dimensions}</button>)}</div>
+      <div className="annotation-tabs" role="tablist" aria-label={w.title}>{editorTabs.map((name,i)=><button id={`arcad-tab-${name}`} role="tab" aria-selected={tab===name} aria-controls={`arcad-section-${name}`} key={name} onClick={()=>setTab(name)} onKeyDown={e=>{if(["ArrowLeft","ArrowRight","Home","End"].includes(e.key)){e.preventDefault();const next=e.key==="Home"?0:e.key==="End"?3:(i+(e.key==="ArrowRight"?1:3))%4;setTab(editorTabs[next]);document.getElementById(`arcad-tab-${editorTabs[next]}`)?.focus();}}} tabIndex={tab===name?0:-1}><ToolIcon name={name==="layers"?"layers":name==="draw"?"polyline":name==="points"?"point-arrow":"dimension-linear"}/>{name==="layers"?u.layers:name==="draw"?u.drawing:name==="points"?w.points:u.dimensions}</button>)}</div>
       <div id="arcad-section-layers" role="tabpanel" aria-labelledby="arcad-tab-layers" hidden={tab!=="layers"}>
-      <div className="layer-section-heading"><strong>{u.layers}</strong><span>{doc.layers.length} / 3</span></div>
-      <div className="user-layers">{doc.layers.map((l,i)=><div key={l.id} className={l.id===doc.activeLayer?"active":""}>
-        <input type="radio" name="user-layer" aria-label={`${w.layer} ${i+1}`} checked={l.id===doc.activeLayer} onChange={()=>{commit({...doc,activeLayer:l.id});setDraft([]);}}/>
+      <div className="layer-section-heading"><strong>{u.layers}</strong><span>{normal.length} / 3 ＋ 4</span></div>
+      <div className="user-layers">{normal.map((l,i)=><div key={l.id} className={l.id===current.id?"active":""}>
+        <input type="radio" name="user-layer" aria-label={`${w.layer} ${i+1}`} checked={l.id===doc.activeLayer&&!(isPointTool(tool)&&active)} onChange={()=>{commit({...doc,activeLayer:l.id});setTool("select");setDraft([]);}}/>
         <input type="checkbox" aria-label={`${l.name} 표시`} checked={l.visible} onChange={()=>commit({...doc,layers:doc.layers.map(a=>a.id===l.id?{...a,visible:!a.visible}:a)})}/>
         <input className="layer-name" aria-label={`${w.layer} ${i+1} 이름`} value={l.name} maxLength={24} onChange={e=>commit({...doc,layers:doc.layers.map(a=>a.id===l.id?{...a,name:e.target.value}:a)})}/>
         <input type="color" aria-label={`${w.layer} ${i+1} 색상`} value={l.color} onChange={e=>commit({...doc,layers:doc.layers.map(a=>a.id===l.id?{...a,color:e.target.value}:a)})}/>
-        <button aria-label={`${w.remove} ${i+1}`} onClick={()=>{const layers=doc.layers.filter(a=>a.id!==l.id);const next=layers.length?{...doc,layers,activeLayer:layers[0].id,objects:doc.objects.filter(o=>o.layerId!==l.id)}:newAnnotationDocument();commit(next);setDraft([]);}}>×</button>
+        <button aria-label={`${w.remove} ${i+1}`} onClick={()=>{commit(removeDrawingLayer(doc,l.id));setDraft([]);}}>×</button>
       </div>)}</div>
-      <button className="add-user-layer" disabled={doc.layers.length>=3} onClick={()=>{const id=uid();commit({...doc,layers:[...doc.layers,{id,name:`${w.layer} ${doc.layers.length+1}`,color:["#49cfff","#fa68df","#8ce56d"][doc.layers.length],visible:true}],activeLayer:id});setDraft([]);}}>＋ {w.add}</button>
+      <div className="reserved-point-layer"><b style={{background:reserved.color,color:badgeForeground(reserved.color)}}>4</b><input type="checkbox" aria-label={`${reserved.name} 표시`} checked={reserved.visible} onChange={()=>{viewer.cancelInteraction();preview.current=null;setDraft([]);const next=ensurePointLayer(doc);commit({...next,layers:next.layers.map(l=>l.id===POINT_LAYER_ID?{...l,visible:!l.visible}:l)});}}/><strong>{reserved.name}<small>{w.reserved}</small></strong><span aria-hidden="true">🔒</span></div>
+      <button className="add-user-layer" disabled={normal.length>=3} onClick={()=>{const id=uid();commit({...doc,layers:[...normal,{id,name:`${w.layer} ${normal.length+1}`,color:["#49cfff","#fa68df","#8ce56d"][normal.length],visible:true},...(doc.layers.some(l=>l.id===POINT_LAYER_ID)?[reserved]:[])],activeLayer:id});setTool("select");setDraft([]);}}>＋ {w.add}</button>
       <small className="annotation-restore">{w.restore}</small></div>
       <div id="arcad-section-draw" role="tabpanel" aria-labelledby="arcad-tab-draw" hidden={tab!=="draw"} className="annotation-tools draw-tool-grid">{(["polyline","circle","rectangle","text"]as AnnotationTool[]).map(name=><button key={name} data-tool={name} aria-pressed={tool===name&&active} onClick={()=>choose(name)}><ToolIcon name={name}/><span>{w[name]}</span></button>)}</div>
       <div id="arcad-section-dimensions" role="tabpanel" aria-labelledby="arcad-tab-dimensions" hidden={tab!=="dimensions"} className="annotation-tools dimension-tool-grid">{(["dimension-aligned","dimension-linear"]as AnnotationTool[]).map(name=><button key={name} data-tool={name} aria-pressed={tool===name&&active} onClick={()=>choose(name)}><ToolIcon name={name}/><span>{w[name]}</span></button>)}</div>
+      {tab==="dimensions"?<PrecisionSelect value={precision} onChange={onPrecision}/>:null}
+      <div id="arcad-section-points" role="tabpanel" aria-labelledby="arcad-tab-points" hidden={tab!=="points"}><div className="annotation-tools point-tool-grid">{POINT_TOOLS.map(name=><button key={name} data-tool={name} aria-pressed={tool===name&&active} onClick={()=>choose(name)}><ToolIcon name={name}/><span>{w[name]}</span></button>)}</div><PointStyleControls style={pointStyle} onChange={updatePointStyle} selected={!!selectedObject&&isPointAnnotation(selectedObject)} onApply={applyPointStyle}/><p className="annotation-help">{tool==="point-leader"?w.leaderHelp:w.pointHelp}</p></div>
       <div className="annotation-tools utility-tool-grid" hidden={tab==="layers"}>{(["select","move","offset","trim"]as AnnotationTool[]).map(name=><button key={name} data-tool={name} aria-pressed={tool===name&&active} onClick={()=>choose(name)}><ToolIcon name={name}/><span>{w[name]}</span></button>)}<button data-tool="delete" disabled={!selected&&!original} onClick={erase}><ToolIcon name="delete"/><span>{w.erase}</span></button></div>
-      <div className="annotation-options" hidden={tab==="layers"}><label><input type="checkbox" checked={snapping} onChange={e=>setSnapping(e.target.checked)}/>{w.snap}</label><label>{w.scale} 1:<input aria-label={w.scale} type="number" min={1} max={10000} value={scaleInput} onChange={e=>setScaleInput(e.target.value)} onBlur={updateScale} onKeyDown={e=>{if(e.key==="Enter")e.currentTarget.blur();}} title={w.scaleHelp}/></label></div>
+      <div className="annotation-options" hidden={tab==="layers"}><label><input type="checkbox" checked={snapping} onChange={e=>setSnapping(e.target.checked)}/>{w.snap}</label><label hidden={tab==="points"}>{w.scale} 1:<input aria-label={w.scale} type="number" min={1} max={10000} value={scaleInput} onChange={e=>setScaleInput(e.target.value)} onBlur={updateScale} onKeyDown={e=>{if(e.key==="Enter")e.currentTarget.blur();}} title={w.scaleHelp}/></label></div>
       {tool==="text"?<p className="annotation-help">{locale==="ko"?"도면을 길게 눌러 위치를 잡고 손을 떼면 바로 입력합니다. 바깥을 누르면 완료되고, 문자를 길게 누르면 다시 편집합니다.":locale==="en"?"Hold and drag to position text, then release to type. Tap outside to finish; hold existing text to edit.":"Konum için basılı tutup sürükleyin, bırakınca yazın. Bitirmek için dışarıya, düzenlemek için metne basılı tutun."}</p>:null}
       <details className="annotation-guidance" hidden={tab==="layers"}><summary>{t("measureHelp")}</summary><p className="annotation-help">{tool==="select"?w.pick:tool==="move"?(!selected&&!original?w.moveSelect:draft.length?w.moveTarget:w.moveBase):tool==="offset"?offsetChoice?w.offsetDirection:w.offsetPick:tool==="text"?w.textHelp:tool==="trim"?w.trimHelp:tool==="polyline"?w.polyHelp:tool.startsWith("dimension")?w.dimHelp:w.twoHelp}</p></details>
       <div className="annotation-actions" hidden={tab==="layers"||!draft.length}><button hidden={tool!=="polyline"} disabled={tool!=="polyline"||draft.length<2} onClick={()=>add(make(draft,"polyline"))}>{w.finish}</button><button disabled={!draft.length} onClick={()=>{setDraft([]);redoDraft.current=[];preview.current=null;renderRef.current();}}>{w.cancel}</button></div>

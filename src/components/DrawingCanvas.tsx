@@ -18,6 +18,8 @@ import { drawMeasurementOverlay } from "../viewer/measurementOverlay";
 import { AnnotationEditor, type AnnotationEditorHandle } from "./AnnotationEditor";
 import type { EditHistoryState } from "../viewer/undoHistory";
 import { measurementValue } from "../viewer/measurementTools";
+import { formatCadNumber } from "../viewer/displayPrecision";
+import { useI18n } from "../i18n/I18nProvider";
 
 type Props = {
   file: File;
@@ -35,6 +37,8 @@ type Props = {
   annotationOpen:boolean;
   sourceUnit:MeasurementUnit;
   displayUnit:MeasurementUnit;
+  precision:number;
+  onPrecision(value:number):void;
   onAnnotationHide():void;
   onAnnotationActivate():void;
   onAnnotationPause():void;
@@ -42,12 +46,13 @@ type Props = {
 };
 
 export const DrawingCanvas = forwardRef<ViewerHandle, Props>(
-  function DrawingCanvas({ file, onProgress, onReady, onError, measurement, onMeasurementPick, onMeasurementReady,annotationActive,annotationOpen,sourceUnit,displayUnit,onAnnotationHide,onAnnotationActivate,onAnnotationPause,onEditHistory }, ref) {
+  function DrawingCanvas({ file, onProgress, onReady, onError, measurement, onMeasurementPick, onMeasurementReady,annotationActive,annotationOpen,sourceUnit,displayUnit,precision,onPrecision,onAnnotationHide,onAnnotationActivate,onAnnotationPause,onEditHistory }, ref) {
+    const {locale}=useI18n();
     const containerRef = useRef<HTMLDivElement>(null);
     const viewerRef = useRef<DrawingViewer | null>(null);
     const annotationRef=useRef<AnnotationEditorHandle>(null);
     const [readyViewer,setReadyViewer]=useState<DrawingViewer|null>(null);
-    const unitRef=useRef({sourceUnit,displayUnit});unitRef.current={sourceUnit,displayUnit};
+    const unitRef=useRef({sourceUnit,displayUnit,precision,locale});unitRef.current={sourceUnit,displayUnit,precision,locale};
     const callbacksRef = useRef({ onProgress, onReady, onError, onMeasurementPick, onMeasurementReady });
     callbacksRef.current = { onProgress, onReady, onError, onMeasurementPick, onMeasurementReady };
     const measurementRef = useRef(measurement);
@@ -59,14 +64,14 @@ export const DrawingCanvas = forwardRef<ViewerHandle, Props>(
       const viewer = viewerRef.current;
       if (!viewer || !overlayRef.current) return;
       const value=measurementValue(settings),u=unitRef.current;
-      const label=value===undefined?undefined:settings.mode==="angle"?`${value.toFixed(1)}°`:`${new Intl.NumberFormat("ko",{maximumFractionDigits:3}).format(convertMeasurement(value,u.sourceUnit,u.displayUnit,settings.mode==="area"))} ${u.displayUnit==="drawing"?"":u.displayUnit}${settings.mode==="area"?"²":""}`;
+      const label=value===undefined?undefined:settings.mode==="angle"?`${formatCadNumber(value,u.precision,u.locale)}°`:`${formatCadNumber(convertMeasurement(value,u.sourceUnit,u.displayUnit,settings.mode==="area"),u.precision,u.locale)} ${u.displayUnit==="drawing"?"":u.displayUnit}${settings.mode==="area"?"²":""}`;
       drawMeasurementOverlay(overlayRef.current, settings, points => viewer.projectPoints(points), previewRef.current,viewer.getMeasurementReferences(),viewer.getMeasurementEndReferences(),label);
     };
 
     useLayoutEffect(() => {
       viewerRef.current?.configureMeasurement(measurement);
       updateProjection();
-    }, [measurement,sourceUnit,displayUnit]);
+    }, [measurement,sourceUnit,displayUnit,precision,locale]);
 
     useImperativeHandle(
       ref,
@@ -141,7 +146,7 @@ export const DrawingCanvas = forwardRef<ViewerHandle, Props>(
     return (
       <div className={`drawing-canvas ${measurement.enabled ? "measurement-active" : ""}`}>
         <div ref={containerRef} className="drawing-surface" />
-        {readyViewer?<AnnotationEditor ref={annotationRef} viewer={readyViewer} active={annotationActive} open={annotationOpen} sourceUnit={sourceUnit} displayUnit={displayUnit} onHide={onAnnotationHide} onActivate={onAnnotationActivate} onPause={onAnnotationPause} onHistoryState={onEditHistory}/>:null}
+        {readyViewer?<AnnotationEditor ref={annotationRef} viewer={readyViewer} active={annotationActive} open={annotationOpen} sourceUnit={sourceUnit} displayUnit={displayUnit} precision={precision} onPrecision={onPrecision} onHide={onAnnotationHide} onActivate={onAnnotationActivate} onPause={onAnnotationPause} onHistoryState={onEditHistory}/>:null}
         <svg ref={overlayRef} className="measurement-overlay" aria-hidden="true" />
       </div>
     );
