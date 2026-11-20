@@ -1,6 +1,6 @@
 # Arcad View — modification notice
 
-Arcad View 2.1.16, modified on 2026-11-20 by GUI's Arc Industry.
+Arcad View 2.1.17, modified on 2026-11-20 by GUI's Arc Industry.
 Based on orgofjs/izCAD. Original copyright and third-party notices below are retained.
 Source: https://github.com/gamzagui-collab/ArcadView
 License: GPL-3.0-only.
@@ -10,6 +10,10 @@ measurement and snap improvements, overlay markup layers, Arcad View UX,
 and consent-based GitHub APK updates. Version 2.1.9 adds a disposable native
 Android converter built from the same LibreDWG 0.9.0 sources, disk-backed DXF
 export, reachable-block retention and a larger packed measurement index.
+Version 2.1.17 replaces the prior A-shaped brand with a blue metallic folded
+document and silver CAD crosshair, based on the user-supplied reference. The
+selected color master was produced with the built-in image-generation tool;
+its prompt and export procedure are included in branding/MARK_SOURCE.md.
 Version 2.1.16 adds an automatic update dialog and a persistent pending-update
 indicator on the information button, with visible mobile approval actions.
 Version 2.1.15 adds shared display precision settings, screen-width point

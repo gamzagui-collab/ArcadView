@@ -1,11 +1,5 @@
-import { useId } from "react";
-
 export function ArcadMark({className=""}:{className?:string}) {
-  const id=useId().replace(/:/g,"");
-  return <svg className={`arcad-mark ${className}`} viewBox="0 0 64 64" fill="none" aria-hidden="true">
-    <defs><linearGradient id={id+"a"} x1="12" y1="56" x2="43" y2="8" gradientUnits="userSpaceOnUse"><stop stopColor="#0077F5"/><stop offset="1" stopColor="#54D6FF"/></linearGradient><linearGradient id={id+"b"} x1="36" y1="12" x2="52" y2="58" gradientUnits="userSpaceOnUse"><stop stopColor="#1588F5"/><stop offset="1" stopColor="#0041AD"/></linearGradient></defs>
-    <path d="M5 55 28 9h15L20 55H5Z" fill={`url(#${id}a)`}/><path d="m36 9 23 46H44L28 24l8-15Z" fill={`url(#${id}b)`}/><path d="M27 40h14l8 15H20l7-15Z" fill="#119AFF"/><path d="m27 40-7 15h29l-9-5H22l5-10Z" fill="#0070D6"/>
-  </svg>;
+  return <img className={`arcad-mark ${className}`} src="/arcad-mark.png" width={64} height={64} alt="" aria-hidden="true" draggable={false}/>;
 }
 export function Brand({company=false}:{company?:boolean}) {
  return <div className="arcad-brand"><ArcadMark/><div><strong>Arcad View</strong>{company?<small>GUI&apos;s Arc Industry</small>:null}</div></div>;
