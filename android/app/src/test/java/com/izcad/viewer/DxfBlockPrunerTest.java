@@ -37,4 +37,25 @@ public class DxfBlockPrunerTest {
     @Test public void rejectsIncompleteDefinitionsInsteadOfDroppingVisibleContent() throws Exception {
         try { prune("0\nSECTION\n2\nBLOCKS\n0\nBLOCK\n2\nA\n0\nEOF\n",1); fail(); }catch(java.io.IOException expected){}
     }
+    @Test public void preservesUnicodeAndCrLfAcrossInputBufferBoundaries() throws Exception {
+        String kept=block("한글", "0\nTEXT\n1\n"+"가나다".repeat(50000)+"\n"),root=insert("한글");
+        for(int shift=-1;shift<=1;shift++) {
+            String prefix="0\r\nSECTION\r\n2\r\nHEADER\r\n1\r\n";
+            String header=prefix+"x".repeat(256*1024-prefix.length()-1+shift)+"\r\n0\r\nENDSEC\r\n";
+            assertEquals(header+document(kept,root).replace("\n","\r\n"),prune(header+document(kept+block("unused",""),root).replace("\n","\r\n"),1));
+        }
+    }
+    @Test public void keepsLongBlockReferencesAndDocumentsWithoutFinalNewline() throws Exception {
+        String name="큰이름".repeat(35000),wanted=block(name,""),root=insert(name);
+        String expected=document(wanted,root).replace("\n","\r").stripTrailing();
+        String input=document(wanted+block("unused",""),root).replace("\n","\r").stripTrailing();
+        assertEquals(expected,prune(input,1));
+        String padded=document(wanted,root).replace("\n2\n","\n +2 \n");
+        assertEquals(padded,prune(padded,1));
+    }
+    @Test public void rejectsBadCodesAndTruncatedSkippedValues() throws Exception {
+        for(String source:new String[]{"1x\nignored\n0\nEOF\n","2147483648\nignored\n0\nEOF\n","0\nSECTION\n2\nENTITIES\n10\n"}) {
+            try { prune(source,0); fail("Accepted malformed DXF"); } catch(java.io.IOException expected){}
+        }
+    }
 }

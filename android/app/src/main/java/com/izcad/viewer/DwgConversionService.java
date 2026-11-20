@@ -117,15 +117,18 @@ public class DwgConversionService extends Service {
         try {
             File raw = new File(directory, "raw.dxf");
             Log.i(TAG, "native started pid=" + android.os.Process.myPid() + " inputBytes=" + input.length());
+            long nativeStarted = android.os.SystemClock.elapsedRealtime();
             int code = NativeDwg.convertFiles(input.getAbsolutePath(), raw.getAbsolutePath(), metadataFile.getAbsolutePath());
+            long nativeElapsed = android.os.SystemClock.elapsedRealtime() - nativeStarted;
             if (raw.length() > DrawingLimits.DXF_BYTES) { finish(1, "FILE_TOO_LARGE", "Converted DXF exceeds the limit.", "{}", "null"); return; }
             if (code != 0) {
                 String failure = (code & 8192) != 0 ? "DWG_MEMORY_LIMIT" : (code & (1 | 8 | 16 | 32 | 64 | 2048)) != 0 ? "DWG_CORRUPT_OR_ENCRYPTED" : "DWG_EXPORT_FAILED";
                 finish(1, failure, "LibreDWG native conversion failed: " + code, "{}", "null"); return;
             }
+            long pruneStarted = android.os.SystemClock.elapsedRealtime();
             DxfBlockPruner.Result pruned = DxfBlockPruner.prune(raw, outputFile);
             outputBytes = outputFile.length();
-            Log.i(TAG, "native rawBytes=" + raw.length() + " outputBytes=" + outputBytes + " blocks=" + pruned.total + " retained=" + pruned.retained);
+            Log.i(TAG, "nativeMs=" + nativeElapsed + " pruneMs=" + (android.os.SystemClock.elapsedRealtime() - pruneStarted) + " rawBytes=" + raw.length() + " outputBytes=" + outputBytes + " blocks=" + pruned.total + " retained=" + pruned.retained);
             if (metadataFile.length() > 16 * 1024 * 1024 || outputBytes == 0) throw new Exception("Invalid native output.");
             String metadata = new String(java.nio.file.Files.readAllBytes(metadataFile.toPath()), StandardCharsets.UTF_8);
             JSONObject json = new JSONObject(metadata);

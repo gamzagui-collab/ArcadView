@@ -1,7 +1,7 @@
 {
   "name": "arcad-view",
   "private": true,
-  "version": "2.1.18",
+  "version": "2.1.19",
   "description": "Arcad View — offline CAD viewing, measurement and markup by GUI's Arc Industry",
   "license": "GPL-3.0-only",
   "author": {
@@ -10,12 +10,12 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/gamzagui-collab/ArcadView.git"
+    "url": "git+https://github.com/gamzagui-collab/ArcadView-Source.git"
   },
   "bugs": {
-    "url": "https://github.com/gamzagui-collab/ArcadView/issues"
+    "url": "https://github.com/gamzagui-collab/ArcadView-Source/issues"
   },
-  "homepage": "https://github.com/gamzagui-collab/ArcadView",
+  "homepage": "https://github.com/gamzagui-collab/ArcadView-Source",
   "keywords": [
     "android",
     "cad",
@@ -37,7 +37,7 @@
     "preview": "vite preview",
     "test": "vitest run && npm run test:safe-area && npm run test:release && npm run test:cad-runtime",
     "test:safe-area": "node --test scripts/tests/safe-area-patch.mjs",
-    "test:release": "node --test scripts/tests/github-release.mjs",
+    "test:release": "node --test scripts/tests/github-release.mjs scripts/tests/public-source.mjs",
     "test:watch": "vitest",
     "android:add": "cap add android && node scripts/configure-android.mjs",
     "android:sync": "npm run build && cap sync android && node scripts/configure-android.mjs",

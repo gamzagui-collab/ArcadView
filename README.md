@@ -1,8 +1,10 @@
-<p align="center"><img src="public/arcad-logo.svg" alt="Arcad View" width="100"></p>
+<p align="center"><img src="public/arcad-mark.png" alt="Arcad View" width="100"></p>
 <h1 align="center">Arcad View</h1>
 <p align="center">GUI's Arc Industry · Android CAD 열람 · 측정 · 치수 · 마크업</p>
 
-[최신 APK 다운로드](https://github.com/gamzagui-collab/ArcadView/releases/latest) · [업데이트 안내](docs/GITHUB_RELEASES.md) · [개인정보 안내](PRIVACY.md)
+[공개 대응 소스](https://github.com/gamzagui-collab/ArcadView-Source) · [소스·앱 배포 정책](docs/DISTRIBUTION_CHANNELS.md) · [개인정보 안내](PRIVACY.md)
+
+소스 공개 저장소는 GitHub Actions를 비활성화하여 APK를 빌드하거나 게시하지 않습니다. 배포한 앱 버전과 같은 태그에서 전체 수정 소스와 빌드 절차를 확인할 수 있습니다. Play 전환 전 직원용 APK 배포·업데이트는 기존 저장소에서 유지합니다.
 
 ## 기능
 

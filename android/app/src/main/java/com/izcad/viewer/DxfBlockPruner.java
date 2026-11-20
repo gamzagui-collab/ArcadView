@@ -18,21 +18,52 @@ final class DxfBlockPruner {
     }
     private static final class Lines implements AutoCloseable {
         final InputStream in;
+        final byte[] buffer = new byte[256 * 1024];
+        byte[] value = new byte[128];
+        int cursor, limit, length, group;
         long position;
-        int buffered = -1;
-        Lines(File file) throws IOException { in = new BufferedInputStream(new FileInputStream(file), 256 * 1024); }
-        byte[] next() throws IOException {
-            ByteArrayOutputStream out = new ByteArrayOutputStream(64);
-            int b = buffered >= 0 ? buffered : in.read(); buffered = -1;
-            if (b < 0) return null;
-            for (;;) {
-                position++;
-                if (b == 10) break;
-                if (b == 13) { int n = in.read(); if (n == 10) position++; else buffered = n; break; }
-                out.write(b);
-                b = in.read(); if (b < 0) break;
+        Lines(File file) throws IOException { in = new FileInputStream(file); }
+        private boolean available() throws IOException {
+            if (cursor < limit) return true;
+            limit = in.read(buffer); cursor = 0;
+            return limit > 0;
+        }
+        // Scan buffered byte ranges. Numeric/coordinate values are skipped without
+        // allocating a line, String or per-byte synchronized stream operation.
+        int next(boolean capture) throws IOException {
+            length = 0; boolean present = false;
+            while (available()) {
+                int start = cursor;
+                while (cursor < limit && buffer[cursor] != 10 && buffer[cursor] != 13) cursor++;
+                int count = cursor - start;
+                if (capture) {
+                    if (length + count > value.length) value = Arrays.copyOf(value, Math.max(length + count, value.length * 2));
+                    System.arraycopy(buffer, start, value, length, count);
+                }
+                length += count; position += count; present = true;
+                if (cursor < limit) {
+                    int newline = buffer[cursor++]; position++;
+                    if (newline == 13 && available() && buffer[cursor] == 10) { cursor++; position++; }
+                    return length;
+                }
             }
-            return out.toByteArray();
+            return present ? length : -1;
+        }
+        boolean nextCode() throws IOException {
+            if (next(true) < 0) return false;
+            int start = 0, end = length;
+            while (start < end && (value[start] & 255) <= 32) start++;
+            while (end > start && (value[end - 1] & 255) <= 32) end--;
+            boolean negative = start < end && value[start] == '-';
+            if (start < end && (negative || value[start] == '+')) start++;
+            if (start == end) throw new IOException("Invalid DXF group code");
+            long number = 0, maximum = negative ? 2147483648L : Integer.MAX_VALUE;
+            for (int i = start; i < end; i++) {
+                int digit = value[i] - '0';
+                if (digit < 0 || digit > 9 || (number = number * 10 + digit) > maximum) throw new IOException("Invalid DXF group code");
+            }
+            group = (int)(negative ? -number : number);
+            return true;
         }
         public void close() throws IOException { in.close(); }
     }
@@ -46,14 +77,12 @@ final class DxfBlockPruner {
         try (Lines lines = new Lines(input)) {
             for (;;) {
                 long start = lines.position;
-                byte[] codeLine = lines.next(); if (codeLine == null) break;
-                byte[] valueLine = lines.next(); if (valueLine == null) throw new IOException("Truncated DXF pair");
-                int code;
-                try { code = Integer.parseInt(new String(codeLine, StandardCharsets.US_ASCII).trim()); }
-                catch (NumberFormatException e) { throw new IOException("Invalid DXF group code", e); }
+                if (!lines.nextCode()) break;
+                int code = lines.group;
+                if (lines.next(code == 0 || code == 2) < 0) throw new IOException("Truncated DXF pair");
                 // Only group 0/2 strings matter to reachability. No entity values are changed.
                 if (code != 0 && code != 2) continue;
-                String value = new String(valueLine, StandardCharsets.UTF_8).trim();
+                String value = new String(lines.value, 0, lines.length, StandardCharsets.UTF_8).trim();
                 if (code == 0) {
                     if (endBlock) {
                         current.end = start;

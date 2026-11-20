@@ -78,6 +78,9 @@ jobs:
           name: arcad-view-${{ github.ref_name }}
           path: release-output/*
           if-no-files-found: error
+      - name: Verify matching public corresponding source
+        if: steps.release.outputs.mode != 'published'
+        run: node scripts/verify-public-source.mjs
       - name: Publish verified release
         if: steps.release.outputs.mode != 'published'
         env:

@@ -40,6 +40,7 @@ export function LoadingScreen({
         />
       </div>
       {percent !== null && <p className="progress-value">{percent}%</p>}
+      {phase === "converting" && <p className="conversion-hint">{u.firstConversion}</p>}
       <button
         type="button"
         className="cancel-button"
