@@ -24,6 +24,13 @@ it("uses supplemental block and hatch edges as intersection snapping candidates"
  expect(intersectionSnap([g],{x:2,y:1},4)).toEqual({x:0,y:0});
  expect(intersectionSnap([g],{x:15,y:1},4)).toBeNull();
 });
+it("retains small circle crossings on billion-unit-long axes without discriminant cancellation",()=>{
+ for(const origin of[0,1e9]){
+  const circle:Annotation={id:"c",layerId:"base",kind:"circle",points:[{x:origin,y:origin},{x:origin+50,y:origin}]};
+  const g=annotationGeometry([circle,line("axis",[{x:origin-1e9,y:origin+30},{x:origin+1e9,y:origin+30}])]);
+  expect(intersectionSnap([g],{x:origin+40,y:origin+30},3)).toEqual({x:origin+40,y:origin+30});
+ }
+});
 it("respects arc sweep and does not snap to extended line intersections",()=>{
  const arc:Annotation={id:"a",layerId:"base",kind:"arc",points:[{x:0,y:0},{x:50,y:0}],start:0,sweep:Math.PI/2};
  const g=annotationGeometry([arc,line("l",[{x:-100,y:30},{x:100,y:30}])]);

@@ -34,13 +34,17 @@ export function intersectionSnap(geometries:MeasurementGeometry[],target:P,toler
   const consider=(p:P|null)=>{if(!p||!accept(p))return;const d=distance(p,target);if(d<=best){result=p;best=d;}};
   for(let i=0;i<near.length;i++)for(let j=i+1;j<near.length;j++)consider(lineIntersection(...near[i].line,...near[j].line));
   for(const c of curves)for(const{line:[a,b]}of near){
-    const dx=b.x-a.x,dy=b.y-a.y,ox=a.x-c.center.x,oy=a.y-c.center.y,A=dx*dx+dy*dy;if(A<1e-20)continue;
-    const B=2*(dx*ox+dy*oy),C=ox*ox+oy*oy-c.radius*c.radius,D=B*B-4*A*C;if(D<0)continue;
-    for(const t of[(-B-Math.sqrt(D))/(2*A),(-B+Math.sqrt(D))/(2*A)])if(t>=0&&t<=1){const q={x:a.x+t*dx,y:a.y+t*dy};if(c.contains(q))consider(q);}
+    const dx=b.x-a.x,dy=b.y-a.y,length=Math.hypot(dx,dy);if(length<1e-10)continue;
+    // Project relative to the circle centre. A quadratic discriminant subtracts
+    // huge near-equal values for long site axes and can shift a small crossing.
+    const ux=dx/length,uy=dy/length,ox=a.x-c.center.x,oy=a.y-c.center.y,along=-(ox*ux+oy*uy),fx=ox+along*ux,fy=oy+along*uy,h2=c.radius*c.radius-fx*fx-fy*fy;
+    if(h2< -1e-12*c.radius*c.radius)continue;
+    const h=Math.sqrt(Math.max(0,h2));
+    for(const side of[-1,1]){const t=along+side*h;if(t>=0&&t<=length){const q={x:c.center.x+fx+side*h*ux,y:c.center.y+fy+side*h*uy};if(c.contains(q))consider(q);}}
   }
   for(let i=0;i<curves.length;i++)for(let j=i+1;j<curves.length;j++){
     const a=curves[i],b=curves[j],d=distance(a.center,b.center);if(d<1e-10||d>a.radius+b.radius||d<Math.abs(a.radius-b.radius))continue;
-    const t=(a.radius*a.radius-b.radius*b.radius+d*d)/(2*d),h=Math.sqrt(Math.max(0,a.radius*a.radius-t*t)),ux=(b.center.x-a.center.x)/d,uy=(b.center.y-a.center.y)/d;
+    const t=((a.radius-b.radius)*(a.radius+b.radius)+d*d)/(2*d),h=Math.sqrt(Math.max(0,(a.radius-t)*(a.radius+t))),ux=(b.center.x-a.center.x)/d,uy=(b.center.y-a.center.y)/d;
     for(const s of[-1,1]){const q={x:a.center.x+t*ux-s*h*uy,y:a.center.y+t*uy+s*h*ux};if(a.contains(q)&&b.contains(q))consider(q);}
   }
   return result;
