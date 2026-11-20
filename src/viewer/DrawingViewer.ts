@@ -24,7 +24,8 @@ import {
   type MeasurableEntity, type SnapPoint,
 } from "./measurementGeometry";
 import type { DrawingPoint } from "./savedView";
-import { nearestPackedEntity, nearestPackedSnap, measurementFitBounds } from "./packedMeasurement";
+import { nearestPackedEntity, nearestPackedSnap, measurementFitBounds, measurementBuffers } from "./packedMeasurement";
+import { retireDrawingBuffers } from "./drawingBufferRelease";
 import { selectInitialDrawingBounds } from "./initialView";
 import { resolveDrawingDisplayUnit, resolveDrawingMeasurementUnit } from "./verifiedDrawingUnits";
 import { getDrawingUnitKey, prepareDrawingUnitKey } from "./drawingUnitPreferences";
@@ -435,7 +436,8 @@ export class DrawingViewer {
     // The viewer owns these chunks; after destruction they must not keep
     // hundreds of MiB alive while the next cached scene is being restored.
     const packed = this.geometry.packed;
-    if (packed) { packed.data.length=0; packed.refs.length=0; packed.points.length=0; packed.snaps.length=0;if(packed.extraSnaps)packed.extraSnaps.length=0;if(packed.snapSegments)packed.snapSegments.length=0; }
+    const retired = packed ? measurementBuffers(packed) : [];
+    if (packed) { packed.data.length=0; packed.refs.length=0; packed.points.length=0; packed.snaps.length=0;if(packed.extraSnaps)packed.extraSnaps.length=0;if(packed.snapSegments)packed.snapSegments.length=0;if(packed.fitBounds)packed.fitBounds.length=0; }
     this.geometry = { units: "drawing", entities: [], snaps: [], limited: false, completeBounds: false, fitBounds: [], fitCompleteBounds: false };
     try {
       this.viewer.Destroy();
@@ -444,6 +446,7 @@ export class DrawingViewer {
       // can otherwise exhaust its WebGL context budget after opening many files.
       renderer?.forceContextLoss();
       canvas.remove();
+      retireDrawingBuffers(retired);
     }
   }
 
