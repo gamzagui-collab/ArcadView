@@ -390,6 +390,13 @@ export class DrawingViewer {
   }
   worldTolerance(pixels:number):number{const c=this.viewer.GetCamera();return pixels*(c.right-c.left)/c.zoom/Math.max(1,this.viewer.GetCanvas().clientWidth);}
   configureAnnotations(input:AnnotationInput|null):void{if(input?.tool!==this.annotationInput?.tool)this.gesture.cancel();this.annotationInput=input;}
+  cancelInteraction():void { this.gesture.cancel(); this.precisionIndex=undefined; }
+  getCanvasElement():HTMLCanvasElement { return this.viewer.GetCanvas(); }
+  clientToDrawing(position:{x:number;y:number}):DrawingPoint {
+    const r=this.viewer.GetCanvas().getBoundingClientRect();
+    const v=new Vector3((position.x-r.left)*2/r.width-1,-(position.y-r.top)*2/r.height+1,0).unproject(this.viewer.GetCamera());
+    const origin=this.viewer.GetOrigin();return{x:v.x+origin.x,y:v.y+origin.y};
+  }
   setUserGeometry(geometry:MeasurementGeometry,masks:Annotation[]):void{this.userGeometry=geometry;this.masks=masks;this.anchor=null;this.endAnchor=null;if(this.measurement)this.configureMeasurement(this.measurement);}
   subscribeView(listener:()=>void):()=>void{this.viewListeners.add(listener);return()=>{this.viewListeners.delete(listener);};}
 

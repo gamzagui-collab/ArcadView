@@ -22,6 +22,7 @@ import { MeasurementPanel, MeasurementStatus } from "../components/MeasurementPa
 import type { MeasurementPick } from "../viewer/DrawingViewer";
 import type { MeasurementGeometry, MeasurementSettings, MeasurementUnit } from "../viewer/measurementGeometry";
 import { measurementPointsAfterPick } from "../viewer/measurementTools";
+import { UndoHistory, type EditCommand, type EditHistoryState } from "../viewer/undoHistory";
 import { saveDrawingUnitPreference, type DrawingUnitPreference } from "../viewer/drawingUnitPreferences";
 import { dispatchBackNavigation, useBackNavigation } from "./backNavigation";
 import { convertDwgToDxf } from "../dwg/convertDwg";
@@ -93,6 +94,9 @@ export function App() {
   const [libraryNotice, setLibraryNotice] = useState(false);
   const [incomingArchive, setIncomingArchive] = useState<File | null>(null);
   const [measurement, setMeasurement] = useState<MeasurementSettings>(emptyMeasurement);
+  const measurementRef=useRef(measurement);measurementRef.current=measurement;
+  const measurementHistory=useRef(new UndoHistory<MeasurementSettings>());
+  const [editHistory,setEditHistory]=useState<EditHistoryState>({canUndo:false,canRedo:false});
   const [measurementPanelOpen,setMeasurementPanelOpen]=useState(false);
   const [annotationOpen,setAnnotationOpen]=useState(false);
   const [annotationActive,setAnnotationActive]=useState(false);
@@ -121,6 +125,7 @@ export function App() {
     pendingImportRef.current = null;
     setLibraryNotice(false);
     setMeasurement(emptyMeasurement);
+    measurementHistory.current.clear();setEditHistory({canUndo:false,canRedo:false});
     setMeasurementPanelOpen(false);
     setAnnotationOpen(false);setAnnotationActive(false);
     measurementActivated.current=false;
@@ -357,6 +362,8 @@ export function App() {
   const handleBack = useCallback(() => {
     if (libraryOpen) {
       setLibraryOpen(false);
+    } else if(viewerRef.current?.finishText?.()){
+      // Finish a text transaction before backing out of tools or the drawing.
     } else if(annotationOpen){
       setAnnotationOpen(false);
     } else if(annotationActive){
@@ -432,13 +439,25 @@ export function App() {
     }
   }, []);
   const handleMeasurementPick = useCallback((pick: MeasurementPick) => {
-    setMeasurement((current) => {
-      if (!current.enabled) return current;
-      if (current.mode === "object") return { ...current, entity: pick.entity, points: [] };
-      return { ...current, points: measurementPointsAfterPick(current, pick.point, pick.replaceIndex), entity: null };
-    });
+    const current=measurementRef.current;if(!current.enabled)return;
+    measurementHistory.current.record(current);
+    const next=current.mode==="object"?{...current,entity:pick.entity,points:[]}:{...current,points:measurementPointsAfterPick(current,pick.point,pick.replaceIndex),entity:null};
+    measurementRef.current=next;setMeasurement(next);
     setMeasurementFeedback(pick.entity ? null : measurement.mode === "object" ? t("measureNoObject") : pick.snapped ? t(({ endpoint: "measureEndpoint", midpoint: "measureMidpoint", center: "measureCenter", insertion:"measureInsertion", start: "measureStartPoint",perpendicular:"measurePerpendicular" } as const)[pick.snapped]) : null);
   }, [measurement.mode, t]);
+
+  const handleEditCommand=(command:EditCommand)=>{
+    viewerRef.current?.cancelGesture?.();
+    if(command==="cancel"){
+      viewerRef.current?.edit?.("cancel");
+      setAnnotationActive(false);setAnnotationOpen(false);setMeasurementPanelOpen(false);setMeasurementFeedback(null);
+      const next={...measurementRef.current,enabled:false,points:[],entity:null};measurementRef.current=next;setMeasurement(next);
+      measurementHistory.current.clear();measurementActivated.current=false;
+    }else if(measurementRef.current.enabled&&!annotationActive){
+      const next=measurementHistory.current[command](measurementRef.current);
+      if(next){const restored={...measurementRef.current,points:next.points,entity:next.entity};measurementRef.current=restored;setMeasurement(restored);setMeasurementFeedback(null);}
+    }else viewerRef.current?.edit?.(command);
+  };
 
   const canvasRequestId = requestIdRef.current;
   const canvas =
@@ -470,6 +489,7 @@ export function App() {
           measurement={measurement}
           onMeasurementReady={handleMeasurementReady}
           onMeasurementPick={handleMeasurementPick}
+          onEditHistory={setEditHistory}
           annotationActive={annotationActive} annotationOpen={annotationOpen} sourceUnit={sourceUnit} displayUnit={displayUnit}
           onAnnotationHide={()=>setAnnotationOpen(open=>!open)} onAnnotationPause={()=>setAnnotationActive(false)}
           onAnnotationActivate={()=>{setAnnotationActive(true);setMeasurement(current=>({...current,enabled:false}));setMeasurementPanelOpen(false);}}
@@ -544,6 +564,9 @@ export function App() {
       </header>
 
       <ViewerToolbar onCommand={sendCommand}
+        canUndo={measurement.enabled&&!annotationActive?measurementHistory.current.canUndo:editHistory.canUndo}
+        canRedo={measurement.enabled&&!annotationActive?measurementHistory.current.canRedo:editHistory.canRedo}
+        onUndo={()=>handleEditCommand("undo")} onRedo={()=>handleEditCommand("redo")} onCancel={()=>handleEditCommand("cancel")}
         canMeasure={state.drawing.format !== "pdf"}
         measuring={measurement.enabled}
         panelOpen={measurementPanelOpen}
@@ -554,7 +577,7 @@ export function App() {
       {measurementPanelOpen && state.drawing.format !== "pdf" ? <MeasurementPanel settings={measurement} geometry={measurementGeometry}
         sourceUnit={sourceUnit} displayUnit={displayUnit} feedback={measurementFeedback}
         onHide={()=>setMeasurementPanelOpen(false)}
-        onSettings={(settings) => { if(settings.enabled)measurementActivated.current=true;setMeasurement(settings); setMeasurementFeedback(null); }}
+        onSettings={(settings) => {const current=measurementRef.current;if(settings.mode!==current.mode)measurementHistory.current.clear();else if((settings.points!==current.points&&(settings.points.length>0||current.points.length>0))||settings.entity!==current.entity)measurementHistory.current.record(current);measurementRef.current=settings;if(settings.enabled)measurementActivated.current=true;setMeasurement(settings); setMeasurementFeedback(null); }}
         onSourceUnit={handleSourceUnit} onDisplayUnit={handleDisplayUnit} /> : null}
       {libraryNotice ? <div className="library-notice" role="status">{t("librarySaveFailed")}</div> : null}
     </>

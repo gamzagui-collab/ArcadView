@@ -13,7 +13,7 @@ export function drawAnnotations(svg:SVGSVGElement,doc:AnnotationDocument,selecte
     if(o.id===selected)line(o.points,"#ff8e9b","annotation-mask-selected",o.id);
   }
   for(const o of [...objects.filter(o=>o.kind!=="mask"),...(draft?[draft]:[])]){
-    const color=doc.layers.find(l=>l.id===o.layerId)?.color??"#49cfff",active=o.id===selected;
+    const color=o.color??doc.layers.find(l=>l.id===o.layerId)?.color??"#49cfff",active=o.id===selected;
     const dim=o.kind.startsWith("dimension")?dimensionGeometry(o,source):null;
     if(o.kind==="text"){
       const p=o.points[0],h=o.textHeight??50,[a,b]=project([p,{x:p.x,y:p.y+h}]),height=Math.max(.1,Math.hypot(a.x-b.x,a.y-b.y));

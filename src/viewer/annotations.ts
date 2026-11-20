@@ -3,7 +3,7 @@ import type { DrawingPoint } from "./savedView";
 import { segmentFoot, type Segment } from "./cadPicking";
 type P = DrawingPoint;
 export type AnnotationTool = "select"|"move"|"text"|"polyline"|"circle"|"rectangle"|"dimension-aligned"|"dimension-linear"|"trim";
-export type Annotation = {id:string;layerId:string;kind:"text"|"polyline"|"circle"|"arc"|"rectangle"|"dimension-aligned"|"dimension-linear"|"mask";points:P[];scale?:number;start?:number;sweep?:number;text?:string;textHeight?:number;approximate?:boolean};
+export type Annotation = {id:string;layerId:string;kind:"text"|"polyline"|"circle"|"arc"|"rectangle"|"dimension-aligned"|"dimension-linear"|"mask";points:P[];scale?:number;start?:number;sweep?:number;text?:string;textHeight?:number;color?:string;approximate?:boolean};
 export type UserLayer = {id:string;name:string;color:string;visible:boolean};
 export type AnnotationDocument = {version:1;layers:UserLayer[];activeLayer:string;objects:Annotation[];dimensionScale:number;textHeight?:number};
 export const uid=()=>crypto.randomUUID();
@@ -190,6 +190,7 @@ export function readAnnotations(key:string|undefined):AnnotationDocument{
     const ids=new Set(d.layers.map(l=>l.id));for(const l of d.layers)if(typeof l.id!=="string"||typeof l.name!=="string"||!/^#[a-f0-9]{6}$/i.test(l.color)||typeof l.visible!=="boolean")throw Error();
     if(d.textHeight!==undefined&&(!Number.isFinite(d.textHeight)||d.textHeight<=0||d.textHeight>1e6))throw Error();
     for(const o of d.objects)if(!ids.has(o.layerId)||typeof o.id!=="string"||!["text","polyline","circle","arc","rectangle","dimension-aligned","dimension-linear","mask"].includes(o.kind)||!Array.isArray(o.points)||o.points.length<(o.kind==="text"?1:2)||o.points.length>30000||o.points.some(p=>!Number.isFinite(p.x)||!Number.isFinite(p.y))||((o.kind==="rectangle"||o.kind==="circle"||o.kind==="arc")&&o.points.length!==2)||(o.kind.startsWith("dimension")&&(o.points.length!==3||!Number.isFinite(o.scale)||o.scale!<1||o.scale!>10000))||(o.kind==="arc"&&(!Number.isFinite(o.start)||!Number.isFinite(o.sweep)||o.sweep!<=0||o.sweep!>TAU))||(o.kind==="text"&&(o.points.length!==1||typeof o.text!=="string"||!o.text.trim()||o.text.length>500||!Number.isFinite(o.textHeight)||o.textHeight!<=0||o.textHeight!>1e6)))throw Error();
+    if(d.objects.some(o=>o.color!==undefined&&!/^#[a-f0-9]{6}$/i.test(o.color)))throw Error();
     return d;
   }catch{return newAnnotationDocument();}
 }

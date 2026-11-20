@@ -15,7 +15,8 @@ import {
 import { DrawingViewer, type MeasurementPick } from "../viewer/DrawingViewer";
 import { convertMeasurement, type MeasurementGeometry, type MeasurementSettings, type MeasurementUnit } from "../viewer/measurementGeometry";
 import { drawMeasurementOverlay } from "../viewer/measurementOverlay";
-import { AnnotationEditor } from "./AnnotationEditor";
+import { AnnotationEditor, type AnnotationEditorHandle } from "./AnnotationEditor";
+import type { EditHistoryState } from "../viewer/undoHistory";
 import { measurementValue } from "../viewer/measurementTools";
 
 type Props = {
@@ -37,12 +38,14 @@ type Props = {
   onAnnotationHide():void;
   onAnnotationActivate():void;
   onAnnotationPause():void;
+  onEditHistory(state:EditHistoryState):void;
 };
 
 export const DrawingCanvas = forwardRef<ViewerHandle, Props>(
-  function DrawingCanvas({ file, onProgress, onReady, onError, measurement, onMeasurementPick, onMeasurementReady,annotationActive,annotationOpen,sourceUnit,displayUnit,onAnnotationHide,onAnnotationActivate,onAnnotationPause }, ref) {
+  function DrawingCanvas({ file, onProgress, onReady, onError, measurement, onMeasurementPick, onMeasurementReady,annotationActive,annotationOpen,sourceUnit,displayUnit,onAnnotationHide,onAnnotationActivate,onAnnotationPause,onEditHistory }, ref) {
     const containerRef = useRef<HTMLDivElement>(null);
     const viewerRef = useRef<DrawingViewer | null>(null);
+    const annotationRef=useRef<AnnotationEditorHandle>(null);
     const [readyViewer,setReadyViewer]=useState<DrawingViewer|null>(null);
     const unitRef=useRef({sourceUnit,displayUnit});unitRef.current={sourceUnit,displayUnit};
     const callbacksRef = useRef({ onProgress, onReady, onError, onMeasurementPick, onMeasurementReady });
@@ -68,6 +71,9 @@ export const DrawingCanvas = forwardRef<ViewerHandle, Props>(
     useImperativeHandle(
       ref,
       () => ({
+        edit(command) { viewerRef.current?.cancelInteraction();annotationRef.current?.execute(command); },
+        cancelGesture() { viewerRef.current?.cancelInteraction(); },
+        finishText() { return annotationRef.current?.finishText()??false; },
         execute(command: ViewerCommand) {
           try {
             viewerRef.current?.execute(command);
@@ -135,7 +141,7 @@ export const DrawingCanvas = forwardRef<ViewerHandle, Props>(
     return (
       <div className={`drawing-canvas ${measurement.enabled ? "measurement-active" : ""}`}>
         <div ref={containerRef} className="drawing-surface" />
-        {readyViewer?<AnnotationEditor viewer={readyViewer} active={annotationActive} open={annotationOpen} sourceUnit={sourceUnit} displayUnit={displayUnit} onHide={onAnnotationHide} onActivate={onAnnotationActivate} onPause={onAnnotationPause}/>:null}
+        {readyViewer?<AnnotationEditor ref={annotationRef} viewer={readyViewer} active={annotationActive} open={annotationOpen} sourceUnit={sourceUnit} displayUnit={displayUnit} onHide={onAnnotationHide} onActivate={onAnnotationActivate} onPause={onAnnotationPause} onHistoryState={onEditHistory}/>:null}
         <svg ref={overlayRef} className="measurement-overlay" aria-hidden="true" />
       </div>
     );

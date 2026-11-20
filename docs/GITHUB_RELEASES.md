@@ -25,6 +25,8 @@ Node.js >=22, JDK21, Android SDK36/build-tools36.0.0, NDK28.2.13676358, CMake3.2
 
 `npm ci`와 `android:prepare`는 고정된 Capacitor Android 8.4.3의 safe area 주입 시점만 보정합니다. HTML 루트가 없으면 문서 준비를 기다려 최신 CSS 여백을 적용하며, 네이티브 여백 계산과 실제 오류 보고는 유지합니다. `scripts/patch-capacitor-safe-area.mjs`에 보정 소스가 포함되고 다른 의존성 버전에서는 검토 없이 적용하지 않습니다.
 
+`scripts/patch-cad-controls.mjs`는 고정된 dxf-viewer 1.0.48의 touchstart/touchmove에서 취소 가능한 이벤트에만 `preventDefault`를 호출하도록 보정합니다. 확대·이동 처리는 유지하며 다른 버전이나 소스 형태에는 검토 없이 적용하지 않습니다.
+
 ```powershell
 npm.cmd ci
 npm.cmd test

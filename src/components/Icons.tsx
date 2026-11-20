@@ -2,6 +2,19 @@ import type { SVGProps } from "react";
 
 type IconProps = SVGProps<SVGSVGElement>;
 
+export function UndoIcon(props: IconProps) {
+  return <IconBase {...props}><path d="M8 5 3 10l5 5M3 10h11a6 6 0 0 1 0 12" transform="translate(0 -2)" /></IconBase>;
+}
+export function RedoIcon(props: IconProps) {
+  return <IconBase {...props}><path d="m16 5 5 5-5 5M21 10H10a6 6 0 0 0 0 12" transform="translate(0 -2)" /></IconBase>;
+}
+export function CancelToolIcon(props: IconProps) {
+  return <IconBase {...props}><circle cx="12" cy="12" r="9" /><path d="m8.5 8.5 7 7m0-7-7 7" /></IconBase>;
+}
+export function PaletteIcon(props: IconProps) {
+  return <IconBase {...props}><path d="M12 3a9 9 0 1 0 0 18h1a2 2 0 0 0 1-3.7 1.6 1.6 0 0 1 1-2.8h2A4 4 0 0 0 21 10c-1-4-4.5-7-9-7Z" /><circle cx="7.5" cy="10" r=".9" /><circle cx="11" cy="7" r=".9" /><circle cx="15.5" cy="8" r=".9" /></IconBase>;
+}
+
 export function MeasureIcon(props: IconProps) {
   return <IconBase {...props}><path d="m3 16 13-13 5 5L8 21zM7 12l2 2M10 9l3 3M13 6l2 2M4 15l3 3" /></IconBase>;
 }
