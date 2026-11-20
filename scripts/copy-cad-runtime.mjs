@@ -70,6 +70,7 @@ await Promise.all([
 
 const licenseDestinationDirectory = resolve("public", "licenses");
 await mkdir(licenseDestinationDirectory, { recursive: true });
+await copyFile(resolve("vendor", "README.md"), resolve(licenseDestinationDirectory, "NATIVE_DWG_SOURCE.md"));
 
 const distributableLicenseFiles = [
   "LICENSE",

@@ -12,6 +12,7 @@ import { installTrianglePrecision } from "../viewer/trianglePrecision";
 import { installBlockLayerColors } from "../viewer/blockColors";
 import { installPreparedSceneCache } from "../viewer/preparedSceneCache";
 import { installLargeDxfReader } from "../viewer/largeDxf";
+import { installNativeDwgMetadata } from "../dwg/nativeMetadata";
 
 installHatchSplineCompatibility(DxfScene);
 installAttributeTextCompatibility(AttributeParser, DxfScene);
@@ -23,4 +24,5 @@ installTrianglePrecision(DxfScene);
 installBlockLayerColors(DxfScene);
 installPreparedSceneCache(DxfWorker);
 installLargeDxfReader();
+installNativeDwgMetadata(DxfWorker);
 DxfViewer.SetupWorker();

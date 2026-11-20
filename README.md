@@ -22,7 +22,13 @@
 
 ## 빌드
 
-Node.js >=22, JDK21, Android SDK36/build-tools36.0.0이 필요합니다.
+Node.js >=22, JDK21, Android SDK36/build-tools36.0.0, NDK28.2.13676358, CMake3.22.1이 필요합니다. 기존 SDK에 아래 구성요소를 추가할 수 있습니다.
+
+```powershell
+sdkmanager.bat "ndk;28.2.13676358" "cmake;3.22.1"
+```
+
+Android DWG 변환은 기존 LibreDWG 0.9.0의 동일 C 소스를 별도 프로세스에서 실행합니다. 네이티브 엔진 소스는 `vendor/`에 포함되어 빌드 때 별도 다운로드하지 않습니다. 웹에서는 기존 WASM 경로를 유지합니다.
 
 ```powershell
 npm.cmd ci

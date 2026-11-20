@@ -6,10 +6,18 @@ shared ADB server, or selects an unrelated phone.
 
 ## Local setup
 
-Reuse Node.js >=22, npm, JDK 21, SDK platform 36 and platform-tools. The official
+Reuse Node.js >=22, npm, JDK 21, SDK platform 36 and platform-tools. Install
+NDK 28.2.13676358 and CMake 3.22.1 into that same SDK if absent. The official
 README's `npm ci`, `npm test`, `npm run android:prepare`, and Gradle
 `assembleDebug` workflow remains unchanged. Run `npm ci` after changing the lock
 file; the debug command installs dependencies only when node_modules is absent.
+
+DWG conversion uses the pinned LibreDWG 0.9.0 C sources in `vendor/` in a
+disposable native Android process, then writes DXF to private disk storage.
+This avoids WebView WASM heap and MEMFS output copies. The browser and the
+Android missing-native-runtime fallback retain the existing WASM converter.
+All four supported ABIs are built by default; `-PARCAD_NATIVE_ABIS=x86_64` is
+available for a local diagnostic build only, not the public release.
 
 Start one LDPlayer instance and enable its ADB local connection. If necessary,
 specify an instance index from `ldconsole.exe list2`. No port is calculated from

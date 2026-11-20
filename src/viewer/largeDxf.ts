@@ -1,5 +1,6 @@
 import { DxfFetcher } from "dxf-viewer/src/DxfFetcher.js";
 import DxfParser from "dxf-viewer/src/parser/DxfParser.js";
+import { applyNativeDwgMetadata, nativeMetadataForUrl } from "../dwg/nativeMetadata";
 import { MAX_CONVERTED_DXF_BYTES, validateDrawingFileSize } from "../files/fileTypes";
 
 /** The pinned parser needs indexed lines, peek and rewind. Generate lines on
@@ -58,6 +59,7 @@ export function installLargeDxfReader():void {
     else {const bytes=await response.arrayBuffer();received=bytes.byteLength;validateDrawingFileSize(received,MAX_CONVERTED_DXF_BYTES);chunks.push(decoder.decode(bytes));}
     progress?.("parse",0,null);
     // _parse uses its source only for split(); all entity handlers stay intact.
-    return (new DxfParser() as unknown as {_parse(source:unknown):unknown})._parse({split:()=>dxfLines(chunks)});
+    const dxf=(new DxfParser() as unknown as {_parse(source:unknown):unknown})._parse({split:()=>dxfLines(chunks)});
+    applyNativeDwgMetadata(dxf,nativeMetadataForUrl(this.url));return dxf;
   };
 }

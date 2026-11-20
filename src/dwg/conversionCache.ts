@@ -1,11 +1,12 @@
 import { getDrawingUnitKey } from "../viewer/drawingUnitPreferences";
 import { getSavedDrawingView, normalizeSavedDrawingView, registerSavedDrawingView, type SavedDrawingView } from "../viewer/savedView";
 import { replaceExtension, MAX_CONVERTED_DXF_BYTES, MAX_DERIVED_CACHE_BYTES } from "../files/fileTypes";
+import { getNativeDwgMetadata, registerNativeDwgMetadata, type NativeDwgMetadata } from "./nativeMetadata";
 
-export const DWG_CACHE_VERSION = "libredwg-web-0.9.0-xclip-v2";
+export const DWG_CACHE_VERSION = "libredwg-0.9.0-native1-xclip3";
 const DATABASE = "izcad-dwg-conversion-cache";
 const MAX_CACHE_BYTES = MAX_DERIVED_CACHE_BYTES;
-type Entry = { id: string; blob: Blob; view: SavedDrawingView | null; bytes: number; accessed: number };
+type Entry = { id: string; blob: Blob; view: SavedDrawingView | null; bytes: number; accessed: number; metadata?:NativeDwgMetadata };
 const statuses = new WeakMap<File, "hit" | "converted">();
 const request = <T>(r: IDBRequest<T>) => new Promise<T>((resolve, reject) => { r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error); });
 const finished = (t: IDBTransaction) => new Promise<void>((resolve, reject) => { t.oncomplete = () => resolve(); t.onabort = t.onerror = () => reject(t.error); });
@@ -53,6 +54,7 @@ export async function cachedDwgConversion(source: File, convert: () => Promise<F
         if (/SECTION/.test(prefix)) {
           const file = new File([entry.blob], replaceExtension(source.name, "dxf"), { type: "application/dxf", lastModified: source.lastModified });
           registerSavedDrawingView(file, entry.view ? normalizeSavedDrawingView(entry.view) : null);
+          registerNativeDwgMetadata(file,entry.metadata);
           statuses.set(file, "hit");
           await store({ ...entry, accessed: Date.now() }).catch(() => undefined);
           cancelled(signal); return file;
@@ -64,7 +66,7 @@ export async function cachedDwgConversion(source: File, convert: () => Promise<F
   const file = await convert(); cancelled(signal);
   statuses.set(file, "converted");
   if (id && globalThis.indexedDB && file.size <= MAX_CONVERTED_DXF_BYTES) {
-    try { await store({ id, blob: file.slice(), bytes: file.size, view: getSavedDrawingView(file), accessed: Date.now() }); }
+    try { await store({ id, blob: file.slice(), bytes: file.size, view: getSavedDrawingView(file), metadata:getNativeDwgMetadata(file), accessed: Date.now() }); }
     catch (error) { console.warn("Could not save generated DWG conversion cache.", error); }
   }
   cancelled(signal); return file;

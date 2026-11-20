@@ -2,7 +2,7 @@ import { MAX_CONVERTED_DXF_BYTES, MAX_DERIVED_CACHE_BYTES } from "../files/fileT
 import { isLikelyMemoryError } from "../dwg/diagnostics";
 import { AppError } from "../types/drawing";
 // Derived data only: original drawings and the library use separate stores.
-const VERSION = "prepared-v2-universal1-xclip2-snap2", DB = "izcad-prepared-scene-index", CACHE = "izcad-prepared-scenes-v1";
+const VERSION = "prepared-v4-native1-index4", DB = "izcad-prepared-scene-index", CACHE = "izcad-prepared-scenes-v1";
 const MAX_BYTES = MAX_DERIVED_CACHE_BYTES, MAX_ENTRY = MAX_CONVERTED_DXF_BYTES, CHUNK = 4 * 1024 ** 2;
 type Header = { key: string; bytes: number; accessed: number; ready: boolean };
 const constructors = { Float32Array, Float64Array, Uint16Array, Uint32Array, Uint8Array, Int32Array };

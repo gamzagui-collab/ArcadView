@@ -1,8 +1,21 @@
 import { describe, expect, it } from "vitest";
 import { buildMeasurementGeometry, nearestEntity, nearestSnap, pointSegmentDistance, type MeasurementDxf } from "./measurementGeometry";
-import { installMeasurementTransfer, measurementBuffers, nearestPackedEntity, nearestPackedSnap, packedEntity } from "./packedMeasurement";
+import { installMeasurementTransfer, measurementBuffers, nearestPackedEntity, nearestPackedSnap, packedEntity, measurementFitBounds } from "./packedMeasurement";
 
 describe("packed drawing measurement", () => {
+  it("stores exact camera bounds in transferable doubles and releases parsed blocks only after their last nested use",()=>{
+    const fixture=():MeasurementDxf=>({entities:[{type:"INSERT",name:"parent",position:{x:1e12,y:1e12}},{type:"INSERT",name:"parent",position:{x:1e12+100,y:1e12+200}}],blocks:{parent:{name:"parent",entities:[{type:"INSERT",name:"child",position:{x:0,y:0}}]},child:{name:"child",entities:[{type:"LINE",vertices:[{x:0,y:0},{x:3,y:4}]}]},unused:{name:"unused",entities:[{type:"LINE",vertices:[{x:0,y:0},{x:99,y:99}]}]}}});
+    const plain=buildMeasurementGeometry(fixture()),source=fixture(),packed=buildMeasurementGeometry(source,{},undefined,true,undefined,true);
+    expect(packed.limited).toBe(false);expect([...measurementFitBounds(packed)]).toEqual(plain.fitBounds);
+    for(let i=0;i<plain.entities.length;i++)expect(packedEntity(packed.packed!,i)).toEqual(plain.entities[i]);
+    expect(source.blocks!.child.entities).toBeUndefined();expect(source.blocks!.parent.entities).toBeUndefined();expect(source.blocks!.unused.entities).toBeUndefined();
+    const buffers=measurementBuffers(packed.packed!);expect(buffers).toContain(packed.packed!.fitBounds![0].buffer);
+  });
+  it("traverses a drawing beyond the previous two-million visit cutoff without dropping later measurement geometry",()=>{
+    const text={type:"TEXT",text:"label"},dxf:MeasurementDxf={blocks:{B:{name:"B",entities:Array.from({length:100_000},()=>text)}},entities:Array.from({length:21},(_,x)=>({type:"INSERT",name:"B",position:{x,y:0}}))};
+    dxf.entities!.push({type:"LINE",vertices:[{x:0,y:0},{x:600,y:0}]});
+    const g=buildMeasurementGeometry(dxf,{},undefined,true,undefined,true);expect(g.limited).toBe(false);expect(g.packed!.entityCount).toBe(1);expect(packedEntity(g.packed!,0).length).toBe(600);
+  });
   it("preserves every double coordinate, length, area, curve, pick and snap of the unpacked index", () => {
     const dxf: MeasurementDxf = { header: { $INSUNITS: 4 }, entities: [
       { type: "LINE", vertices: [{ x: 1e12, y: 1e12 }, { x: 1e12 + 3, y: 1e12 + 4 }] },

@@ -1,3 +1,4 @@
+import {measurementFitBounds} from "./packedMeasurement";
 import { describe, expect, it } from "vitest";
 import DxfParser from "dxf-viewer/src/parser/DxfParser.js";
 import { nearestPackedSnap, packedEntity } from "./packedMeasurement";
@@ -306,12 +307,12 @@ describe("measurement worker preparation", () => {
     expect(scene.decompositions).toBe(1);
     expect(geometry.completeBounds).toBe(false);
     expect(geometry.fitCompleteBounds).toBe(true);
-    expect(geometry.fitBounds[0].minX).toBeCloseTo(96);
-    expect(geometry.fitBounds[0].maxX).toBeCloseTo(100);
-    expect(geometry.fitBounds[0].minY).toBeCloseTo(200);
-    expect(geometry.fitBounds[0].maxY).toBeCloseTo(208);
-    expect(geometry.fitBounds[1]).toEqual({ minX: 0, minY: -4, maxX: 5, maxY: 0 });
-    expect(geometry.fitBounds[2]).toEqual({ minX: 50, minY: 60, maxX: 50, maxY: 60 });
+    expect([...measurementFitBounds(geometry)][0].minX).toBeCloseTo(96);
+    expect([...measurementFitBounds(geometry)][0].maxX).toBeCloseTo(100);
+    expect([...measurementFitBounds(geometry)][0].minY).toBeCloseTo(200);
+    expect([...measurementFitBounds(geometry)][0].maxY).toBeCloseTo(208);
+    expect([...measurementFitBounds(geometry)][1]).toEqual({ minX: 0, minY: -4, maxX: 5, maxY: 0 });
+    expect([...measurementFitBounds(geometry)][2]).toEqual({ minX: 50, minY: 60, maxX: 50, maxY: 60 });
     expect(geometry.entities).toHaveLength(0);
     expect(nearestPackedSnap(geometry.packed!, { x: 50, y: 60 }, 0)).toEqual({ x: 50, y: 60, kind: "endpoint" });
   });

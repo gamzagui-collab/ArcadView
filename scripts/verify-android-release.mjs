@@ -3,6 +3,7 @@ import { resolve, relative, extname } from "node:path";
 import { createHash } from "node:crypto";
 import { inflateRawSync } from "node:zlib";
 import { spawnSync } from "node:child_process";
+import { elf16kAligned, zipDataOffset } from "./native-library-check.mjs";
 
 const args = process.argv.slice(2);
 const archivePath = resolve(args.find((arg) => !arg.startsWith("--")) ?? "android/app/build/outputs/bundle/release/app-release.aab");
@@ -82,8 +83,9 @@ try {
   check("Artifact includes the offline DWG runtime", entries.has(`${prefix}wasm/libredwg-web.js`) && entries.has(`${prefix}wasm/libredwg-web.wasm`));
   check("Artifact includes local font and license notices", entries.has(`${prefix}fonts/IzCadSans-Regular.ttf`) && entries.has(`${prefix}licenses/NOTICE.md`) && entries.has(`${prefix}licenses/THIRD_PARTY_LICENSES.md`));
   const nativeLibraries = [...entries.keys()].filter((name) => /(?:^|\/)lib\/[^/]+\/[^/]+\.so$/.test(name));
-  check("16 KB compatibility: no packaged native libraries", nativeLibraries.length === 0,
-    nativeLibraries.length ? `Native libraries require ELF and generated-APK alignment verification: ${nativeLibraries.join(", ")}` : "Java/JavaScript/WebAssembly assets do not add Android NDK shared libraries.");
+  check("Native DWG converter includes all supported Android ABIs",["arm64-v8a","armeabi-v7a","x86_64","x86"].every(abi=>entries.has(`${isBundle?'base/':''}lib/${abi}/libarcad_dwg.so`)));
+  check("Native libraries use 16 KB ELF segment alignment",nativeLibraries.length>0&&nativeLibraries.every(name=>elf16kAligned(entryBytes(archive,entries.get(name)))));
+  if(!isBundle)check("Uncompressed native libraries are 16 KB ZIP aligned",nativeLibraries.every(name=>{const entry=entries.get(name);return entry.method===0&&zipDataOffset(archive,entry)%16384===0;}));
 
   if (isBundle) {
     const signatureEntries = [...entries.keys()].filter((name) => /^META-INF\/[^/]+\.(?:RSA|DSA|EC)$/.test(name));

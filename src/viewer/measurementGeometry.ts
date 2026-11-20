@@ -187,16 +187,17 @@ export function buildMeasurementGeometry(
   renderedEntityBounds?: WeakMap<object, DrawingBounds | null>,
   packed = false,
   interpolateSpline?:SplineInterpolator,
+  consumeSource = false,
 ): MeasurementGeometry {
   const limit = (requested: number | undefined, maximum: number) => Number.isFinite(requested) && requested! > 0 ? Math.min(maximum, Math.floor(requested!)) : maximum;
   // Packed doubles have a bounded byte cost without a retained point-object graph.
-  const maxEntities = limit(requestedLimits.maxEntities, packed ? 500_000 : MAX_ENTITIES);
+  const maxEntities = limit(requestedLimits.maxEntities, packed ? 2_000_000 : MAX_ENTITIES);
   // Correct XCLIP transforms expose 15,919,696 outline points / 2,221,046
   // snaps in the reviewed BASE drawing. Packed buffers keep this bounded
   // (about 325 MiB for its complete index) without a point-object graph.
-  const maxPoints = limit(requestedLimits.maxPoints, packed ? 16_000_000 : MAX_POINTS);
-  const maxSnaps = limit(requestedLimits.maxSnaps, packed ? 2_500_000 : MAX_POINTS);
-  const maxVisits = limit(requestedLimits.maxVisits, packed ? 2_000_000 : MAX_ENTITIES * 4);
+  const maxPoints = limit(requestedLimits.maxPoints, packed ? 64_000_000 : MAX_POINTS);
+  const maxSnaps = limit(requestedLimits.maxSnaps, packed ? 10_000_000 : MAX_POINTS);
+  const maxVisits = limit(requestedLimits.maxVisits, packed ? 16_000_000 : MAX_ENTITIES * 4);
   const packer = packed ? new MeasurementPacker() : null;
   let unpackedSnapCount=0;
   const supplement=new SupplementalSnaps(limit(requestedLimits.maxSupplementalSnaps,750000),limit(requestedLimits.maxSnapSegments,300000));
@@ -228,8 +229,8 @@ export function buildMeasurementGeometry(
   const reachedLimit = () => { result.limited = true; incomplete(); };
   const addFitBounds = (bounds: DrawingBounds) => {
     if (!Object.values(bounds).every(Number.isFinite)) { incomplete(); return; }
-    if (result.fitBounds.length >= maxEntities) { reachedLimit(); return; }
-    result.fitBounds.push(bounds);
+    if ((packer?.value.fitCount??result.fitBounds.length) >= maxEntities) { reachedLimit(); return; }
+    if(packer)packer.addBounds(bounds);else result.fitBounds.push(bounds);
   };
   const addSnaps = (snaps: SnapPoint[], clips: DrawingPoint[][]) => {
     for (const point of snaps) {
@@ -436,7 +437,29 @@ export function buildMeasurementGeometry(
       add({ kind: entity.type!, points, bounds, length, area, approximate }, snaps, clips, curved);
     } else incomplete();
   };
-  for (const entity of dxf.entities ?? []) { if (result.limited) break; visit(entity, new Matrix3(), "0", [], []); }
+  // Rendering is finished before the worker builds this index. Release each
+  // parsed definition after its last model/paper use instead of retaining the
+  // entire DXF object graph beside the growing double-precision index.
+  const sourceEntities=dxf.entities??[];
+  const retire=new Map<number,Array<{entities?:Entity[]}>>();
+  if(consumeSource){
+    const definitions=Object.values(dxf.blocks??{}),byName=new Map<string|undefined,(typeof definitions)[number]>();
+    for(const b of definitions)if(b.name&&!byName.has(b.name))byName.set(b.name,b);
+    for(const[name,b]of Object.entries(dxf.blocks??{}))byName.set(name,b);
+    const dependencies=new Map(definitions.map(b=>[b,[...new Set((b.entities??[]).filter(e=>e.type==='INSERT').map(e=>byName.get(e.name)))].filter(Boolean)]));
+    const last=new Map<(typeof definitions)[number],number>();
+    for(let i=0;i<sourceEntities.length;i++){
+      const first=byName.get(sourceEntities[i].name),todo=first?[first]:[];
+      while(todo.length){const block=todo.pop()!;if(last.get(block)===i)continue;last.set(block,i);for(const child of dependencies.get(block)??[])if(child)todo.push(child);}
+    }
+    for(const[block,index]of last){const list=retire.get(index)??[];list.push(block);retire.set(index,list);}
+    for(const block of definitions)if(!last.has(block))delete block.entities;
+  }
+  for (let i=0;i<sourceEntities.length;i++) {
+    if (result.limited) break;
+    visit(sourceEntities[i], new Matrix3(), "0", [], []);
+    if(consumeSource){for(const block of retire.get(i)??[])delete block.entities;(sourceEntities as Array<Entity|null>)[i]=null;}
+  }
   result.snaps.sort((a, b) => a.x - b.x);
   if (packer){result.packed = packer.finish();supplement.finish(result.packed);}
   result.snapLimited=supplement.limited;
@@ -511,7 +534,10 @@ export function installMeasurementPreparation(constructor: object): void {
     this[RENDERED_ENTITY_BOUNDS] = new WeakMap();
     this[RENDERED_BOUND_COUNT] = 0;
     await original.call(this, dxf, fonts);
-    const geometry = buildMeasurementGeometry(dxf, {}, this[RENDERED_ENTITY_BOUNDS], true,this._InterpolateSpline?.bind(this));
+    (this as unknown as {inserts?:Map<unknown,unknown>}).inserts?.clear();
+    console.info("[arcad-index] start");
+    const geometry = buildMeasurementGeometry(dxf, {}, this[RENDERED_ENTITY_BOUNDS], true,this._InterpolateSpline?.bind(this),true);
+    console.info("[arcad-index] complete",geometry.packed?.entityCount,geometry.packed?.pointCount,geometry.limited,geometry.snapLimited);
     for (const key of Object.keys(dxf)) delete (dxf as Record<string, unknown>)[key];
     (dxf as Record<string, unknown>).izcadMeasurement = geometry;
     delete this[RENDERED_ENTITY_BOUNDS];

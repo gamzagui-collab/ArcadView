@@ -1,4 +1,4 @@
-import type { DrawingPoint } from "./savedView";
+import type { DrawingPoint, DrawingBounds } from "./savedView";
 import type { MeasurableEntity, SnapPoint } from "./measurementGeometry";
 
 const CHUNK = 16_384;
@@ -8,6 +8,7 @@ export type PackedMeasurement = {
   data: Float64Array[]; refs: Uint32Array[]; points: Float64Array[]; snaps: Float64Array[];
   extraSnaps?:Float64Array[];extraSnapCount?:number;
   snapSegments?:Float64Array[];snapSegmentCount?:number;
+  fitBounds?:Float64Array[];fitCount?:number;
 };
 function row(chunks: Float64Array[] | Uint32Array[], index: number, stride: number) {
   return { chunk: chunks[Math.floor(index / CHUNK)], offset: index % CHUNK * stride };
@@ -33,6 +34,10 @@ export class MeasurementPacker {
   }
   addSnap(point: SnapPoint): void {
     append(this.value.snaps, this.value.snapCount++, [point.x, point.y, snapKinds.indexOf(point.kind)]);
+  }
+  addBounds(bounds:DrawingBounds):void {
+    const p=this.value;p.fitBounds??=[];p.fitCount??=0;
+    append(p.fitBounds,p.fitCount++,[bounds.minX,bounds.minY,bounds.maxX,bounds.maxY]);
   }
   finish(): PackedMeasurement {
     const p = this.value, original = p.snaps;
@@ -98,7 +103,13 @@ export function nearestPackedEntity(p: PackedMeasurement, target: DrawingPoint, 
 }
 
 export function measurementBuffers(p: PackedMeasurement): ArrayBuffer[] {
-  return [...p.data, ...p.refs, ...p.points, ...p.snaps,...p.extraSnaps??[],...p.snapSegments??[]].map(a => a.buffer as ArrayBuffer);
+  return [...p.data, ...p.refs, ...p.points, ...p.snaps,...p.extraSnaps??[],...p.snapSegments??[],...p.fitBounds??[]].map(a => a.buffer as ArrayBuffer);
+}
+
+export function measurementFitBounds(g:{fitBounds:DrawingBounds[];packed?:PackedMeasurement}):Iterable<DrawingBounds>{
+  if(!g.packed?.fitBounds)return g.fitBounds;
+  const p=g.packed;
+  return{*[Symbol.iterator](){for(let i=0;i<(p.fitCount??0);i++){const q=row(p.fitBounds!,i,4),a=q.chunk,k=q.offset;yield{minX:a[k],minY:a[k+1],maxX:a[k+2],maxY:a[k+3]};}}};
 }
 
 /** Separate budget: new snap-only features never truncate the existing measurement index. */

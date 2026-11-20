@@ -85,7 +85,7 @@ export function resolveSavedDrawingView(
   bounds: DrawingBounds | null,
   origin: DrawingPoint,
   viewportAspect: number,
-  entityBounds: readonly DrawingBounds[] = [],
+  entityBounds: Iterable<DrawingBounds> = [],
 ): ResolvedDrawingView | null {
   if (
     !view ||
@@ -157,17 +157,14 @@ export function resolveSavedDrawingView(
   // gap between distant blocks. Keep the saved zoom, but anchor that empty
   // view to a dense group of actual geometry. This only moves the camera;
   // the fit-all command and all drawing coordinates remain unchanged.
-  const visibleBounds = entityBounds.filter((box) =>
-    Object.values(box).every(isFiniteNumber) &&
-    box.minX <= box.maxX && box.minY <= box.maxY,
-  );
-  if (visibleBounds.length > 0 && !visibleBounds.some((box) =>
-    viewMaxX >= box.minX && viewMinX <= box.maxX &&
-    viewMaxY >= box.minY && viewMinY <= box.maxY,
-  )) {
+  const validBox=(box:DrawingBounds)=>Object.values(box).every(isFiniteNumber)&&box.minX<=box.maxX&&box.minY<=box.maxY;
+  let visible=false,intersects=false;
+  for(const box of entityBounds){if(!validBox(box))continue;visible=true;if(viewMaxX>=box.minX&&viewMinX<=box.maxX&&viewMaxY>=box.minY&&viewMinY<=box.maxY){intersects=true;break;}}
+  if (visible && !intersects) {
     const cells = new Map<string, { count: number; x: number; y: number }>();
     let densest: { count: number; x: number; y: number } | undefined;
-    for (const box of visibleBounds) {
+    for (const box of entityBounds) {
+      if(!validBox(box))continue;
       if (box.maxX - box.minX > halfWidth || box.maxY - box.minY > halfHeight) continue;
       const x = box.minX + (box.maxX - box.minX) / 2;
       const y = box.minY + (box.maxY - box.minY) / 2;

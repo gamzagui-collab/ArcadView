@@ -2,11 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { convertDwgInProcess } from "./dwgConversion";
 import { getSavedDrawingView } from "../viewer/savedView";
 import { MAX_CONVERTED_DXF_BYTES } from "../files/fileTypes";
+import { getNativeDwgMetadata } from "../dwg/nativeMetadata";
 
 const mocks = vi.hoisted(() => ({
   begin: vi.fn(), append: vi.fn(), convert: vi.fn(), release: vi.fn(), read: vi.fn(),
 }));
-vi.mock("@capacitor/core", () => ({ registerPlugin: () => mocks }));
+vi.mock("@capacitor/core", () => ({ registerPlugin: () => mocks, Capacitor:{convertFileSrc:(uri:string)=>uri} }));
 vi.mock("./incomingDrawing", () => ({ readIncomingDrawingFile: mocks.read }));
 
 describe("isolated Android DWG conversion", () => {
@@ -40,6 +41,23 @@ describe("isolated Android DWG conversion", () => {
       savedView: JSON.stringify({ center: { x: 10, y: 20 }, viewHeight: 30 }) });
     const output = await convertDwgInProcess(new File(["AC1032"], "test.dwg"));
     expect(getSavedDrawingView(output)).toMatchObject({ center: { x: 10, y: 20 }, viewHeight: 30 });
+  });
+
+  it("reads native clipping/layer metadata before releasing its private staging files", async () => {
+    const metadata={version:1,layers:[],clips:{}};
+    mocks.convert.mockResolvedValue({uri:"file:///cache/output.dxf",size:10,savedView:"null",metadataUri:"file:///cache/metadata.json"});
+    const fetchMetadata=vi.fn(async()=>{expect(mocks.release).not.toHaveBeenCalled();return new Response(JSON.stringify(metadata));});
+    vi.stubGlobal("fetch",fetchMetadata);
+    const output=await convertDwgInProcess(new File(["AC1032"],"test.dwg"));
+    expect(fetchMetadata).toHaveBeenCalledWith("file:///cache/metadata.json",{signal:undefined,cache:"no-store"});
+    expect(getNativeDwgMetadata(output)).toEqual(metadata);expect(mocks.release).toHaveBeenCalledOnce();
+  });
+
+  it("rejects malformed native metadata and still releases staging files", async () => {
+    mocks.convert.mockResolvedValue({uri:"file:///cache/output.dxf",size:10,savedView:"null",metadataUri:"file:///cache/metadata.json"});
+    vi.stubGlobal("fetch",vi.fn(async()=>new Response('{"version":9}')));
+    await expect(convertDwgInProcess(new File(["AC1032"],"test.dwg"))).rejects.toMatchObject({code:"DWG_CONVERSION_FAILED"});
+    expect(mocks.release).toHaveBeenCalledOnce();
   });
 
   it("does not stage an already cancelled file", async () => {

@@ -7,6 +7,7 @@ import {
 } from "../types/drawing";
 import { detectDxfEncoding } from "./dxfEncoding";
 import { MAX_CONVERTED_DXF_BYTES, validateDrawingFileSize } from "../files/fileTypes";
+import { getNativeDwgMetadata } from "../dwg/nativeMetadata";
 import {
   getSavedDrawingView,
   resolveSavedDrawingView,
@@ -23,7 +24,7 @@ import {
   type MeasurableEntity, type SnapPoint,
 } from "./measurementGeometry";
 import type { DrawingPoint } from "./savedView";
-import { nearestPackedEntity, nearestPackedSnap } from "./packedMeasurement";
+import { nearestPackedEntity, nearestPackedSnap, measurementFitBounds } from "./packedMeasurement";
 import { selectInitialDrawingBounds } from "./initialView";
 import { resolveDrawingDisplayUnit, resolveDrawingMeasurementUnit } from "./verifiedDrawingUnits";
 import { getDrawingUnitKey, prepareDrawingUnitKey } from "./drawingUnitPreferences";
@@ -252,6 +253,7 @@ export class DrawingViewer {
         options: { fileEncoding: string };
       }).options;
       options.fileEncoding = detectDxfEncoding(new Uint8Array(prefix));
+      (options as any).izcadDwgMetadata=getNativeDwgMetadata(file);
       const contentKey = getDrawingUnitKey(file);
       // Cache compatibility is versioned by preparedSceneCache.VERSION. A raw
       // worker source URL also encodes platform line endings and is not stable
@@ -448,7 +450,7 @@ export class DrawingViewer {
 
   private fit(initial = false): void {
     const bounds = initial && this.geometry.fitCompleteBounds
-      ? selectInitialDrawingBounds(this.viewer.GetBounds(), this.geometry.fitBounds)
+      ? selectInitialDrawingBounds(this.viewer.GetBounds(), [...measurementFitBounds(this.geometry)])
       : this.viewer.GetBounds();
     if (!bounds) {
       return;
@@ -488,10 +490,10 @@ export class DrawingViewer {
     const origin = this.viewer.GetOrigin();
     const resolved = resolveSavedDrawingView(
       this.savedView,
-      this.geometry.fitCompleteBounds ? selectInitialDrawingBounds(this.viewer.GetBounds(), this.geometry.fitBounds) : this.viewer.GetBounds(),
+      this.geometry.fitCompleteBounds ? selectInitialDrawingBounds(this.viewer.GetBounds(), [...measurementFitBounds(this.geometry)]) : this.viewer.GetBounds(),
       origin,
       viewportAspect,
-      this.geometry.fitBounds,
+      measurementFitBounds(this.geometry),
     );
     if (!resolved) {
       return false;

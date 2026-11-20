@@ -1,7 +1,7 @@
 {
   "name": "arcad-view",
   "private": true,
-  "version": "2.1.8",
+  "version": "2.1.9",
   "description": "Arcad View — offline CAD viewing, measurement and markup by GUI's Arc Industry",
   "license": "GPL-3.0-only",
   "author": {
@@ -46,7 +46,7 @@
     "check": "npm run test && npm run android:prepare",
     "android:prepare": "npm run android:sync && npm run android:verify",
     "android:ld-debug": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/android-ld-debug.ps1",
-    "test:cad-runtime": "node --test scripts/tests/dwg-memory-runtime.mjs"
+    "test:cad-runtime": "node --test scripts/tests/dwg-memory-runtime.mjs scripts/tests/native-library-check.mjs"
   },
   "dependencies": {
     "@capacitor/android": "8.4.3",

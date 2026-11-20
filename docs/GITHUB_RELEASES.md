@@ -21,7 +21,7 @@
 
 ## 개발 및 배포
 
-Node.js >=22, JDK21, Android SDK36/build-tools36.0.0을 사용합니다.
+Node.js >=22, JDK21, Android SDK36/build-tools36.0.0, NDK28.2.13676358, CMake3.22.1을 사용합니다. GitHub Actions가 동일 버전을 설치하고 네 가지 ABI의 네이티브 DWG 엔진 및 16KB ELF/APK 정렬을 검사합니다. 엔진 대응 소스는 `vendor/`에 포함되어 소스 ZIP과 함께 배포됩니다.
 
 `npm ci`와 `android:prepare`는 고정된 Capacitor Android 8.4.3의 safe area 주입 시점만 보정합니다. HTML 루트가 없으면 문서 준비를 기다려 최신 CSS 여백을 적용하며, 네이티브 여백 계산과 실제 오류 보고는 유지합니다. `scripts/patch-capacitor-safe-area.mjs`에 보정 소스가 포함되고 다른 의존성 버전에서는 검토 없이 적용하지 않습니다.
 

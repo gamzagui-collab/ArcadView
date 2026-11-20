@@ -44,6 +44,7 @@ public class DwgConversionService extends Service {
     private FileOutputStream output;
     private long outputBytes;
     private String workerUrl;
+    private File metadataFile;
 
     @Override public IBinder onBind(Intent intent) { return null; }
 
@@ -57,6 +58,12 @@ public class DwgConversionService extends Service {
             input = new File(directory, "input.dwg");
             if (!input.isFile()) throw new Exception("Input cache missing.");
             outputFile = new File(directory, "output.dxf");
+            if (NativeDwg.available()) {
+                metadataFile = new File(directory, "metadata.json");
+                main.postDelayed(() -> finish(1, "DWG_CONVERSION_TIMEOUT", "DWG conversion timed out.", "{}", "null"), DrawingLimits.CONVERSION_TIMEOUT_MS);
+                new Thread(() -> convertNative(directory), "arcad-native-dwg").start();
+                return START_NOT_STICKY;
+            }
             output = new FileOutputStream(outputFile);
             for (String asset : getAssets().list("public/assets")) {
                 if (asset.startsWith("dwg.worker-") && asset.endsWith(".js")) workerUrl = "/assets/" + asset;
@@ -106,6 +113,27 @@ public class DwgConversionService extends Service {
         return START_NOT_STICKY;
     }
 
+    private void convertNative(File directory) {
+        try {
+            File raw = new File(directory, "raw.dxf");
+            Log.i(TAG, "native started pid=" + android.os.Process.myPid() + " inputBytes=" + input.length());
+            int code = NativeDwg.convertFiles(input.getAbsolutePath(), raw.getAbsolutePath(), metadataFile.getAbsolutePath());
+            if (raw.length() > DrawingLimits.DXF_BYTES) { finish(1, "FILE_TOO_LARGE", "Converted DXF exceeds the limit.", "{}", "null"); return; }
+            if (code != 0) {
+                String failure = (code & 8192) != 0 ? "DWG_MEMORY_LIMIT" : (code & (1 | 8 | 16 | 32 | 64 | 2048)) != 0 ? "DWG_CORRUPT_OR_ENCRYPTED" : "DWG_EXPORT_FAILED";
+                finish(1, failure, "LibreDWG native conversion failed: " + code, "{}", "null"); return;
+            }
+            DxfBlockPruner.Result pruned = DxfBlockPruner.prune(raw, outputFile);
+            outputBytes = outputFile.length();
+            Log.i(TAG, "native rawBytes=" + raw.length() + " outputBytes=" + outputBytes + " blocks=" + pruned.total + " retained=" + pruned.retained);
+            if (metadataFile.length() > 16 * 1024 * 1024 || outputBytes == 0) throw new Exception("Invalid native output.");
+            String metadata = new String(java.nio.file.Files.readAllBytes(metadataFile.toPath()), StandardCharsets.UTF_8);
+            JSONObject json = new JSONObject(metadata);
+            finish(0, "", "", "{}", json.opt("savedView") == JSONObject.NULL ? "null" : json.getJSONObject("savedView").toString());
+        } catch (OutOfMemoryError error) { finish(1, "DWG_MEMORY_LIMIT", "Native conversion memory exhausted.", "{}", "null"); }
+        catch (Exception error) { finish(1, "DWG_CONVERSION_FAILED", error.toString(), "{}", "null"); }
+    }
+
     private final class NativeBridge {
         @JavascriptInterface public String workerUrl() { return workerUrl; }
         @JavascriptInterface public void appendOutput(String encoded) throws Exception {
@@ -136,6 +164,7 @@ public class DwgConversionService extends Service {
             if (webView != null) { webView.removeJavascriptInterface("NativeConversion"); webView.destroy(); webView = null; }
             Bundle data = new Bundle(); data.putString("code", code); data.putString("message", message);
             data.putString("details", details); data.putString("savedView", savedView);
+            if (status == 0 && metadataFile != null) data.putString("metadataUri", Uri.fromFile(metadataFile).toString());
             if (status == 0 && (getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
                 try {
                     MessageDigest digest = MessageDigest.getInstance("SHA-256");

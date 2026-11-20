@@ -19,6 +19,7 @@ projeden ve dağıtım varlıklarından kaldırılmıştır.
 | @capacitor/core ve @capacitor/android | 8.4.3 | MIT | `LICENSE-CAPACITOR-MIT.txt` |
 | @capacitor/browser | 8.0.4 | MIT | `LICENSE-CAPACITOR-MIT.txt` |
 | @mlightcad/libredwg-web | 0.9.0 | GPL-3.0-only | `LICENSE` |
+| LibreDWG native Android core (same libredwg-web v0.9.0 source) | 7d90153180229faff5d1bbdfb9fb4378d5f141d5 | GPL-3.0-or-later, distributed with this GPL-3.0-only app | `LICENSE`, `vendor/libredwg-0.9.0-source.tar.gz` (COPYING), `vendor/README.md` |
 | PDF.js (`pdfjs-dist`) | 6.4.299 | Apache License 2.0; ek varlık lisansları aşağıda | `LICENSE-APACHE-2.0.txt`, `LICENSE-PDFJS-THIRD-PARTY.txt` |
 | fflate | 0.8.3 | MIT | `LICENSE-FFLATE-MIT.txt` |
 | libarchive-wasm JavaScript bağları | 1.2.0 | MIT | `LICENSE-LIBARCHIVE-WASM-MIT.txt` |

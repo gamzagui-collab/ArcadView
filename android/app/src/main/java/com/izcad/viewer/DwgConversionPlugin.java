@@ -37,7 +37,7 @@ public class DwgConversionPlugin extends Plugin {
         File[] directories = root.listFiles();
         if (directories != null) for (File directory : directories) {
             if (directory.isDirectory() && directory.getName().matches("[0-9a-f-]{36}")) {
-                new File(directory, "input.dwg").delete(); new File(directory, "output.dxf").delete(); directory.delete();
+                for (String name : new String[]{"input.dwg", "output.dxf", "raw.dxf", "metadata.json"}) new File(directory, name).delete(); directory.delete();
             }
         }
     }
@@ -102,6 +102,7 @@ public class DwgConversionPlugin extends Plugin {
                 JSObject result = new JSObject();
                 result.put("uri", Uri.fromFile(output).toString()); result.put("size", output.length());
                 result.put("savedView", data.getString("savedView", "null"));
+                if (data.containsKey("metadataUri")) result.put("metadataUri", data.getString("metadataUri"));
                 waiting.resolve(result);
             }
         };
@@ -144,8 +145,8 @@ public class DwgConversionPlugin extends Plugin {
         }
         File directory = sessions.remove(token);
         if (directory != null) {
-            // Only the two fixed staging files in a directory created by begin().
-            new File(directory, "input.dwg").delete(); new File(directory, "output.dxf").delete(); directory.delete();
+            // Only fixed staging files in a directory created by begin().
+            for (String name : new String[]{"input.dwg", "output.dxf", "raw.dxf", "metadata.json"}) new File(directory, name).delete(); directory.delete();
         }
         resolveWhenStopped(call, 100);
     }
@@ -166,7 +167,7 @@ public class DwgConversionPlugin extends Plugin {
         for (PluginCall call : pending.values()) call.reject("Application closed.", "DWG_CONVERSION_FAILED");
         pending.clear();
         for (File directory : sessions.values()) {
-            new File(directory, "input.dwg").delete(); new File(directory, "output.dxf").delete(); directory.delete();
+            for (String name : new String[]{"input.dwg", "output.dxf", "raw.dxf", "metadata.json"}) new File(directory, name).delete(); directory.delete();
         }
         sessions.clear();
     }

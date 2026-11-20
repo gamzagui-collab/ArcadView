@@ -1,13 +1,17 @@
 # Arcad View — modification notice
 
-Arcad View 2.1.6, modified on 2026-11-20 by GUI's Arc Industry.
+Arcad View 2.1.9, modified on 2026-11-20 by GUI's Arc Industry.
 Based on orgofjs/izCAD. Original copyright and third-party notices below are retained.
 Source: https://github.com/gamzagui-collab/ArcadView
 License: GPL-3.0-only.
 
 Modifications include Android DWG memory isolation and caches, Korean fonts,
 measurement and snap improvements, overlay markup layers, Arcad View UX,
-and consent-based GitHub APK updates. Drawing processing stays local;
+and consent-based GitHub APK updates. Version 2.1.9 adds a disposable native
+Android converter built from the same LibreDWG 0.9.0 sources, disk-backed DXF
+export, reachable-block retention and a larger packed measurement index.
+Native engine provenance and corresponding sources are in `vendor/README.md`
+and the source distribution. Drawing processing stays local;
 only the GitHub distribution's update check/download uses the network.
 
 ## Original izCAD notice
