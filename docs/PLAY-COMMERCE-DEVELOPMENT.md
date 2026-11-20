@@ -14,7 +14,9 @@ Set-Location android
 .\gradlew.bat assembleDebug bundleRelease testDebugUnitTest -PARCAD_DISTRIBUTION=play
 ```
 
-`ARCAD_ACCOUNT_SERVER` must be an HTTPS origin (no trailing path). The default is empty: view files normally, but display that accounts are not configured and block new measured/paid completions. Configure a real staging origin only after OAuth/Worker provisioning. The independent service and setup instructions live next to this checkout in `arcad-services`; the public client does not require its source or secrets to compile.
+`ARCAD_ACCOUNT_SERVER` must be an HTTPS origin (no trailing path). The default is empty. The verified development artifact passes `-PARCAD_ACCOUNT_SERVER=https://arcad-accounts-staging.gamzagui.workers.dev -PARCAD_ACCOUNT_ENVIRONMENT=staging`. The independent service and setup instructions live next to this checkout in `arcad-services`; the public client does not require its source or secrets to compile. Health reports Google configuration unavailable, so the app displays the preparation state and disables sign-in while preserving viewing.
+
+Native `ARCAD_BILLING_ENABLED` defaults to false and blocks checkout even if a developer calls the plugin directly. It must remain false until approved Play products, license testers and the testing plan are in place. Server payment mode and sales approval are additional gates. No actual sale is authorized by compiling a Billing SDK.
 
 `bundleRelease` is unsigned unless all four existing `IZCAD_KEYSTORE_FILE`, `IZCAD_KEYSTORE_PASSWORD`, `IZCAD_KEY_ALIAS`, `IZCAD_KEY_PASSWORD` settings are supplied through the established external signing mechanism. The existing Android Debug certificate cannot be used as the Play upload key. Do not commit keys, create a Play signing enrollment or accept legal terms automatically.
 

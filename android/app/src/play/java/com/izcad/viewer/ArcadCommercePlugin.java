@@ -40,7 +40,7 @@ public final class ArcadCommercePlugin extends Plugin {
     @Override public void load() { credentials = CredentialManager.create(getContext()); }
     @PluginMethod public void getConfig(PluginCall call) {
         JSObject out = new JSObject(); out.put("enabled", true); out.put("server", BuildConfig.ACCOUNT_SERVER);
-        out.put("distribution", "play"); out.put("packageName", getContext().getPackageName()); call.resolve(out);
+        out.put("distribution", "play");out.put("environment", BuildConfig.ACCOUNT_ENVIRONMENT);out.put("billingEnabled",BuildConfig.BILLING_ENABLED); out.put("packageName", getContext().getPackageName()); call.resolve(out);
     }
     @PluginMethod public void signIn(PluginCall call) {
         String clientId = call.getString("clientId", ""), nonce = call.getString("nonce", "");
@@ -155,6 +155,7 @@ public final class ArcadCommercePlugin extends Plugin {
         })));
     }
     @PluginMethod public void purchase(PluginCall call) {
+        if(!BuildConfig.BILLING_ENABLED){call.reject("SALES_NOT_ENABLED");return;}
         String id = call.getString("productId", ""), offer = call.getString("offerToken", ""), account = call.getString("accountId", "");
         if ((!id.equals(PRO) && !id.equals(STANDARD)) || !account.matches("[a-f0-9]{64}") || offer.isEmpty()) { call.reject("INVALID_PURCHASE"); return; }
         ready(call, () -> query(id, call, p -> {

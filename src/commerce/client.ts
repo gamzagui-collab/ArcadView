@@ -4,7 +4,7 @@ export type AccountBalance = { userId:string;plan:"FREE"|"STANDARD"|"PRO";free:n
 export type PlayProduct={id:string;name:string;description:string;price?:string;period?:string;offerToken?:string};
 type Purchase={token:string;products:string[];state:number};
 interface NativeCommerce {
-  getConfig():Promise<{enabled:boolean;server:string;distribution:string}>;
+  getConfig():Promise<{enabled:boolean;server:string;distribution:string;environment?:string;billingEnabled?:boolean}>;
   signIn(options:{clientId:string;nonce:string}):Promise<{idToken:string}>;
   saveSession(options:{session:string}):Promise<void>;readSession():Promise<{session?:string}>;clearSession():Promise<void>;
   products():Promise<{products:PlayProduct[]}>;purchase(options:{productId:string;offerToken:string;accountId:string}):Promise<void>;
@@ -13,8 +13,8 @@ interface NativeCommerce {
 }
 export const nativeCommerce=registerPlugin<NativeCommerce>("ArcadCommerce");
 type Session={session:string;userId:string;accountId:string};
-export type CommerceState={ready:boolean;managed:boolean;server:string;balance:AccountBalance|null;error:string|null;busy:boolean};
-let state:CommerceState={ready:false,managed:Capacitor.isNativePlatform(),server:"",balance:null,error:null,busy:false};
+export type CommerceState={ready:boolean;managed:boolean;server:string;available:boolean;environment:string;billingEnabled:boolean;balance:AccountBalance|null;error:string|null;busy:boolean};
+let state:CommerceState={ready:false,managed:Capacitor.isNativePlatform(),server:"",available:false,environment:"staging",billingEnabled:false,balance:null,error:null,busy:false};
 let session:Session|null=null,boot:Promise<void>|undefined,restoring:Promise<void>|undefined;
 const listeners=new Set<()=>void>();
 export const commerceSnapshot=()=>state;
@@ -35,17 +35,19 @@ export async function initializeCommerce(){
     try{
       const config=await nativeCommerce.getConfig();
       if(config.server&&!/^https:\/\/[a-zA-Z0-9.-]+(?::\d+)?$/.test(config.server))throw new CommerceError("SERVICE_NOT_CONFIGURED");
-      patch({managed:config.enabled,server:config.server,ready:true});if(!config.enabled)return;
+      patch({managed:config.enabled,server:config.server,environment:config.environment??"staging",billingEnabled:!!config.billingEnabled,ready:true});if(!config.enabled)return;
       const saved=await nativeCommerce.readSession();if(saved.session){const parsed=JSON.parse(saved.session)as Session;if(typeof parsed.session==="string"&&typeof parsed.userId==="string")session=parsed;}
       const onResume=()=>{void refreshAccount().then(()=>restorePurchases()).catch(e=>patch({error:errorMessage(e)}));};
       await nativeCommerce.addListener("purchases",event=>{if(event.code===0&&event.purchases)void receivePurchases(event.purchases).catch(e=>patch({error:errorMessage(e)}));else if(event.code!==1)patch({error:"Google Play 결제를 완료하지 못했습니다. 구매 복원으로 다시 확인해 주세요."});});
       await nativeCommerce.addListener("resume",onResume);
+      if(config.server)try{await checkService();}catch(e){patch({error:errorMessage(e)});}
       if(session)onResume();
     }catch(e){patch({ready:true,error:errorMessage(e)});}
   })();
 }
 export async function signIn(){
   patch({busy:true,error:null});try{
+    if(!state.available)throw new CommerceError("SERVICE_NOT_CONFIGURED");
     const challenge=await api<{id:string;nonce:string;clientId:string}>("/v1/auth/challenge","POST");
     const credential=await nativeCommerce.signIn({clientId:challenge.clientId,nonce:challenge.nonce});
     const login=await api<{session:string;obfuscatedAccountId:string;balance:AccountBalance}>("/v1/auth/google","POST",{challengeId:challenge.id,idToken:credential.idToken});
@@ -54,7 +56,8 @@ export async function signIn(){
   }catch(e){patch({error:errorMessage(e)});}finally{patch({busy:false});}
 }
 export async function refreshAccount(){if(!session)return;const balance=await api<AccountBalance>("/v1/account");if(balance.userId!==session.userId)throw new CommerceError("ACCOUNT_MISMATCH");patch({balance,error:null});}
-export async function logout(){if(session)await api("/v1/auth/logout","POST",{});await nativeCommerce.clearSession();session=null;patch({balance:null,error:null});}
+export async function logout(){try{if(session)await api("/v1/auth/logout","POST",{});}finally{await nativeCommerce.clearSession();session=null;patch({balance:null,error:null});}}
+export async function checkService(){if(!state.server)return;const health=await api<{configured:boolean;environment:string}>("/health");if(health.environment!==state.environment)throw new CommerceError("SERVICE_NOT_CONFIGURED");patch({available:health.configured});}
 export async function deleteAccount(){await api("/v1/account","DELETE",{confirm:"DELETE"});await nativeCommerce.clearSession();session=null;patch({balance:null,error:null});}
 async function receivePurchases(items:Purchase[]){
   if(!session)return;
@@ -68,6 +71,7 @@ async function receivePurchases(items:Purchase[]){
 }
 export function restorePurchases(){return restoring??=(async()=>{try{await receivePurchases((await nativeCommerce.restore()).purchases);await refreshAccount();}finally{restoring=undefined;}})();}
 export async function buy(product:PlayProduct){
+  if(!state.billingEnabled)throw new CommerceError("SALES_NOT_ENABLED");
   if(!session){showAccount();throw new CommerceError("LOGIN_REQUIRED");}
   if(!product.offerToken||!product.price)throw new CommerceError("PRODUCT_UNAVAILABLE");
   if(!(await api<{canPurchase:boolean}>("/v1/catalog")).canPurchase)throw new CommerceError("SALES_NOT_ENABLED");

@@ -6,6 +6,8 @@ def distribution = providers.gradleProperty('ARCAD_DISTRIBUTION').orElse('github
 if (!(distribution in ['github', 'play'])) throw new GradleException('ARCAD_DISTRIBUTION must be github or play.')
 def accountServer = providers.gradleProperty('ARCAD_ACCOUNT_SERVER').orElse('').get()
 if (accountServer && !(accountServer ==~ /https:\/\/[a-zA-Z0-9.-]+(?::[0-9]+)?/)) throw new GradleException('ARCAD_ACCOUNT_SERVER must be an HTTPS origin without a path.')
+def accountEnvironment = providers.gradleProperty('ARCAD_ACCOUNT_ENVIRONMENT').orElse('staging').get()
+if (!(accountEnvironment in ['staging','production'])) throw new GradleException('ARCAD_ACCOUNT_ENVIRONMENT must be staging or production.')
 def playAppId = providers.gradleProperty('ARCAD_PLAY_APP_ID').orElse('com.guisarc.arcadview').get()
 if (!(playAppId ==~ /[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+/)) throw new GradleException('Invalid ARCAD_PLAY_APP_ID.')
 
@@ -40,6 +42,8 @@ android {
         versionName appMetadata.version
         buildConfigField 'boolean', 'GITHUB_UPDATES', (distribution == 'github').toString()
         buildConfigField 'String', 'ACCOUNT_SERVER', '"' + (distribution == 'play' ? accountServer : '') + '"'
+        buildConfigField 'String', 'ACCOUNT_ENVIRONMENT', '"' + accountEnvironment + '"'
+        buildConfigField 'boolean', 'BILLING_ENABLED', (distribution == 'play' && providers.gradleProperty('ARCAD_BILLING_ENABLED').orElse('false').get() == 'true').toString()
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
