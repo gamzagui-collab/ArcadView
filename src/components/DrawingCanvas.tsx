@@ -17,7 +17,7 @@ import { convertMeasurement, type MeasurementGeometry, type MeasurementSettings,
 import { drawMeasurementOverlay } from "../viewer/measurementOverlay";
 import { AnnotationEditor, type AnnotationEditorHandle } from "./AnnotationEditor";
 import type { EditHistoryState } from "../viewer/undoHistory";
-import { measurementValue } from "../viewer/measurementTools";
+import { measurementReadout,measurementPointsAfterPick } from "../viewer/measurementTools";
 import { formatCadNumber } from "../viewer/displayPrecision";
 import { useI18n } from "../i18n/I18nProvider";
 
@@ -63,9 +63,11 @@ export const DrawingCanvas = forwardRef<ViewerHandle, Props>(
       const settings = measurementRef.current;
       const viewer = viewerRef.current;
       if (!viewer || !overlayRef.current) return;
-      const value=measurementValue(settings),u=unitRef.current;
-      const label=value===undefined?undefined:settings.mode==="angle"?`${formatCadNumber(value,u.precision,u.locale)}°`:`${formatCadNumber(convertMeasurement(value,u.sourceUnit,u.displayUnit,settings.mode==="area"),u.precision,u.locale)} ${u.displayUnit==="drawing"?"":u.displayUnit}${settings.mode==="area"?"²":""}`;
-      drawMeasurementOverlay(overlayRef.current, settings, points => viewer.projectPoints(points), previewRef.current,viewer.getMeasurementReferences(),viewer.getMeasurementEndReferences(),label);
+      const preview=settings.displayOnly?null:previewRef.current;
+      const readout=preview&&(settings.mode==="path"||settings.mode==="area")?{...settings,points:measurementPointsAfterPick(settings,preview.point,preview.replaceIndex)}:settings;
+      const {value,area}=measurementReadout(readout),u=unitRef.current;
+      const label=value===undefined?undefined:settings.mode==="angle"?`${formatCadNumber(value,u.precision,u.locale)}°`:`${formatCadNumber(convertMeasurement(value,u.sourceUnit,u.displayUnit,area),u.precision,u.locale)} ${u.displayUnit==="drawing"?"":u.displayUnit}${area?"²":""}`;
+      drawMeasurementOverlay(overlayRef.current, settings, points => viewer.projectPoints(points), preview,viewer.getMeasurementReferences(),viewer.getMeasurementEndReferences(),label);
     };
 
     useLayoutEffect(() => {

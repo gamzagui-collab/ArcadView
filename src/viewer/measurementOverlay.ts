@@ -53,7 +53,7 @@ export function drawMeasurementOverlay(svg: SVGSVGElement, settings: Measurement
   }
   if(label&&projected.length>=2){
     const p=linear?project([linear.start,linear.end]):projected;
-    const a=p[0],b=p[p.length-1],x=(a.x+b.x)/2,y=(a.y+b.y)/2-25,width=Math.min(300,label.length*8+22);
+    const a=!settings.displayOnly&&(settings.mode==="path"||settings.mode==="area")?p[p.length-2]:p[0],b=p[p.length-1],x=(a.x+b.x)/2,y=(a.y+b.y)/2-25,width=Math.min(300,label.length*8+22);
     make("rect",{x:x-width/2,y:y-14,width,height:29,rx:7,class:"measurement-value-badge"});
     make("text",{x,y:y+5,"text-anchor":"middle",class:"measurement-value-label"}).textContent=label;
   }

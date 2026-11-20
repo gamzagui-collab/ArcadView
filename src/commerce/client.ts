@@ -1,4 +1,5 @@
 import { Capacitor, registerPlugin } from "@capacitor/core";
+import { isUnmeteredTool } from "./toolPolicy";
 
 export type AccountBalance = { userId:string;plan:"FREE"|"STANDARD"|"PRO";free:number;paid:number;debt:number;resetsAt:string;subscription:null|{state:string;expiresAt:string;autoRenew:boolean;active:boolean} };
 export type PlayProduct={id:string;name:string;description:string;price?:string;period?:string;offerToken?:string};
@@ -20,7 +21,8 @@ const listeners=new Set<()=>void>();
 export const commerceSnapshot=()=>state;
 export const commerceSubscribe=(fn:()=>void)=>{listeners.add(fn);return()=>{listeners.delete(fn);};};
 function patch(value:Partial<CommerceState>){state={...state,...value};for(const fn of listeners)fn();}
-export function showAccount(){window.dispatchEvent(new Event("arcad:account"));}
+export type ToolAccessRequest={tool:string;resume?:()=>void};
+export function showAccount(request?:ToolAccessRequest){window.dispatchEvent(new CustomEvent("arcad:account",{detail:request}));}
 export class CommerceError extends Error { constructor(public code:string){super(code);} }
 export async function api<T>(path:string,method="GET",body?:unknown):Promise<T>{
   if(!state.server)throw new CommerceError("SERVICE_NOT_CONFIGURED");
@@ -37,26 +39,30 @@ export async function initializeCommerce(){
       if(config.server&&!/^https:\/\/[a-zA-Z0-9.-]+(?::\d+)?$/.test(config.server))throw new CommerceError("SERVICE_NOT_CONFIGURED");
       patch({managed:config.enabled,server:config.server,environment:config.environment??"staging",billingEnabled:!!config.billingEnabled,ready:true});if(!config.enabled)return;
       const saved=await nativeCommerce.readSession();if(saved.session){const parsed=JSON.parse(saved.session)as Session;if(typeof parsed.session==="string"&&typeof parsed.userId==="string")session=parsed;}
-      const onResume=()=>{void refreshAccount().then(()=>restorePurchases()).catch(e=>patch({error:errorMessage(e)}));};
+      const onResume=()=>{if(session)void refreshAccount().then(()=>state.billingEnabled?restorePurchases():undefined).catch(e=>patch({error:errorMessage(e)}));};
       await nativeCommerce.addListener("purchases",event=>{if(event.code===0&&event.purchases)void receivePurchases(event.purchases).catch(e=>patch({error:errorMessage(e)}));else if(event.code!==1)patch({error:"Google Play 결제를 완료하지 못했습니다. 구매 복원으로 다시 확인해 주세요."});});
       await nativeCommerce.addListener("resume",onResume);
-      if(config.server)try{await checkService();}catch(e){patch({error:errorMessage(e)});}
+      // A guest's offline CAD use never needs a health, auth or token request.
+      if(session&&config.server)try{await checkService();}catch(e){patch({error:errorMessage(e)});}
       if(session)onResume();
     }catch(e){patch({ready:true,error:errorMessage(e)});}
   })();
 }
 export async function signIn(){
   patch({busy:true,error:null});try{
+    await checkService();
     if(!state.available)throw new CommerceError("SERVICE_NOT_CONFIGURED");
     const challenge=await api<{id:string;nonce:string;clientId:string}>("/v1/auth/challenge","POST");
     const credential=await nativeCommerce.signIn({clientId:challenge.clientId,nonce:challenge.nonce});
     const login=await api<{session:string;obfuscatedAccountId:string;balance:AccountBalance}>("/v1/auth/google","POST",{challengeId:challenge.id,idToken:credential.idToken});
     const next={session:login.session,userId:login.balance.userId,accountId:login.obfuscatedAccountId};
-    await nativeCommerce.saveSession({session:JSON.stringify(next)});session=next;patch({balance:login.balance});await restorePurchases();
-  }catch(e){patch({error:errorMessage(e)});}finally{patch({busy:false});}
+    await nativeCommerce.saveSession({session:JSON.stringify(next)});session=next;patch({balance:login.balance});
+    if(state.billingEnabled)await restorePurchases();
+    return "signed-in" as const;
+  }catch(e){if(e instanceof Error&&e.message==="GOOGLE_SIGN_IN_CANCELLED"){patch({error:null});return "cancelled" as const;}patch({error:errorMessage(e)});return "failed" as const;}finally{patch({busy:false});}
 }
 export async function refreshAccount(){if(!session)return;const balance=await api<AccountBalance>("/v1/account");if(balance.userId!==session.userId)throw new CommerceError("ACCOUNT_MISMATCH");patch({balance,error:null});}
-export async function logout(){try{if(session)await api("/v1/auth/logout","POST",{});}finally{await nativeCommerce.clearSession();session=null;patch({balance:null,error:null});}}
+export async function logout(){try{if(session)await api("/v1/auth/logout","POST",{});}finally{await nativeCommerce.clearSession();session=null;patch({balance:null,error:null,available:false});}}
 export async function checkService(){if(!state.server)return;const health=await api<{configured:boolean;environment:string}>("/health");if(health.environment!==state.environment)throw new CommerceError("SERVICE_NOT_CONFIGURED");patch({available:health.configured});}
 export async function deleteAccount(){await api("/v1/account","DELETE",{confirm:"DELETE"});await nativeCommerce.clearSession();session=null;patch({balance:null,error:null});}
 async function receivePurchases(items:Purchase[]){
@@ -69,7 +75,10 @@ async function receivePurchases(items:Purchase[]){
     }
   }
 }
-export function restorePurchases(){return restoring??=(async()=>{try{await receivePurchases((await nativeCommerce.restore()).purchases);await refreshAccount();}finally{restoring=undefined;}})();}
+export function restorePurchases(){
+  if(!state.billingEnabled)return refreshAccount();
+  return restoring??=(async()=>{try{await receivePurchases((await nativeCommerce.restore()).purchases);await refreshAccount();}finally{restoring=undefined;}})();
+}
 export async function buy(product:PlayProduct){
   if(!state.billingEnabled)throw new CommerceError("SALES_NOT_ENABLED");
   if(!session){showAccount();throw new CommerceError("LOGIN_REQUIRED");}
@@ -78,11 +87,19 @@ export async function buy(product:PlayProduct){
   await nativeCommerce.purchase({productId:product.id,offerToken:product.offerToken,accountId:session.accountId});
 }
 export function currentUser(){return session?.userId??null;}
-export function canStart(tool:string){
+export function hasToolAccess(tool:string){
+  if(isUnmeteredTool(tool))return true;
   if(!state.managed)return state.ready;
-  if(!session||!state.balance){showAccount();return false;}
-  const b=state.balance;if(b.plan==="PRO"||b.paid>0||tool==="measure.aligned"&&b.free>0)return true;
-  showAccount();return false;
+  if(!session||!state.balance||globalThis.navigator?.onLine===false)return false;
+  const b=state.balance;return b.plan==="PRO"||b.free>0||b.paid>0;
+}
+export function canStart(tool:string,resume?:()=>void){
+  if(hasToolAccess(tool))return true;
+  showAccount({tool,resume});return false;
+}
+export function updateAccountBalance(balance:AccountBalance){
+  if(!session||balance.userId!==session.userId)throw new CommerceError("ACCOUNT_MISMATCH");
+  patch({balance,error:null});
 }
 export const errorMessage=(e:unknown)=>{
   const code=e instanceof CommerceError?e.code:e instanceof Error?e.message:"SERVICE_UNAVAILABLE";

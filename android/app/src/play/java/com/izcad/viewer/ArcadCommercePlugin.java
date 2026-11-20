@@ -15,6 +15,7 @@ import androidx.credentials.GetCredentialRequest;
 import androidx.credentials.GetCredentialResponse;
 import androidx.credentials.exceptions.ClearCredentialException;
 import androidx.credentials.exceptions.GetCredentialException;
+import androidx.credentials.exceptions.GetCredentialCancellationException;
 import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption;
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential;
 import com.android.billingclient.api.*;
@@ -61,7 +62,7 @@ public final class ArcadCommercePlugin extends Plugin {
                             JSObject out = new JSObject(); out.put("idToken", GoogleIdTokenCredential.createFrom(c.getData()).getIdToken()); call.resolve(out);
                         } catch (Exception ignored) { call.reject("INVALID_GOOGLE_CREDENTIAL"); }
                     }
-                    @Override public void onError(GetCredentialException ignored) { credentialRequest = null; call.reject("GOOGLE_SIGN_IN_CANCELLED_OR_UNAVAILABLE"); }
+                    @Override public void onError(GetCredentialException error) { credentialRequest = null; call.reject(error instanceof GetCredentialCancellationException ? "GOOGLE_SIGN_IN_CANCELLED" : "GOOGLE_SIGN_IN_CANCELLED_OR_UNAVAILABLE"); }
                 });
         });
     }

@@ -1,4 +1,5 @@
-import { api, commerceSnapshot, currentUser, CommerceError } from "./client";
+import { api, currentUser, CommerceError, updateAccountBalance, type AccountBalance } from "./client";
+import { isUnmeteredTool } from "./toolPolicy";
 
 export type PendingOperation<T=unknown>={id:string;userId:string;drawingKey:string;tool:string;candidate:T;resultHash:string;state:"pending"|"approved";createdAt:number};
 export interface OperationStore{put(value:PendingOperation):Promise<void>;remove(id:string):Promise<void>;list(drawingKey:string,userId:string):Promise<PendingOperation[]>;}
@@ -30,6 +31,8 @@ export async function newOperation<T>(drawingKey:string,tool:string,candidate:T)
   return{id:crypto.randomUUID(),userId,drawingKey,tool,candidate,resultHash:await resultHash(candidate),state:"pending",createdAt:Date.now()};
 }
 export async function authorizeOperation(operation:{id:string;tool:string;resultHash:string}){
-  const result=await api<{balance:ReturnType<typeof commerceSnapshot>["balance"]}>("/v1/usage","POST",operation);
+  if(isUnmeteredTool(operation.tool))return;
+  const result=await api<{balance:AccountBalance}>("/v1/usage","POST",operation);
+  updateAccountBalance(result.balance);
   window.dispatchEvent(new Event("arcad:balance-changed"));return result;
 }

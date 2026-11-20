@@ -1,4 +1,4 @@
-import { measuredAngle, pathLength, polygonArea, type LinearAxis, type MeasurementSettings } from "./measurementGeometry";
+import { distance, measuredAngle, pathLength, polygonArea, type LinearAxis, type MeasurementSettings } from "./measurementGeometry";
 import type { DrawingPoint } from "./savedView";
 
 export const isDistanceMode = (mode: MeasurementSettings["mode"]): boolean => mode === "distance" || mode === "linear";
@@ -17,6 +17,20 @@ export function measurementValue(settings: MeasurementSettings): number | undefi
   if (settings.mode === "area") return settings.points.length >= 3 ? polygonArea(settings.points) : undefined;
   if (settings.mode === "linear") return linearMeasurement(settings.points, settings.linearAxis)?.value;
   return settings.points.length >= 2 ? pathLength(settings.points) : undefined;
+}
+/** Drafts expose only the latest edge; totals become readable after completion is saved. */
+export function measurementReadout(settings: MeasurementSettings) {
+  const segment = (settings.mode === "path" || settings.mode === "area") && !settings.displayOnly;
+  return {
+    value: segment ? settings.points.length >= 2 ? distance(settings.points.at(-2)!, settings.points.at(-1)!) : undefined : measurementValue(settings),
+    area: settings.mode === "area" && !segment,
+    segment,
+  };
+}
+export function canFinishMeasurement(settings: MeasurementSettings): boolean {
+  if (settings.displayOnly || (settings.mode !== "path" && settings.mode !== "area")) return false;
+  const value = measurementValue(settings);
+  return value !== undefined && Number.isFinite(value) && value > 0;
 }
 const same = (a: DrawingPoint, b: DrawingPoint) => a.x === b.x && a.y === b.y;
 export const pathIsClosed = (points: readonly DrawingPoint[]): boolean => points.length >= 4 && same(points[0], points[points.length - 1]);

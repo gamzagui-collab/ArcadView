@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 import type { MeasurementSettings } from "./measurementGeometry";
-import { linearMeasurement, measurementPointsAfterPick, measurementValue, pathIsClosed, snapToPathStart } from "./measurementTools";
+import { canFinishMeasurement,linearMeasurement, measurementPointsAfterPick, measurementReadout,measurementValue, pathIsClosed, snapToPathStart } from "./measurementTools";
 const settings = (changes: Partial<MeasurementSettings> = {}): MeasurementSettings => ({ enabled: true, mode: "distance", points: [], snapping: true, entity: null, ...changes });
 const triangle = [{ x: 1e9, y: 1e9 }, { x: 1e9 + 3, y: 1e9 }, { x: 1e9 + 3, y: 1e9 + 4 }];
 it("distinguishes aligned distance from both linear projections in any quadrant", () => {
@@ -39,4 +39,25 @@ it("restarts after a closed path, reopens with undo and keeps closure when editi
 });
 it("uses the same two-point reset for linear and aligned measurements", () => {
   for (const mode of ["linear", "distance"] as const) expect(measurementPointsAfterPick(settings({ mode, points: triangle.slice(0, 2) }), triangle[2])).toEqual([triangle[2]]);
+});
+it("shows only the latest segment until open path or area completion is saved, even while paused",()=>{
+  for(const mode of ["path","area"] as const){
+    const draft=settings({mode,points:triangle});
+    expect(measurementReadout(draft)).toEqual({value:4,area:false,segment:true});
+    expect(measurementReadout({...draft,enabled:false})).toEqual({value:4,area:false,segment:true});
+    expect(measurementReadout({...draft,displayOnly:true})).toEqual({value:mode==="path"?7:6,area:mode==="area",segment:false});
+    expect(canFinishMeasurement(draft)).toBe(true);
+    expect(canFinishMeasurement({...draft,displayOnly:true})).toBe(false);
+    expect(measurementReadout({...draft,points:triangle.slice(0,1)}).value).toBeUndefined();
+  }
+});
+it("keeps a closed but unapproved path's total hidden and validates explicit completion separately from its readout",()=>{
+  const closed=settings({mode:"path",points:[...triangle,triangle[0]]});
+  expect(measurementReadout(closed).value).toBe(5);
+  expect(measurementReadout({...closed,displayOnly:true}).value).toBe(12);
+  expect(canFinishMeasurement(settings({mode:"path",points:triangle.slice(0,2)}))).toBe(true);
+  expect(canFinishMeasurement(settings({mode:"area",points:triangle.slice(0,2)}))).toBe(false);
+  expect(canFinishMeasurement(settings({mode:"area",points:[{x:0,y:0},{x:1,y:0},{x:2,y:0}]}))).toBe(false);
+  expect(canFinishMeasurement(settings({mode:"path",points:[{x:0,y:0},{x:0,y:0}]}))).toBe(false);
+  expect(canFinishMeasurement(settings({mode:"distance",points:triangle.slice(0,2)}))).toBe(false);
 });

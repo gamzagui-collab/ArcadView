@@ -1,6 +1,7 @@
 import { useEffect,useRef,useState } from "react";
 import { api,commerceSnapshot,currentUser,errorMessage,CommerceError } from "./client";
 import { authorizeOperation,finishJournalOperation,newOperation,operationStore,type PendingOperation } from "./operationJournal";
+import { isUnmeteredTool } from "./toolPolicy";
 type Candidate<T>={kind:string;value:T};
 /** One durable in-flight candidate per editor; no new edits can overwrite it. */
 export function useOperation<T>(drawingKey:string|undefined,kind:string,onSave:(value:T)=>Promise<void>){
@@ -35,15 +36,15 @@ export function useOperation<T>(drawingKey:string|undefined,kind:string,onSave:(
    const ops=await operationStore.list(drawingKey,userId),op=ops.find(v=>(v.candidate as Candidate<T>)?.kind===kind)as PendingOperation<Candidate<T>>|undefined;
    if(!op)return;
    if(live)set(op);
-   if(op.state==="pending"){
+   if(op.state==="pending"&&!isUnmeteredTool(op.tool)){
     try{const r=await api<{receipt:{result_hash:string}}>("/v1/usage/"+op.id);if(r.receipt.result_hash!==op.resultHash)throw new CommerceError("OPERATION_ID_CONFLICT");op.state="approved";await operationStore.put(op);}
     catch(e){if(!(e instanceof CommerceError&&e.code==="OPERATION_NOT_FOUND"))throw e;}
    }
-   if(live){set(op);if(op.state==="approved")await run(op);}
+   if(live){set(op);if(op.state==="approved"||isUnmeteredTool(op.tool))await run(op);}
   }catch(e){if(live)report(errorMessage(e));}finally{if(live)lock(false);}})();return()=>{live=false;};
  },[drawingKey,userId,kind,revision]);
  const cancel=async()=>{const op=pendingRef.current;if(!op||busyRef.current)return;lock(true);try{
-  const result=await api<{receipt:unknown}>("/v1/usage/"+op.id+"/cancel","POST",{});
+  const result=isUnmeteredTool(op.tool)?{receipt:null}:await api<{receipt:unknown}>("/v1/usage/"+op.id+"/cancel","POST",{});
   if(result.receipt){await run({...op,state:"approved"});}
   else{await operationStore.remove(op.id);set(null);report(null);}
  }catch(e){report(errorMessage(e));}finally{lock(false);}};

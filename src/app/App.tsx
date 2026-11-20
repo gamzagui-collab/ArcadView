@@ -9,7 +9,8 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { commerceSnapshot,commerceSubscribe,canStart } from "../commerce/client";
+import { commerceSnapshot,commerceSubscribe,canStart,hasToolAccess } from "../commerce/client";
+import { isUnmeteredTool,measurementToolId } from "../commerce/toolPolicy";
 import { CommercePortal } from "../commerce/CommercePortal";
 import { useOperation } from "../commerce/useOperation";
 import { readMeasurement,saveMeasurement } from "../commerce/operationJournal";
@@ -27,7 +28,7 @@ import { ViewerToolbar } from "../components/ViewerToolbar";
 import { MeasurementPanel, MeasurementStatus } from "../components/MeasurementPanel";
 import type { MeasurementPick } from "../viewer/DrawingViewer";
 import type { MeasurementGeometry, MeasurementSettings, MeasurementUnit } from "../viewer/measurementGeometry";
-import { measurementPointsAfterPick,measurementValue,pathIsClosed } from "../viewer/measurementTools";
+import { canFinishMeasurement,measurementPointsAfterPick,measurementValue,pathIsClosed } from "../viewer/measurementTools";
 import { UndoHistory, type EditCommand, type EditHistoryState } from "../viewer/undoHistory";
 import { saveDrawingUnitPreference, type DrawingUnitPreference } from "../viewer/drawingUnitPreferences";
 import { dispatchBackNavigation, useBackNavigation } from "./backNavigation";
@@ -104,6 +105,8 @@ export function App() {
   const [measurement, setMeasurement] = useState<MeasurementSettings>(emptyMeasurement);
   const measurementRef=useRef(measurement);measurementRef.current=measurement;
   const measurementHistory=useRef(new UndoHistory<MeasurementSettings>());
+  const localMeasurementSaving=useRef(false);
+  const [measurementSaving,setMeasurementSaving]=useState(false);
   const [editHistory,setEditHistory]=useState<EditHistoryState>({canUndo:false,canRedo:false});
   const [measurementPanelOpen,setMeasurementPanelOpen]=useState(false);
   const [annotationOpen,setAnnotationOpen]=useState(false);
@@ -114,7 +117,7 @@ export function App() {
   const measurementOperation=useOperation<MeasurementSettings>(measurementKey,"measurement",async candidate=>{
     if(!measurementKey)throw Error("MISSING_DRAWING_KEY");
     const saved={...candidate,enabled:true,displayOnly:true};await saveMeasurement(measurementKey,saved);
-    if(unitPreferenceRef.current?.key===measurementKey){measurementHistory.current.record(measurementRef.current);measurementRef.current=saved;setMeasurement(saved);}
+    if(unitPreferenceRef.current?.key===measurementKey&&measurementRef.current.mode===candidate.mode){measurementHistory.current.record(measurementRef.current);measurementRef.current=saved;setMeasurement(saved);}
   });
   const [sourceUnit, setSourceUnit] = useState<MeasurementUnit>("drawing");
   const [displayUnit, setDisplayUnit] = useState<MeasurementUnit>("drawing");
@@ -457,21 +460,73 @@ export function App() {
       saveDrawingUnitPreference(next.key, next);
     }
   }, []);
+  const finishLocalMeasurement=(candidate:MeasurementSettings)=>{
+    const key=unitPreferenceRef.current?.key,request=requestIdRef.current;
+    if(localMeasurementSaving.current)return;
+    if(!key){setMeasurementFeedback(t("librarySaveFailed"));return;}
+    const saved={...candidate,enabled:true,displayOnly:true};
+    localMeasurementSaving.current=true;setMeasurementSaving(true);
+    void saveMeasurement(key,saved).then(()=>{
+      if(request!==requestIdRef.current||measurementRef.current.mode!==candidate.mode)return;
+      measurementHistory.current.record(measurementRef.current);measurementRef.current=saved;setMeasurement(saved);
+    }).catch(()=>{if(request===requestIdRef.current)setMeasurementFeedback(t("librarySaveFailed"));})
+      .finally(()=>{localMeasurementSaving.current=false;setMeasurementSaving(false);});
+  };
   const handleMeasurementPick = useCallback((pick: MeasurementPick) => {
-    const current=measurementRef.current;if(!current.enabled||current.displayOnly)return;
-    if(commerceSnapshot().managed&&(measurementOperation.blocked()||!canStart(current.mode==="distance"?"measure.aligned":"measure."+current.mode)))return;
+    const current=measurementRef.current;if(!current.enabled||current.displayOnly||localMeasurementSaving.current)return;
+    const tool=measurementToolId(current.mode);
+    if(commerceSnapshot().managed&&!isUnmeteredTool(tool)&&(measurementOperation.blocked()||!canStart(tool)))return;
     const next=current.mode==="object"?{...current,entity:pick.entity,points:[]}:{...current,points:measurementPointsAfterPick(current,pick.point,pick.replaceIndex),entity:null};
-    if(commerceSnapshot().managed){const value=measurementValue(next),complete=next.mode==="object"?!!next.entity:next.mode==="path"?pathIsClosed(next.points):next.mode==="area"?false:next.mode==="angle"?next.points.length===3:next.points.length===2;
-      if(complete&&value!==undefined&&Number.isFinite(value)&&value>0){measurementOperation.begin(next,next.mode==="distance"?"measure.aligned":"measure."+next.mode);return;}}
+    if(commerceSnapshot().managed&&!isUnmeteredTool(tool)){const value=measurementValue(next),complete=next.mode==="object"?!!next.entity:next.mode==="path"?pathIsClosed(next.points):next.mode==="area"?false:next.mode==="angle"?next.points.length===3:next.points.length===2;
+      if(complete&&value!==undefined&&Number.isFinite(value)&&value>0){measurementOperation.begin(next,tool);return;}}
+    if(!commerceSnapshot().managed&&next.mode==="path"&&pathIsClosed(next.points)&&canFinishMeasurement(next)){finishLocalMeasurement(next);return;}
     measurementHistory.current.record(current);
     measurementRef.current=next;setMeasurement(next);
+    if(isUnmeteredTool(tool)&&next.points.length===2&&unitPreferenceRef.current?.key)void saveMeasurement(unitPreferenceRef.current.key,next).catch(()=>setMeasurementFeedback(t("librarySaveFailed")));
     setMeasurementFeedback(pick.entity ? null : measurement.mode === "object" ? t("measureNoObject") : pick.snapped ? t(({ endpoint: "measureEndpoint", midpoint: "measureMidpoint", center: "measureCenter", insertion:"measureInsertion", start: "measureStartPoint",perpendicular:"measurePerpendicular",intersection:"measureIntersection" } as const)[pick.snapped]) : null);
   }, [measurement.mode, t,measurementOperation]);
 
-  const finishMeasurement=()=>{const settings=measurementRef.current,value=measurementValue(settings);if(value!==undefined&&Number.isFinite(value)&&value>0&&!settings.displayOnly)measurementOperation.begin(settings,settings.mode==="distance"?"measure.aligned":"measure."+settings.mode);};
+  const finishMeasurement=()=>{
+    const settings=measurementRef.current;
+    if(!canFinishMeasurement(settings)||localMeasurementSaving.current)return;
+    if(commerceSnapshot().managed){const tool=measurementToolId(settings.mode);if(!measurementOperation.blocked()&&canStart(tool))measurementOperation.begin(settings,tool);}
+    else finishLocalMeasurement(settings);
+  };
+
+  const changeMeasurementSettings=(settings:MeasurementSettings)=>{
+    if(localMeasurementSaving.current)return;
+    const drawingRequest=requestIdRef.current;
+    const apply=()=>{
+      if(requestIdRef.current!==drawingRequest)return;
+      const current=measurementRef.current;
+      if(settings.mode!==current.mode){measurementHistory.current.clear();settings={...settings,displayOnly:false};}
+      else if((settings.points!==current.points&&(settings.points.length>0||current.points.length>0))||settings.entity!==current.entity){measurementHistory.current.record(current);settings={...settings,displayOnly:false};}
+      measurementRef.current=settings;if(settings.enabled)measurementActivated.current=true;
+      setMeasurement(settings);setMeasurementFeedback(null);
+    };
+    const tool=measurementToolId(settings.mode);
+    if(commerce.managed&&!isUnmeteredTool(tool)&&(measurementOperation.blocked()||settings.enabled&&!canStart(tool,apply)))return;
+    apply();
+  };
+  const openMeasurementTools=()=>{
+    setAnnotationActive(false);setAnnotationOpen(false);setMeasurementPanelOpen(open=>!open);
+    const current=measurementRef.current;
+    if(!hasToolAccess(measurementToolId(current.mode))){
+      const next={...current,mode:"distance" as const,enabled:true,displayOnly:false,points:[],entity:null};
+      measurementRef.current=next;measurementActivated.current=true;setMeasurement(next);
+    }else if(!measurementActivated.current||annotationActive||current.displayOnly){
+      measurementActivated.current=true;const next={...current,enabled:true,displayOnly:false,...(current.displayOnly?{points:[],entity:null}:{})};measurementRef.current=next;setMeasurement(next);
+    }
+  };
+  const toggleMeasurement=()=>{
+    const drawingRequest=requestIdRef.current,tool=measurementToolId(measurementRef.current.mode);
+    const apply=()=>{if(drawingRequest!==requestIdRef.current)return;measurementActivated.current=true;const current=measurementRef.current,next={...current,enabled:current.displayOnly?true:!current.enabled,displayOnly:false,...(current.displayOnly?{points:[],entity:null}:{})};measurementRef.current=next;setMeasurement(next);};
+    if(commerce.managed&&!canStart(tool,apply))return;apply();
+  };
 
   const handleEditCommand=(command:EditCommand)=>{
-    if(commerce.managed&&measurementOperation.blocked())return;
+    if(localMeasurementSaving.current)return;
+    if(commerce.managed&&!isUnmeteredTool(measurementToolId(measurementRef.current.mode))&&measurementOperation.blocked())return;
     viewerRef.current?.cancelGesture?.();
     if(command==="cancel"){
       viewerRef.current?.edit?.("cancel");
@@ -480,7 +535,7 @@ export function App() {
       measurementHistory.current.clear();measurementActivated.current=false;
     }else if(measurementRef.current.enabled&&!annotationActive){
       const next=measurementHistory.current[command](measurementRef.current);
-      if(next){const restored={...measurementRef.current,points:next.points,entity:next.entity};measurementRef.current=restored;setMeasurement(restored);setMeasurementFeedback(null);}
+      if(next){const restored={...measurementRef.current,points:next.points,entity:next.entity,displayOnly:next.displayOnly};measurementRef.current=restored;setMeasurement(restored);setMeasurementFeedback(null);}
     }else viewerRef.current?.edit?.(command);
   };
 
@@ -597,13 +652,14 @@ export function App() {
         measuring={measurement.enabled}
         panelOpen={measurementPanelOpen}
         editing={annotationActive} editOpen={annotationOpen} onEdit={()=>{setAnnotationOpen(open=>!open);setAnnotationActive(true);setMeasurement(current=>({...current,enabled:false}));setMeasurementPanelOpen(false);}}
-        onMeasure={() => {if(commerce.managed&&!canStart(measurement.mode==="distance"?"measure.aligned":"measure."+measurement.mode))return;setAnnotationActive(false);setAnnotationOpen(false);setMeasurementPanelOpen(open=>!open);if(!measurementActivated.current||annotationActive||measurement.displayOnly){measurementActivated.current=true;setMeasurement(current=>({...current,enabled:true,displayOnly:false,...(current.displayOnly?{points:[],entity:null}:{})}));}}} />
+        onMeasure={openMeasurementTools} />
       {state.drawing.format!=="pdf"&&!annotationActive?<MeasurementStatus settings={measurement} sourceUnit={sourceUnit} displayUnit={displayUnit} feedback={measurementFeedback} precision={precision}
-        onShow={()=>setMeasurementPanelOpen(open=>!open)} onFinish={commerce.managed?finishMeasurement:undefined} onToggle={()=>{if(commerce.managed&&!canStart(measurement.mode==="distance"?"measure.aligned":"measure."+measurement.mode))return;measurementActivated.current=true;setMeasurement(current=>({...current,enabled:current.displayOnly?true:!current.enabled,displayOnly:false,...(current.displayOnly?{points:[],entity:null}:{})}));}}/>:null}
+        onShow={()=>setMeasurementPanelOpen(open=>!open)} onFinish={finishMeasurement} finishDisabled={measurementSaving||(commerce.managed&&measurementOperation.blocked())} onToggle={toggleMeasurement}/>:null}
       {measurementPanelOpen && state.drawing.format !== "pdf" ? <MeasurementPanel settings={measurement} geometry={measurementGeometry}
         sourceUnit={sourceUnit} displayUnit={displayUnit} feedback={measurementFeedback} precision={precision} onPrecision={handlePrecision}
         onHide={()=>setMeasurementPanelOpen(false)}
-        onSettings={(settings) => {if(commerce.managed&&(measurementOperation.blocked()||settings.enabled&&!canStart(settings.mode==="distance"?"measure.aligned":"measure."+settings.mode)))return;const current=measurementRef.current;if(settings.mode!==current.mode){measurementHistory.current.clear();settings={...settings,displayOnly:false};}else if((settings.points!==current.points&&(settings.points.length>0||current.points.length>0))||settings.entity!==current.entity)measurementHistory.current.record(current);measurementRef.current=settings;if(settings.enabled)measurementActivated.current=true;setMeasurement(settings); setMeasurementFeedback(null); }}
+        onSettings={changeMeasurementSettings}
+        onFinish={finishMeasurement} finishDisabled={measurementSaving||(commerce.managed&&measurementOperation.blocked())}
         onSourceUnit={handleSourceUnit} onDisplayUnit={handleDisplayUnit} /> : null}
       {libraryNotice ? <div className="library-notice" role="status">{t("librarySaveFailed")}</div> : null}
     </>
