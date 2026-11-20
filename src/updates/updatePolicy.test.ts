@@ -1,4 +1,6 @@
-import{expect,it}from"vitest";import{shouldCheckUpdate,UPDATE_INTERVAL,updateProgress}from"./updatePolicy";
+import{expect,it}from"vitest";import{pendingUpdateCode,shouldCheckUpdate,UPDATE_INTERVAL,updateProgress}from"./updatePolicy";
 it("checks on first launch, after its interval, and after clock rollback",()=>{expect(shouldCheckUpdate(100,null)).toBe(true);expect(shouldCheckUpdate(UPDATE_INTERVAL+100,100)).toBe(true);expect(shouldCheckUpdate(50,100)).toBe(true);});
 it("throttles repeated resumes while tolerating corrupt stored timestamps",()=>{expect(shouldCheckUpdate(200,100)).toBe(false);expect(shouldCheckUpdate(200,NaN)).toBe(true);expect(shouldCheckUpdate(200,-1)).toBe(true);});
 it("bounds download progress and handles missing totals",()=>{expect(updateProgress(50,100)).toBe(50);expect(updateProgress(101,100)).toBe(100);expect(updateProgress(0,0)).toBe(null);expect(updateProgress(-1,10)).toBe(null);});
+it("keeps an uninstalled update across restarts and clears it once installed",()=>{expect(pendingUpdateCode('43',42)).toBe(43);expect(pendingUpdateCode('43',43)).toBe(null);expect(pendingUpdateCode('43',44)).toBe(null);expect(pendingUpdateCode('43',42,false)).toBe(null);});
+it("rejects corrupt, fractional and out-of-range pending version codes",()=>{for(const raw of[null,'','bad','-1','43.5','Infinity','2147483648','{"token":"expired"}'])expect(pendingUpdateCode(raw,42)).toBe(null);expect(pendingUpdateCode('43',NaN)).toBe(null);expect(pendingUpdateCode('43',0)).toBe(null);});

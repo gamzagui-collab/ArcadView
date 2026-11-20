@@ -7,13 +7,13 @@ import { LanguageSwitch } from "./LanguageSwitch";
 import { ChevronRightIcon, FolderIcon, DrawingFileIcon } from "./Icons";
 import { ToolIcon } from "./ToolIcon";
 
-export function HomeDashboard({onLibrary,onOpen,onAbout}:{onLibrary():void;onOpen(file:File,id:string):Promise<void>;onAbout():void}){
+export function HomeDashboard({onLibrary,onOpen,onAbout,updatePending}:{onLibrary():void;onOpen(file:File,id:string):Promise<void>;onAbout():void;updatePending:boolean}){
  const{t,locale}=useI18n(),u=useUx(),[recent,setRecent]=useState<LibraryDrawingEntry[]>([]),[busy,setBusy]=useState(false),[error,setError]=useState(false);
  useEffect(()=>{let live=true;void listRecentDrawings(4).then(rows=>{if(live)setRecent(rows);}).catch(()=>{if(live)setError(true);});return()=>{live=false;};},[]);
  const open=async(e:LibraryDrawingEntry)=>{setBusy(true);setError(false);try{const f=await openLibraryDrawing(e.id);await onOpen(f,e.id);}catch{setError(true);setBusy(false);}};
  const size=(bytes:number)=>{const i=bytes<1024?0:Math.min(3,Math.floor(Math.log(bytes)/Math.log(1024)));return `${new Intl.NumberFormat(locale,{maximumFractionDigits:1}).format(bytes/1024**i)} ${["B","KB","MB","GB"][i]}`;};
  return <div className="home-dashboard">
-  <header className="arcad-home-header"><Brand company/><div className="home-header-actions"><LanguageSwitch/><button className="icon-button" aria-label={u.info} onClick={onAbout}><ToolIcon name="info"/></button></div></header>
+  <header className="arcad-home-header"><Brand company/><div className="home-header-actions"><LanguageSwitch/><button className="icon-button app-info-button" aria-label={u.info+(updatePending?` — ${locale==='ko'?'새 업데이트 있음':locale==='en'?'Update available':'Güncelleme var'}`:'')} onClick={onAbout}><ToolIcon name="info"/>{updatePending?<span className="update-dot" aria-hidden="true"/>:null}</button></div></header>
   <main className="home-scroll">
    <section className="home-welcome"><Blueprint/><div className="home-welcome-copy"><p className="home-kicker"><span/>{u.workbench}</p><h1>{u.title}</h1><p>{u.description}</p><button className="open-button home-open" aria-label={t("myDrawings")} onClick={onLibrary}><FolderIcon/><span>{u.open}</span><ChevronRightIcon/></button></div></section>
    <div className="home-capabilities"><div><ToolIcon name="bolt"/><strong>{u.quick}</strong><small>{u.quickSub}</small></div><div><ToolIcon name="shield"/><strong>{u.local}</strong><small>{u.localSub}</small></div><div><DrawingFileIcon/><strong>{u.formats}</strong><small>DWG · DXF · PDF</small></div></div>

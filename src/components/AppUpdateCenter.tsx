@@ -1,7 +1,7 @@
 import{useCallback,useEffect,useRef,useState}from"react";
 import{Capacitor}from"@capacitor/core";
 import{appUpdates,type UpdateOffer,type UpdateState}from"../native/appUpdates";
-import{shouldCheckUpdate,updateProgress}from"../updates/updatePolicy";
+import{pendingUpdateCode,PENDING_UPDATE_KEY,shouldCheckUpdate,updateProgress}from"../updates/updatePolicy";
 import{useBackNavigation}from"../app/backNavigation";
 import{useI18n}from"../i18n/I18nProvider";
 import{CloseIcon}from"./Icons";import{ArcadMark}from"./Brand";
@@ -13,30 +13,30 @@ const copy={
 };
 type Stage="idle"|"checking"|"available"|"latest"|"error"|"downloading"|"permission"|"installing"|"disabled";
 const LAST="arcad.updates.last-check.v1";
-export function AppUpdateCenter(){
- const{locale}=useI18n(),w=copy[locale],[state,setState]=useState<UpdateState|null>(null),[stage,setStage]=useState<Stage>("idle"),[open,setOpen]=useState(false),[banner,setBanner]=useState(false),[percent,setPercent]=useState<number|null>(null),[networkError,setNetworkError]=useState(false);
+export function AppUpdateCenter({onPendingChange}:{onPendingChange(pending:boolean):void}){
+ const{locale}=useI18n(),w=copy[locale],[state,setState]=useState<UpdateState|null>(null),[stage,setStage]=useState<Stage>("idle"),[open,setOpen]=useState(false),[percent,setPercent]=useState<number|null>(null),[networkError,setNetworkError]=useState(false);
+ const announced=useRef(new Set<number>()),receivedState=useRef(false);
  const stageRef=useRef(stage),offer=useRef<UpdateOffer|undefined>(undefined),checking=useRef(false),cancelled=useRef(false),dialog=useRef<HTMLElement>(null);stageRef.current=stage;
- const close=useCallback(()=>{if(stageRef.current==="downloading"){cancelled.current=true;void appUpdates.cancel().catch(()=>undefined);}cancelled.current=true;setOpen(false);setBanner(false);setStage(offer.current?"available":"idle");},[]);
+ const close=useCallback(()=>{if(stageRef.current==="downloading"){cancelled.current=true;void appUpdates.cancel().catch(()=>undefined);}cancelled.current=true;setOpen(false);setStage(offer.current?"available":"idle");},[]);
  useBackNavigation(close,open);
  const check=useCallback(async(manual:boolean,force=false)=>{
   if(checking.current||["downloading","permission","installing"].includes(stageRef.current))return;
   if(!manual&&!force){try{const raw=localStorage.getItem(LAST);if(!shouldCheckUpdate(Date.now(),raw===null?null:Number(raw)))return;}catch{}}
   if(!Capacitor.isNativePlatform()){if(manual){setStage("disabled");setOpen(true);}return;}
-  checking.current=true;if(manual){setStage("checking");setOpen(true);setBanner(false);}
-  try{const s=await appUpdates.check();setState(s);offer.current=s.offer;setStage(!s.enabled?"disabled":s.offer?"available":"latest");if(s.offer&&!manual)setBanner(true);try{localStorage.setItem(LAST,String(Date.now()));}catch{}}
+  checking.current=true;if(manual){setStage("checking");setOpen(true);}
+  try{const s=await appUpdates.check(),pending=pendingUpdateCode(s.offer?String(s.offer.versionCode):null,s.versionCode,s.enabled);receivedState.current=true;setState(s);offer.current=pending?s.offer:undefined;onPendingChange(pending!==null);setStage(!s.enabled?"disabled":pending?"available":"latest");if(pending!==null){if(!manual&&!announced.current.has(pending))setOpen(true);announced.current.add(pending);}try{if(pending!==null)localStorage.setItem(PENDING_UPDATE_KEY,String(pending));else localStorage.removeItem(PENDING_UPDATE_KEY);localStorage.setItem(LAST,String(Date.now()));}catch{}}
   catch{if(manual){setNetworkError(true);setStage("error");}}finally{checking.current=false;}
- },[]);
+ },[onPendingChange]);
  const install=useCallback(async()=>{const o=offer.current;if(!o||cancelled.current)return;try{const r=await appUpdates.install({token:o.token});if(!cancelled.current)setStage(r.permissionRequired?"permission":"installing");}catch{if(!cancelled.current){setNetworkError(false);setStage("error");}}},[]);
- useEffect(()=>{const manual=()=>void check(true),timer=setTimeout(()=>void check(false,true),2500);window.addEventListener("arcad:check-updates",manual);let live=true;const subscriptions=Capacitor.isNativePlatform()?[appUpdates.addListener("progress",e=>{if(live)setPercent(updateProgress(e.received,e.total));}),appUpdates.addListener("installerResume",()=>{if(!live)return;if(stageRef.current==="permission")void install();else void check(false);})]:[];return()=>{live=false;clearTimeout(timer);window.removeEventListener("arcad:check-updates",manual);for(const p of subscriptions)void p.then(s=>s.remove()).catch(()=>undefined);};},[check,install]);
+ useEffect(()=>{const manual=()=>void check(true),timer=setTimeout(()=>void check(false,true),2500);window.addEventListener("arcad:check-updates",manual);let live=true;if(Capacitor.isNativePlatform())void appUpdates.getState().then(s=>{if(!live||receivedState.current)return;try{const pending=pendingUpdateCode(localStorage.getItem(PENDING_UPDATE_KEY),s.versionCode,s.enabled);onPendingChange(pending!==null);if(pending===null)localStorage.removeItem(PENDING_UPDATE_KEY);}catch{}}).catch(()=>undefined);const subscriptions=Capacitor.isNativePlatform()?[appUpdates.addListener("progress",e=>{if(live)setPercent(updateProgress(e.received,e.total));}),appUpdates.addListener("installerResume",()=>{if(!live)return;if(stageRef.current==="permission")void install();else void check(false);})]:[];return()=>{live=false;clearTimeout(timer);window.removeEventListener("arcad:check-updates",manual);for(const p of subscriptions)void p.then(s=>s.remove()).catch(()=>undefined);};},[check,install,onPendingChange]);
  useEffect(()=>{if(!open)return;const previous=document.activeElement as HTMLElement|null;dialog.current?.querySelector<HTMLButtonElement>('button')?.focus();const nodes=[...document.querySelectorAll<HTMLElement>('.app-content,.canvas-layer,.library-overlay,.about-backdrop')].map(e=>({e,prior:e.inert}));for(const {e}of nodes)e.inert=true;return()=>{for(const {e,prior}of nodes)if(e.isConnected)e.inert=prior;previous?.focus();};},[open]);
  const approve=async()=>{const o=offer.current;if(!o)return;cancelled.current=false;setPercent(null);setStage("downloading");try{await appUpdates.download({token:o.token});if(!cancelled.current)await install();}catch{if(!cancelled.current){setNetworkError(false);setStage("error");}}};
  const allow=async()=>{try{await appUpdates.openInstallSettings();}catch{setStage("error");}};
  const o=state?.offer;
  return <>
-  {banner&&!open&&o?<aside className="update-banner" role="status"><ArcadMark/><div><strong>Arcad View {o.versionName}</strong><span>{w.available}</span></div><button onClick={()=>{setBanner(false);setOpen(true);}}>{w.view}</button><button className="update-dismiss" aria-label={w.later} onClick={()=>setBanner(false)}>×</button></aside>:null}
   {open?<div className="update-backdrop"><section ref={dialog} className="update-dialog" role="dialog" aria-modal="true" aria-label={w.title} onKeyDown={e=>{if(e.key!=="Tab")return;const items=[...dialog.current!.querySelectorAll<HTMLElement>('button:not(:disabled),a')].filter(e=>e.getClientRects().length);const first=items[0],last=items.at(-1);if(e.shiftKey&&document.activeElement===first){e.preventDefault();last?.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first?.focus();}}}>
    <header><ArcadMark/><strong>{w.title}</strong><button className="icon-button" aria-label={w.close} onClick={close}><CloseIcon/></button></header>
-   {stage==="available"&&o?<><h2>{w.available}</h2><p className="update-version">{state?.versionName} → <strong>{o.versionName}</strong><small>{(o.size/1024/1024).toFixed(1)} MB</small></p><p>{w.privacy}</p>{o.notes?<pre className="update-notes">{o.notes}</pre>:null}<div className="update-actions"><button onClick={close}>{w.later}</button><button className="update-approve" onClick={()=>void approve()}>{w.approve}</button></div></>:null}
+   {stage==="available"&&o?<><div className="update-body"><h2>{w.available}</h2><p className="update-version">{state?.versionName} → <strong>{o.versionName}</strong><small>{(o.size/1024/1024).toFixed(1)} MB</small></p><p>{w.privacy}</p>{o.notes?<pre className="update-notes">{o.notes}</pre>:null}</div><div className="update-actions"><button onClick={close}>{w.later}</button><button className="update-approve" onClick={()=>void approve()}>{w.approve}</button></div></>:null}
    {stage!=="available"?<><p className="update-message" role="status">{stage==="checking"?w.checking:stage==="latest"?w.latest:stage==="downloading"?w.downloading:stage==="permission"?w.permission:stage==="installing"?w.installing:stage==="disabled"?w.disabled:networkError?w.offline:w.failed}</p>{stage==="downloading"?<><progress max={100} value={percent??undefined}/><small>{percent===null?"…":`${percent}%`}</small><button onClick={close}>{w.cancel}</button></>:stage==="permission"?<button className="update-approve" onClick={()=>void allow()}>{w.allow}</button>:stage==="installing"?<button className="update-approve" onClick={()=>void install()}>{w.install}</button>:stage==="error"?<button onClick={()=>void check(true)}>{w.retry}</button>:null}{stage==="latest"&&state?<small>Arcad View {state.versionName} ({state.versionCode})</small>:null}</>:null}
   </section></div>:null}
  </>;

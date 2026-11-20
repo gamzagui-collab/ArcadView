@@ -92,6 +92,7 @@ export function App() {
   const [state, setState] = useState<AppState>({ status: "home" });
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [aboutOpen,setAboutOpen]=useState(false);
+  const [updatePending,setUpdatePending]=useState(false);
   const [libraryNotice, setLibraryNotice] = useState(false);
   const [incomingArchive, setIncomingArchive] = useState<File | null>(null);
   const [measurement, setMeasurement] = useState<MeasurementSettings>(emptyMeasurement);
@@ -521,7 +522,7 @@ export function App() {
       </>
     );
   } else if (state.status === "home") {
-    content = <HomeDashboard onLibrary={()=>setLibraryOpen(true)} onOpen={openFile} onAbout={()=>setAboutOpen(true)}/>;
+    content = <HomeDashboard onLibrary={()=>setLibraryOpen(true)} onOpen={openFile} onAbout={()=>setAboutOpen(true)} updatePending={updatePending}/>;
   } else if (state.status === "loading") {
     content = (
         <LoadingScreen
@@ -593,7 +594,7 @@ export function App() {
       {canvas ? <div className="canvas-layer" inert={libraryOpen||aboutOpen} aria-hidden={libraryOpen||aboutOpen}>{canvas}</div> : null}
       <div className="app-content" hidden={libraryOpen} inert={aboutOpen}>{content}</div>
       {aboutOpen?<AboutPanel onClose={()=>setAboutOpen(false)}/>:null}
-      <AppUpdateCenter/>
+      <AppUpdateCenter onPendingChange={setUpdatePending}/>
       {libraryOpen ? (
         <div className="library-overlay">
           <DrawingLibrary onClose={() => { setLibraryOpen(false); setIncomingArchive(null); }} onOpen={openFile}

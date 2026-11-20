@@ -1,4 +1,6 @@
 /* Arcad View: a quiet workspace around the unchanged CAD canvas. */
+.app-info-button{position:relative;overflow:visible}.app-info-button .update-dot{position:absolute;top:-3px;right:-3px;width:10px;height:10px;background:#ff435a;border:2px solid #071a30;border-radius:50%;box-shadow:0 0 0 1px #ff8b99;pointer-events:none}
+.update-backdrop .update-dialog{display:flex;flex-direction:column;overflow:hidden}.update-dialog>.update-body{min-height:0;overflow:auto}.update-dialog>header,.update-dialog>.update-actions{flex-shrink:0}.update-dialog .update-actions button{min-height:44px}.update-dialog .update-actions{margin-top:14px}
 @font-face{font-family:ArcadUI;src:url('/fonts/NanumGothic-Regular.ttf') format('truetype');font-display:swap}
 :root{font-family:Inter,ArcadUI,system-ui,-apple-system,"Segoe UI",sans-serif;--bg:#071a30;--surface:#102740;--surface-2:#17324d;--line:#29425d;--muted:#9bafc5;--text:#f1f6ff;--accent:#218bff;--accent-bright:#80d5ff;--accent-ink:#fff;--danger:#e24c65;--toolbar-bottom:12px;--toolbar-height:64px;--inspector-bottom:132px}
 .app-shell [hidden]{display:none!important}
