@@ -41,6 +41,8 @@ export type MeasurementGeometryLimits = {
 };
 export type MeasurementSettings = {
   enabled: boolean;
+  /** A saved result remains visible without starting a new billable measurement. */
+  displayOnly?: boolean;
   mode: MeasurementMode;
   points: DrawingPoint[];
   snapping: boolean;

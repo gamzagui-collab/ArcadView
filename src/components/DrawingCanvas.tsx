@@ -69,7 +69,7 @@ export const DrawingCanvas = forwardRef<ViewerHandle, Props>(
     };
 
     useLayoutEffect(() => {
-      viewerRef.current?.configureMeasurement(measurement);
+      viewerRef.current?.configureMeasurement({...measurement,enabled:measurement.enabled&&!measurement.displayOnly});
       updateProjection();
     }, [measurement,sourceUnit,displayUnit,precision,locale]);
 

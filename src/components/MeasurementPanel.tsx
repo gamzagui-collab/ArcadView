@@ -65,7 +65,7 @@ export function MeasurementPanel({ settings, geometry, sourceUnit, displayUnit, 
   );
 }
 
-export function MeasurementStatus({settings,sourceUnit,displayUnit,feedback,precision,onShow,onToggle}:Pick<Props,"settings"|"sourceUnit"|"displayUnit"|"feedback"|"precision">&{onShow():void;onToggle():void}) {
+export function MeasurementStatus({settings,sourceUnit,displayUnit,feedback,precision,onShow,onToggle,onFinish}:Pick<Props,"settings"|"sourceUnit"|"displayUnit"|"feedback"|"precision">&{onShow():void;onToggle():void;onFinish?():void}) {
   const {t,locale}=useI18n();
   const value=measurementValue(settings);
   const unit=displayUnit==="drawing"?t("drawingUnit"):displayUnit;
@@ -74,6 +74,7 @@ export function MeasurementStatus({settings,sourceUnit,displayUnit,feedback,prec
   const mode=t(modeKeys[settings.mode])+(direction?` · ${t(direction==="x"?"measureHorizontal":"measureVertical")}`:"");
   return <div className={`measurement-status ${settings.enabled?"is-active":""}`} role="status">
     <button type="button" className="measurement-status-copy" onClick={onShow}><span>{settings.enabled?mode:`${t("measureNavigate")} · ${mode}`} · {settings.points.length}{settings.mode==="angle"?"/3":isDistanceMode(settings.mode)?"/2":""} · {settings.snapping?t("measureSnap"):t("measureSnapOff")}{settings.mode==="path"&&pathIsClosed(settings.points)?` · ${t("measureClosed")}`:""}</span><strong className="measurement-status-result">{result}</strong>{settings.enabled&&feedback?<small>{feedback}</small>:null}</button>
-    <button type="button" className="measurement-toggle" onClick={onToggle} aria-label={settings.enabled?t("measurePause"):t("measureResume")} title={settings.enabled?t("measurePause"):t("measureResume")}>{settings.enabled?"Ⅱ":"▶"}</button>
+    {onFinish&&!settings.displayOnly&&(settings.mode==="path"||settings.mode==="area")?<button className="measurement-finish" disabled={value===undefined||!Number.isFinite(value)||value<=0} onClick={onFinish}>측정 완료 ✓</button>:null}
+    <button type="button" className="measurement-toggle" onClick={onToggle} aria-label={settings.enabled&&!settings.displayOnly?t("measurePause"):t("measureResume")} title={settings.enabled&&!settings.displayOnly?t("measurePause"):t("measureResume")}>{settings.enabled&&!settings.displayOnly?"Ⅱ":"▶"}</button>
   </div>;
 }

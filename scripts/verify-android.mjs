@@ -161,9 +161,9 @@ check(
 
 );
 check(
-  "Stable application identity",
-  /applicationId\s+"com\.izcad\.viewer"/.test(appGradle) && capacitorConfig.appId === "com.izcad.viewer",
-  "Keep the existing Play package identity com.izcad.viewer.",
+  "Stable employee identity and separate approved Play identity",
+  /applicationId \(distribution == 'play' \? playAppId : "com\.izcad\.viewer"\)/.test(appGradle) && /orElse\('com\.guisarc\.arcadview'\)/.test(appGradle) && capacitorConfig.appId === "com.izcad.viewer",
+  "Keep employee installs at com.izcad.viewer and Play installs at com.guisarc.arcadview.",
 );
 check(
   "Application name",

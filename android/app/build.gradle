@@ -4,6 +4,10 @@ def appMetadata = new groovy.json.JsonSlurper().parse(rootProject.file('../packa
 def releaseMetadata = new groovy.json.JsonSlurper().parse(rootProject.file('../release-config.json'))
 def distribution = providers.gradleProperty('ARCAD_DISTRIBUTION').orElse('github').get()
 if (!(distribution in ['github', 'play'])) throw new GradleException('ARCAD_DISTRIBUTION must be github or play.')
+def accountServer = providers.gradleProperty('ARCAD_ACCOUNT_SERVER').orElse('').get()
+if (accountServer && !(accountServer ==~ /https:\/\/[a-zA-Z0-9.-]+(?::[0-9]+)?/)) throw new GradleException('ARCAD_ACCOUNT_SERVER must be an HTTPS origin without a path.')
+def playAppId = providers.gradleProperty('ARCAD_PLAY_APP_ID').orElse('com.guisarc.arcadview').get()
+if (!(playAppId ==~ /[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+/)) throw new GradleException('Invalid ARCAD_PLAY_APP_ID.')
 
 // Override this for the next unused code in Play Console without changing source.
 def releaseVersionCode = providers.gradleProperty('IZCAD_VERSION_CODE').orElse(releaseMetadata.versionCode.toString()).get()
@@ -29,12 +33,13 @@ android {
     defaultConfig {
         ndk { abiFilters.addAll((providers.gradleProperty('ARCAD_NATIVE_ABIS').orElse('arm64-v8a,armeabi-v7a,x86_64,x86').get()).split(',') as List) }
         externalNativeBuild { cmake { arguments '-DCMAKE_BUILD_TYPE=Release'; cFlags '-fvisibility=hidden' } }
-        applicationId "com.izcad.viewer"
+        applicationId (distribution == 'play' ? playAppId : "com.izcad.viewer")
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode releaseVersionCode.toInteger()
         versionName appMetadata.version
         buildConfigField 'boolean', 'GITHUB_UPDATES', (distribution == 'github').toString()
+        buildConfigField 'String', 'ACCOUNT_SERVER', '"' + (distribution == 'play' ? accountServer : '') + '"'
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -46,6 +51,8 @@ android {
     sourceSets {
         debug.manifest.srcFile "src/${distribution}/AndroidManifest.xml"
         release.manifest.srcFile "src/${distribution}/AndroidManifest.xml"
+        debug.java.srcDir "src/${distribution}/java"
+        release.java.srcDir "src/${distribution}/java"
     }
     signingConfigs {
         if (signingSupplied) {
@@ -85,6 +92,12 @@ dependencies {
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
     implementation project(':capacitor-cordova-android-plugins')
+    if (distribution == 'play') {
+        implementation 'com.android.billingclient:billing:9.1.0'
+        implementation 'androidx.credentials:credentials:1.6.0'
+        implementation 'androidx.credentials:credentials-play-services-auth:1.6.0'
+        implementation 'com.google.android.libraries.identity.googleid:googleid:1.2.1'
+    }
 }
 
 apply from: 'capacitor.build.gradle'

@@ -1,4 +1,7 @@
 import { forwardRef, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { commerceSnapshot,canStart } from "../commerce/client";
+import { annotationUsage } from "../commerce/annotationUsage";
+import { useOperation } from "../commerce/useOperation";
 import type { AnnotationHandleDrag, DrawingViewer, MeasurementPick } from "../viewer/DrawingViewer";
 import type { DrawingPoint } from "../viewer/savedView";
 import { distance, type MeasurableEntity, type MeasurementUnit } from "../viewer/measurementGeometry";
@@ -79,13 +82,15 @@ export const AnnotationEditor=forwardRef<AnnotationEditorHandle,Props>(function 
     textSession.text.replace(/\r\n?/g,"\n")!==originalText.text||textSession.height!==originalText.textHeight||textSession.color!==originalText.color:!!textSession.text.trim());
   const normal=drawingLayers(doc),reserved=pointLayer(doc),current=isPointTool(tool)&&active?{...reserved,color:doc.layers.some(l=>l.id===POINT_LAYER_ID)?reserved.color:pointStyle.color}:doc.layers.find(l=>l.id===doc.activeLayer)!;
   const currentNumber=current.id===POINT_LAYER_ID?4:normal.findIndex(l=>l.id===current.id)+1;
-  const commit=(next:AnnotationDocument)=>{if(next.objects.length>3000||next.objects.some(o=>o.points.length>30000)){setNotice(w.limit);return false;}if(next===docRef.current)return true;history.current.record(docRef.current);redoDraft.current=[];docRef.current=next;setDoc(next);setSelected(null);setOriginal(null);setPending(null);setOffsetChoice(null);setNotice("");return true;};
+  const applyDocument=(next:AnnotationDocument)=>{history.current.record(docRef.current);redoDraft.current=[];docRef.current=next;setDoc(next);setSelected(null);setOriginal(null);setPending(null);setOffsetChoice(null);setNotice("");return true;};
+  const commercial=useOperation<AnnotationDocument>(key,"annotations",async next=>{if(!saveAnnotations(key,next))throw Error("LOCAL_STORAGE_FAILED");applyDocument(next);setDraft([]);textSessionRef.current=null;setTextSession(null);pointSessionRef.current=null;setPointSession(null);});
+  const commit=(next:AnnotationDocument)=>{if(next.objects.length>3000||next.objects.some(o=>o.points.length>30000)){setNotice(w.limit);return false;}if(next===docRef.current)return true;if(commerceSnapshot().managed){if(commercial.blocked())return false;const usage=annotationUsage(docRef.current,next,tool);if(usage)return commercial.begin(next,usage);}return applyDocument(next);};
   const make=(points:DrawingPoint[],kind:Annotation["kind"]):Annotation=>({id:uid(),layerId:isPointTool(kind)?POINT_LAYER_ID:doc.activeLayer,kind,points,scale:doc.dimensionScale,...(isPointTool(kind)?{color:pointStyle.color,screenWidth:pointStyle.width,screenFontSize:pointStyle.fontSize}:{})});
   const add=(o:Annotation)=>{if(o.points.length<2||distance(o.points[0],o.points[1])<1e-10){setNotice(w.need);return;}if(commit(isPointAnnotation(o)?addPointObject(doc,o):{...doc,objects:[...doc.objects,o]}))setDraft([]);};
-  const choose=(value:AnnotationTool)=>{viewer.cancelInteraction();setBoundary(null);cancelTextHold.current();if(pointSessionRef.current)finishPointText(document.querySelector<HTMLTextAreaElement>('.point-leader-input')?.value??pointSessionRef.current.object.text??'');preview.current=null;redoDraft.current=[];setPending(null);setOffsetChoice(null);setEditError("");setTool(value);if(isPointTool(value))setTab("points");else if(value.startsWith("dimension"))setTab("dimensions");else if(["polyline","circle","rectangle","text"].includes(value))setTab("draw");setDraft([]);setNotice(value==="offset"?w.offsetPick:value==="extend"?w.extendBoundary:value==="rotate"?editedModel?w.rotateCenter:w.rotateSelect:"");if(value!=="move"&&value!=="rotate"){setSelected(null);setOriginal(null);}onActivate();if((value==="text"||value==="offset"||value==="rotate"||value==="extend"||isPointTool(value))&&open)onHide();};
+  const choose=(value:AnnotationTool)=>{if(commerceSnapshot().managed&&(commercial.blocked()||!["select","erase","trim"].includes(value)&&!canStart(value.startsWith("dimension")?"draw.dimension":value.startsWith("point-")?"draw.point":["move","rotate","offset","extend"].includes(value)?"edit."+value:"draw."+value)))return;viewer.cancelInteraction();setBoundary(null);cancelTextHold.current();if(pointSessionRef.current)finishPointText(document.querySelector<HTMLTextAreaElement>('.point-leader-input')?.value??pointSessionRef.current.object.text??'');preview.current=null;redoDraft.current=[];setPending(null);setOffsetChoice(null);setEditError("");setTool(value);if(isPointTool(value))setTab("points");else if(value.startsWith("dimension"))setTab("dimensions");else if(["polyline","circle","rectangle","text"].includes(value))setTab("draw");setDraft([]);setNotice(value==="offset"?w.offsetPick:value==="extend"?w.extendBoundary:value==="rotate"?editedModel?w.rotateCenter:w.rotateSelect:"");if(value!=="move"&&value!=="rotate"){setSelected(null);setOriginal(null);}onActivate();if((value==="text"||value==="offset"||value==="rotate"||value==="extend"||isPointTool(value))&&open)onHide();};
   const updatePointStyle=(style:PointStyle)=>{setPointStyle(style);savePointStyle(style);if(style.color!==pointStyle.color&&doc.layers.some(l=>l.id===POINT_LAYER_ID)){const id=selected;commit({...doc,layers:doc.layers.map(l=>l.id===POINT_LAYER_ID?{...l,color:style.color}:l)});setSelected(id);}};
   const applyPointStyle=()=>{if(!selectedObject||!isPointAnnotation(selectedObject))return;const id=selectedObject.id;commit({...doc,objects:doc.objects.map(o=>o.id===id?{...o,color:pointStyle.color,screenWidth:pointStyle.width,screenFontSize:pointStyle.fontSize}:o)});setSelected(id);};
-  const beginPointText=(object:Annotation,originalId?:string)=>{viewer.cancelInteraction();textSessionRef.current=null;setTextSession(null);const session={object,originalId};pointSessionRef.current=session;setPointSession(session);setTool("point-leader");setTab("points");setDraft([]);preview.current=null;setSelected(null);setOriginal(null);onActivate();if(open)onHide();};
+  const beginPointText=(object:Annotation,originalId?:string)=>{if(commerceSnapshot().managed&&(commercial.blocked()||!canStart("draw.point")))return;viewer.cancelInteraction();textSessionRef.current=null;setTextSession(null);const session={object,originalId};pointSessionRef.current=session;setPointSession(session);setTool("point-leader");setTab("points");setDraft([]);preview.current=null;setSelected(null);setOriginal(null);onActivate();if(open)onHide();};
   const finishPointText=(text:string,cancel=false)=>{const session=pointSessionRef.current;if(!session)return;if(!cancel){try{const next=completePointText(docRef.current,session,text);if(!commit(next))return;}catch{setNotice(w.pointInvalid);return;}}pointSessionRef.current=null;setPointSession(null);preview.current=null;};
   const updatePointText=(text:string)=>{const current=pointSessionRef.current;if(current){const next={...current,object:{...current.object,text}};pointSessionRef.current=next;setPointSession(next);}};
   const replaceObject=(object:Annotation,source:MeasurableEntity|null=null)=>{
@@ -95,6 +100,7 @@ export const AnnotationEditor=forwardRef<AnnotationEditorHandle,Props>(function 
   };
   const beginHandle=(client:DrawingPoint):AnnotationHandleDrag|null=>{
     if(!active||tool!=="select"||!editedModel||editedModel.kind==="mask"||pending||textSession||pointSession||original&&!current.visible)return null;
+    if(commerceSnapshot().managed&&(commercial.blocked()||!canStart("edit.reshape")))return null;
     const canvas=viewer.getCanvasElement(),rect=canvas.getBoundingClientRect(),p={x:client.x-rect.left,y:client.y-rect.top},move=moveHandlePosition(editedModel,q=>viewer.projectPoints(q),canvas.clientWidth,canvas.clientHeight),grips=objectGrips(editedModel),step=Math.max(1,Math.ceil(grips.length/512));
     let grip:typeof grips[number]|undefined,best=14;const free=!!move&&Math.hypot(p.x-move.x,p.y-move.y)<=17;
     if(!free)for(const[g,i]of grips.map((g,i)=>[g,i]as const)){if(i%step&&i!==grips.length-1)continue;const q=viewer.projectPoints([g.point])[0],d=Math.hypot(p.x-q.x,p.y-q.y);if(d<=best){best=d;grip=g;}}
@@ -128,6 +134,7 @@ export const AnnotationEditor=forwardRef<AnnotationEditorHandle,Props>(function 
     }
   };
   const beginText=(point:DrawingPoint,object?:Annotation)=>{
+    if(commerceSnapshot().managed&&(commercial.blocked()||!canStart("draw.text")))return;
     viewer.cancelInteraction();
     const height=object?.textHeight??(!heightTouched.current&&docRef.current.textHeight===undefined?Math.min(1e6,viewer.worldTolerance(22)):+heightInput);
     const session:TextEditSession={id:object?.id??uid(),originalId:object?.id,layerId:object?.layerId??docRef.current.activeLayer,point:object?.points[0]??point,text:object?.text??"",height,color:object?object.color:textColor,...(object?.rotation!==undefined?{rotation:object.rotation}:{})};
@@ -145,6 +152,7 @@ export const AnnotationEditor=forwardRef<AnnotationEditorHandle,Props>(function 
     const current=textSessionRef.current;if(current){const next={...current,...(style.height!==undefined?{height:style.height}:{}),...(style.color!==undefined?{color:style.color}:{})};textSessionRef.current=next;setTextSession(next);}
   };
   const editCommand=(command:EditCommand)=>{
+    if(commerceSnapshot().managed&&commercial.blocked())return;
     cancelTextHold.current();viewer.cancelInteraction();setBoundary(null);preview.current=null;
     if(pending||offsetChoice){cancelEdit();if(command!=="cancel")return;}
     if(command==="cancel"){finishText("",true);finishPointText("",true);setDraft([]);redoDraft.current=[];setSelected(null);setOriginal(null);setNotice("");return;}
@@ -156,7 +164,7 @@ export const AnnotationEditor=forwardRef<AnnotationEditorHandle,Props>(function 
     const next=history.current[command](docRef.current);
     if(next){docRef.current=next;setDoc(next);setDraft([]);redoDraft.current=[];setSelected(null);setOriginal(null);setNotice("");}
   };
-  useImperativeHandle(ref,()=>({execute:editCommand,finishText(){const point=pointSessionRef.current;if(point){finishPointText(document.querySelector<HTMLTextAreaElement>('.point-leader-input')?.value??point.object.text??'');return true;}const current=textSessionRef.current;if(!current)return false;finishText(document.querySelector<HTMLTextAreaElement>(".canvas-text-input")?.value??current.text);return true;}}));
+  useImperativeHandle(ref,()=>({execute(command){if(commerceSnapshot().managed&&commercial.blocked())return;editCommand(command);},finishText(){const point=pointSessionRef.current;if(point){finishPointText(document.querySelector<HTMLTextAreaElement>('.point-leader-input')?.value??point.object.text??'');return true;}const current=textSessionRef.current;if(!current)return false;finishText(document.querySelector<HTMLTextAreaElement>(".canvas-text-input")?.value??current.text);return true;}}));
   const erase=()=>{
     if(!current.visible&&!selected){setNotice(w.hidden);return;}
     if(selected){commit({...doc,objects:doc.objects.filter(o=>o.id!==selected)});setNotice(w.deleted);}
@@ -295,6 +303,7 @@ export const AnnotationEditor=forwardRef<AnnotationEditorHandle,Props>(function 
   useLayoutEffect(()=>{onHistoryState({canUndo:!!draft.length||textChanged||!!pointSession?.object.text?.trim()||history.current.canUndo,canRedo:!textChanged&&!pointSession&&(!!redoDraft.current.length||(!draft.length&&history.current.canRedo))});},[doc,draft,textChanged,pointSession,onHistoryState]);
   const updateScale=()=>{const scale=Number(scaleInput);if(!Number.isFinite(scale)||scale<1||scale>10000){setScaleInput(String(doc.dimensionScale));return;}if(scale===doc.dimensionScale&&!selected)return;const id=selected;commit({...doc,dimensionScale:scale,objects:doc.objects.map(o=>o.id===selected&&o.kind.startsWith("dimension")?{...o,scale}:o)});setSelected(id);};
   return <>
+    {commercial.controls}
     <svg ref={overlay} className="annotation-overlay" aria-hidden="true"/><svg ref={target} className="measurement-overlay annotation-target-overlay" aria-hidden="true"/>
     <div className={`active-layer-badge ${current.visible?"":"layer-hidden"}`} role="status" aria-label={`${w.currentLayer} ${currentNumber} ${current.name}`} title={`${w.currentLayer} ${currentNumber} · ${current.name}`} style={{background:current.color,color:badgeForeground(current.color)}} data-layer={currentNumber}>{currentNumber}</div>
     {active&&pointSession?<PointLeaderEditor viewer={viewer} session={pointSession} onText={updatePointText} onFinish={finishPointText}/>:null}

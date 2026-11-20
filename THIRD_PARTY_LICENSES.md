@@ -146,3 +146,12 @@ arşivi aynı release altında sunulmalı veya aynı kolaylıkta erişilebilir k
 bir kaynak adresi verilmelidir.
 
 Bu dosya açık kaynak bildirimidir; hukuki görüş değildir.
+
+## Optional Google Play development configuration (not in employee GitHub APKs)
+
+- AndroidX Credentials / Credentials Play Services Auth 1.6.0 — Apache-2.0, Android Open Source Project.
+- Google Play Billing 9.1.0 — the published Maven POM declares **Android Software Development Kit License**: https://developer.android.com/studio/terms.html
+- Google Identity googleid 1.2.1 — the published Maven POM declares **Android Software Development Kit License**: https://developer.android.com/studio/terms.html
+- Additional transitive Google Play services libraries are subject to their published terms. They are not described as Apache-licensed or included in the existing GPL license by this notice.
+
+The Play configuration is local development work. Compatibility of distributing these SDK binaries together with this GPL-3.0-only application and LibreDWG needs a licensing determination before public distribution. No linking exception is asserted or added to upstream copyrights. Existing GitHub builds omit these dependencies and preserve their existing updater and offline tools. Corresponding application source remains under GPL-3.0-only; service credentials and signing keys are never included.
