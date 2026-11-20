@@ -9,6 +9,7 @@ export type TextEditSession = {
   text: string;
   height: number;
   color?: string;
+  rotation?:number;
 };
 
 /** One completed text session is one document edit, including its style. */
@@ -20,7 +21,7 @@ export function completeTextEdit(doc: AnnotationDocument, session: TextEditSessi
   if (session.originalId && !original) return doc;
   if (!text.trim()) return original ? {...doc, objects:doc.objects.filter(o=>o.id!==original.id)} : doc;
   const object: Annotation = {...original, id:session.id, layerId:session.layerId, kind:"text",
-    points:[session.point], text, textHeight:session.height, color:session.color};
+    points:[session.point], text, textHeight:session.height, color:session.color,...(session.rotation!==undefined?{rotation:session.rotation}:{})};
   if (original && original.text === text && original.textHeight === session.height && original.color === session.color) return doc;
   return {...doc, textHeight:session.height, objects:original ? doc.objects.map(o=>o.id===original.id?object:o) : [...doc.objects,object]};
 }

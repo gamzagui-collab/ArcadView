@@ -3,6 +3,7 @@ import type { DrawingPoint } from "./savedView";
 import { annotationPoints, dimensionGeometry, isPointAnnotation, textBounds, visibleAnnotations, type Annotation, type AnnotationDocument } from "./annotations";
 import { drawPointAnnotation } from "./pointMarkup";
 import { formatCadNumber } from "./displayPrecision";
+import {moveHandlePosition,objectGrips} from "./objectEditing";
 const NS="http://www.w3.org/2000/svg";
 export function drawAnnotations(svg:SVGSVGElement,doc:AnnotationDocument,selected:string|null,draft:Annotation|null,project:(p:readonly DrawingPoint[])=>DrawingPoint[],source:MeasurementUnit,display:MeasurementUnit,precision=3,locale="ko"):void{
   const children:SVGElement[]=[];
@@ -20,7 +21,7 @@ export function drawAnnotations(svg:SVGSVGElement,doc:AnnotationDocument,selecte
     if(isPointAnnotation(o))drawPointAnnotation(o,project,el);
     else if(o.kind==="text"){
       const p=o.points[0],h=o.textHeight??50,[a,b]=project([p,{x:p.x,y:p.y+h}]),height=Math.max(.1,Math.hypot(a.x-b.x,a.y-b.y));
-      const text=el("text",{x:a.x,y:a.y,"font-size":height,fill:color,class:"annotation-user-text","data-object":o.id,"xml:space":"preserve"});
+      const text=el("text",{x:a.x,y:a.y,"font-size":height,fill:color,class:"annotation-user-text","data-object":o.id,"xml:space":"preserve",...(o.rotation?{transform:`rotate(${-o.rotation} ${a.x} ${a.y})`}:{})});
       for(const [i,line]of(o.text??"").split("\n").entries()){
         const span=document.createElementNS(NS,"tspan");span.setAttribute("x",String(a.x));span.setAttribute("y",String(a.y+i*height*1.3));span.textContent=line||" ";text.append(span);
       }
@@ -39,7 +40,16 @@ export function drawAnnotations(svg:SVGSVGElement,doc:AnnotationDocument,selecte
     }else{
       const points=annotationPoints(o);line(points,"#03101d","annotation-halo",o.id);line(points,color,active?"annotation-line selected":"annotation-line",o.id);
     }
-    if(active)for(const p of project(o.points))el("rect",{x:p.x-3,y:p.y-3,width:6,height:6,fill:"#fff",stroke:color,"stroke-width":1});
+    if(active&&o.kind!=="mask"){
+      const grips=objectGrips(o),step=Math.max(1,Math.ceil(grips.length/512));
+      for(const[g,i]of grips.map((g,i)=>[g,i]as const).filter(([,i])=>i%step===0||i===grips.length-1)){
+        const p=project([g.point])[0];if(p.x< -10||p.x>svg.clientWidth+10||p.y< -10||p.y>svg.clientHeight+10)continue;
+        el("rect",{x:p.x-6,y:p.y-6,width:12,height:12,rx:2,fill:"#03101d",stroke:"#03101d","stroke-width":3});
+        el("rect",{x:p.x-4,y:p.y-4,width:8,height:8,fill:"#fff",stroke:color,"stroke-width":1.5,"data-grip":g.id,"data-grip-index":i,"data-object":o.id});
+      }
+      const p=moveHandlePosition(o,project,svg.clientWidth,svg.clientHeight);
+      if(p){el("circle",{cx:p.x,cy:p.y,r:17,fill:"#0a263ce8",stroke:"#9fe5ff","stroke-width":1.5,"data-free-move":o.id});el("path",{d:`M${p.x-10},${p.y}h20 M${p.x},${p.y-10}v20 M${p.x-6},${p.y-4}l-4,4 4,4 M${p.x+6},${p.y-4}l4,4 -4,4 M${p.x-4},${p.y-6}l4,-4 4,4 M${p.x-4},${p.y+6}l4,4 4,-4`,fill:"none",stroke:"#b8f0ff","stroke-width":1.6});}
+    }
   }
   svg.replaceChildren(...children);
 }

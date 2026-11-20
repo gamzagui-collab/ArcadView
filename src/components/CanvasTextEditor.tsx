@@ -27,6 +27,7 @@ export function CanvasTextEditor({viewer,session,active,height,color,onText,onSt
     const size=Math.max(1,Math.hypot(a.x-b.x,a.y-b.y));
     // Match the SVG baseline, including the input's border/padding, when editing ends.
     el.style.left=`${a.x-3}px`;el.style.top=`${a.y-inputBaseline(size)-1}px`;el.style.fontSize=`${size}px`;
+    el.style.transformOrigin=`3px ${inputBaseline(size)+1}px`;el.style.transform=s.rotation?`rotate(${-s.rotation}deg)`:"";
     const width=viewer.getCanvasElement().clientWidth;
     el.style.width=`${Math.max(96,Math.min(Math.max(128,(el.value.split("\n").reduce((max,s)=>Math.max(max,[...s].length),0)+1)*size),width-Math.max(0,a.x)-12))}px`;
     el.style.height="0px";el.style.height=`${Math.max(size*1.3+6,el.scrollHeight+2)}px`;

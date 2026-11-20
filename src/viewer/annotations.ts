@@ -1,13 +1,14 @@
 import { distance, pathLength, pointSegmentDistance, type MeasurableEntity, type MeasurementGeometry, type MeasurementUnit, type SnapPoint, UNIT_METERS } from "./measurementGeometry";
 import type { DrawingPoint } from "./savedView";
 import { segmentFoot, type Segment } from "./cadPicking";
+import {curveLength,rectangleCorners,rotatePoint} from "./curveGeometry";
 type P = DrawingPoint;
 export const POINT_LAYER_ID="arcad-point-layer",POINT_LAYER_NAME="포인트그리기";
 export const POINT_TOOLS=["point-arrow","point-cloud","point-circle","point-rectangle","point-leader"]as const;
 export type PointTool=typeof POINT_TOOLS[number];
 export const isPointTool=(tool:string):tool is PointTool=>(POINT_TOOLS as readonly string[]).includes(tool);
-export type AnnotationTool = "select"|"move"|"offset"|"text"|"polyline"|"circle"|"rectangle"|"dimension-aligned"|"dimension-linear"|"trim"|PointTool;
-export type Annotation = {id:string;layerId:string;kind:"text"|"polyline"|"circle"|"arc"|"rectangle"|"dimension-aligned"|"dimension-linear"|"mask"|PointTool;points:P[];scale?:number;start?:number;sweep?:number;text?:string;textHeight?:number;color?:string;approximate?:boolean;screenWidth?:number;screenFontSize?:number};
+export type AnnotationTool = "select"|"move"|"rotate"|"extend"|"offset"|"text"|"polyline"|"circle"|"rectangle"|"dimension-aligned"|"dimension-linear"|"trim"|PointTool;
+export type Annotation = {id:string;layerId:string;kind:"text"|"polyline"|"circle"|"arc"|"rectangle"|"dimension-aligned"|"dimension-linear"|"mask"|PointTool;points:P[];scale?:number;start?:number;sweep?:number;text?:string;textHeight?:number;color?:string;approximate?:boolean;curved?:boolean;rotation?:number;screenWidth?:number;screenFontSize?:number};
 export const isPointAnnotation=(object:Annotation)=>isPointTool(object.kind);
 export type UserLayer = {id:string;name:string;color:string;visible:boolean};
 export type AnnotationDocument = {version:1;layers:UserLayer[];activeLayer:string;objects:Annotation[];dimensionScale:number;textHeight?:number};
@@ -24,7 +25,7 @@ export function removeDrawingLayer(doc:AnnotationDocument,id:string):AnnotationD
 }
 export const visibleAnnotations=(d:AnnotationDocument)=>d.objects.filter(o=>d.layers.some(l=>l.id===o.layerId&&l.visible));
 export function annotationPoints(o:Annotation):P[]{
-  if(o.kind==="rectangle"){const[a,b]=o.points;return[a,{x:b.x,y:a.y},b,{x:a.x,y:b.y},a];}
+  if(o.kind==="rectangle"){const p=rectangleCorners(o);return[...p,p[0]];}
   if(o.kind==="circle"||o.kind==="arc"){
     const[c,r]=o.points,radius=distance(c,r),start=o.start??0,sweep=o.kind==="circle"?Math.PI*2:o.sweep??Math.PI*2;
     const n=Math.max(12,Math.ceil(Math.abs(sweep)/(Math.PI*2)*192));
@@ -33,7 +34,7 @@ export function annotationPoints(o:Annotation):P[]{
 }
 export const segments=(points:readonly P[]):Segment[]=>points.slice(1).map((p,i)=>[points[i],p]);
 export const defaultTextHeight=(unit:MeasurementUnit)=>unit==="drawing"?50:.05/UNIT_METERS[unit];
-export function textBounds(o:Annotation){
+function textLocalBounds(o:Annotation){
   const p=o.points[0],height=o.textHeight??50,lines=(o.text??"").split("\n");
   let width=0;
   for(const line of lines){
@@ -47,6 +48,7 @@ export function textBounds(o:Annotation){
   return{minX:p.x,maxX:p.x+Math.max(width,height*.25),minY:p.y-(lines.length-1)*height*1.3-height*.25,maxY:p.y+height};
 }
 let textContext:CanvasRenderingContext2D|null|undefined;
+export function textBounds(o:Annotation){const b=textLocalBounds(o);if(!o.rotation)return b;const p=[{x:b.minX,y:b.minY},{x:b.maxX,y:b.minY},{x:b.maxX,y:b.maxY},{x:b.minX,y:b.maxY}].map(p=>rotatePoint(p,o.points[0],o.rotation!));return{minX:Math.min(...p.map(p=>p.x)),maxX:Math.max(...p.map(p=>p.x)),minY:Math.min(...p.map(p=>p.y)),maxY:Math.max(...p.map(p=>p.y))};}
 function textCanvasContext(){if(textContext===undefined)textContext=document.createElement('canvas').getContext('2d');return textContext;}
 export function translateAnnotation(o:Annotation,base:P,destination:P):Annotation{
   if(o.kind==="mask")throw Error("A source erasure cannot be moved independently");
@@ -61,6 +63,7 @@ export function sourceMoveObjects(entity:MeasurableEntity,layerId:string,base:P,
 /** A separate overlay copy; never changes the original geometry. */
 export function sourceAnnotation(entity:MeasurableEntity,layerId:string):Annotation{
   let copy:Annotation={id:uid(),layerId,kind:"polyline",points:entity.points.map(p=>({...p})),approximate:entity.approximate};
+  if(["LWPOLYLINE","POLYLINE"].includes(entity.kind)&&!entity.approximate&&entity.length-pathLength(entity.points)>Math.max(1e-7,entity.length*1e-9))copy.curved=true;
   if(entity.kind==="CIRCLE"&&!entity.approximate){const c={x:(entity.bounds.minX+entity.bounds.maxX)/2,y:(entity.bounds.minY+entity.bounds.maxY)/2},r=entity.length/(Math.PI*2);copy={...copy,kind:"circle",points:[c,{x:c.x+r,y:c.y}]};}
   if(entity.kind==="ARC"&&!entity.approximate&&entity.points.length>=3){
     const a=entity.points[0],b=entity.points[Math.floor(entity.points.length/2)],end=entity.points.at(-1)!,u={x:b.x-a.x,y:b.y-a.y},v={x:end.x-a.x,y:end.y-a.y},den=2*(u.x*v.y-u.y*v.x);
@@ -81,7 +84,7 @@ export function annotationGeometry(objects:Annotation[]):MeasurementGeometry{
     const points=annotationPoints(o);if(!points.length)continue;
     const xs=points.map(p=>p.x),ys=points.map(p=>p.y);
     const radius=(o.kind==="circle"||o.kind==="arc")?distance(o.points[0],o.points[1]):0;
-    entities.push({kind:o.kind==="circle"?"CIRCLE":o.kind==="arc"?"ARC":"LWPOLYLINE",points,bounds:{minX:Math.min(...xs),maxX:Math.max(...xs),minY:Math.min(...ys),maxY:Math.max(...ys)},length:o.kind==="circle"?Math.PI*2*radius:o.kind==="arc"?radius*(o.sweep??Math.PI*2):pathLength(points),area:o.kind==="circle"?Math.PI*radius*radius:undefined,approximate:!!o.approximate});
+    entities.push({kind:o.kind==="circle"?"CIRCLE":o.kind==="arc"?"ARC":"LWPOLYLINE",points,bounds:{minX:Math.min(...xs),maxX:Math.max(...xs),minY:Math.min(...ys),maxY:Math.max(...ys)},length:o.kind==="circle"?Math.PI*2*radius:o.kind==="arc"?radius*(o.sweep??Math.PI*2):o.curved?curveLength(o):pathLength(points),area:o.kind==="circle"?Math.PI*radius*radius:undefined,approximate:!!o.approximate});
     if(o.kind==="circle"||o.kind==="arc"){
       const[c,r]=o.points,radius=distance(c,r);snaps.push({...c,kind:"center"});
       if(o.kind==="circle")for(let i=0;i<4;i++)snaps.push({x:c.x+radius*Math.cos(i*Math.PI/2),y:c.y+radius*Math.sin(i*Math.PI/2),kind:"endpoint"});
@@ -119,7 +122,7 @@ export function visibleEntityFragment(entity:MeasurableEntity,masks:Annotation[]
   return{kind:picked.length===2?"LINE":"LWPOLYLINE",points:picked,bounds:{minX:Math.min(...xs),maxX:Math.max(...xs),minY:Math.min(...ys),maxY:Math.max(...ys)},length:pathLength(picked),approximate:entity.approximate||["CIRCLE","ARC","ELLIPSE","SPLINE"].includes(entity.kind)};
 }
 export function dimensionGeometry(o:Annotation,sourceUnit:MeasurementUnit){
-  const[a,b,p]=o.points;if(!a||!b||!p)return null;
+  let[a,b,p]=o.points;if(!a||!b||!p)return null;const pivot=a,rotation=o.kind==="dimension-linear"?o.rotation??0:0;if(rotation)[a,b,p]=[a,b,p].map(p=>rotatePoint(p,pivot,-rotation));
   const length=distance(a,b);if(length<1e-12)return null;
   let first:P,second:P,value:number;
   if(o.kind==="dimension-linear"){
@@ -132,6 +135,7 @@ export function dimensionGeometry(o:Annotation,sourceUnit:MeasurementUnit){
     first={x:a.x+nx*h,y:a.y+ny*h};second={x:b.x+nx*h,y:b.y+ny*h};value=length;
   }
   const textHeight=2.5*(o.scale??20)*(sourceUnit==="drawing"?1:.001/UNIT_METERS[sourceUnit]);
+  if(rotation)[a,b,first,second]=[a,b,first,second].map(p=>rotatePoint(p,pivot,rotation));
   return{first,second,value,textHeight,extensions:[[a,first],[b,second]]as Segment[]};
 }
 export function annotationHit(objects:Annotation[],point:P,tolerance:number,sourceUnit:MeasurementUnit):Annotation|null{
@@ -210,10 +214,11 @@ function validateDocument(d:AnnotationDocument):void{
   for(const l of d.layers)if(typeof l.id!=="string"||typeof l.name!=="string"||!/^#[a-f0-9]{6}$/i.test(l.color)||typeof l.visible!=="boolean"||(l.id===POINT_LAYER_ID&&(l.name!==POINT_LAYER_NAME||l!==d.layers.at(-1))))throw Error();
   if(d.textHeight!==undefined&&(!Number.isFinite(d.textHeight)||d.textHeight<=0||d.textHeight>1e6))throw Error();
   for(const o of d.objects){
-    if(!ids.has(o.layerId)||typeof o.id!=="string"||!["text","polyline","circle","arc","rectangle","dimension-aligned","dimension-linear","mask",...POINT_TOOLS].includes(o.kind)||!Array.isArray(o.points)||o.points.length<(o.kind==="text"?1:2)||o.points.length>30000||o.points.some(p=>!Number.isFinite(p.x)||!Number.isFinite(p.y))||((o.kind==="rectangle"||o.kind==="circle"||o.kind==="arc")&&o.points.length!==2)||(o.kind.startsWith("dimension")&&(o.points.length!==3||!Number.isFinite(o.scale)||o.scale!<1||o.scale!>10000))||(o.kind==="arc"&&(!Number.isFinite(o.start)||!Number.isFinite(o.sweep)||o.sweep!<=0||o.sweep!>TAU))||(o.kind==="text"&&(o.points.length!==1||typeof o.text!=="string"||!o.text.trim()||o.text.length>500||!Number.isFinite(o.textHeight)||o.textHeight!<=0||o.textHeight!>1e6)))throw Error();
+    if(!ids.has(o.layerId)||typeof o.id!=="string"||!["text","polyline","circle","arc","rectangle","dimension-aligned","dimension-linear","mask",...POINT_TOOLS].includes(o.kind)||!Array.isArray(o.points)||o.points.length<(o.kind==="text"?1:2)||o.points.length>30000||o.points.some(p=>!Number.isFinite(p.x)||!Number.isFinite(p.y))||(o.kind==="rectangle"&&![2,4].includes(o.points.length))||((o.kind==="circle"||o.kind==="arc")&&o.points.length!==2)||(o.kind.startsWith("dimension")&&(o.points.length!==3||!Number.isFinite(o.scale)||o.scale!<1||o.scale!>10000))||(o.kind==="arc"&&(!Number.isFinite(o.start)||!Number.isFinite(o.sweep)||o.sweep!<=0||o.sweep!>TAU))||(o.kind==="text"&&(o.points.length!==1||typeof o.text!=="string"||!o.text.trim()||o.text.length>500||!Number.isFinite(o.textHeight)||o.textHeight!<=0||o.textHeight!>1e6)))throw Error();
+    if(o.rotation!==undefined&&(!Number.isFinite(o.rotation)||o.rotation<0||o.rotation>=360)||o.curved!==undefined&&typeof o.curved!=="boolean")throw Error();
     if(o.color!==undefined&&!/^#[a-f0-9]{6}$/i.test(o.color))throw Error();
     if(isPointAnnotation(o)!==(o.layerId===POINT_LAYER_ID))throw Error();
-    if(isPointAnnotation(o)&&(o.points.length!==2||!Number.isFinite(o.screenWidth)||o.screenWidth!<1||o.screenWidth!>12||!o.color))throw Error();
+    if(isPointAnnotation(o)&&((!(["point-rectangle","point-cloud"].includes(o.kind)?[2,4]:[2]).includes(o.points.length))||!Number.isFinite(o.screenWidth)||o.screenWidth!<1||o.screenWidth!>12||!o.color))throw Error();
     if(o.kind==="point-leader"&&(typeof o.text!=="string"||!o.text.trim()||o.text.length>500||!Number.isFinite(o.screenFontSize)||o.screenFontSize!<10||o.screenFontSize!>48))throw Error();
   }
 }

@@ -41,7 +41,8 @@ import { perpendicularSnap, segmentFoot } from "./cadPicking";
 import { masked, visibleEntityFragment, type Annotation } from "./annotations";
 
 export type MeasurementPick = { point: DrawingPoint; snapped: SnapPoint["kind"] | "start" | "perpendicular" | "intersection" | null; entity: MeasurableEntity | null; replaceIndex?: number };
-export type AnnotationInput = {tool:string;snapping:boolean;anchor?:DrawingPoint;points:DrawingPoint[];referenceSnaps?:SnapPoint[];onPick(pick:MeasurementPick):void;onPreview(pick:MeasurementPick|null):void};
+export type AnnotationHandleDrag={offset?:DrawingPoint;anchor?:DrawingPoint;move(pick:MeasurementPick):void;end(pick:MeasurementPick):void;cancel():void};
+export type AnnotationInput = {tool:string;snapping:boolean;handleSnapping?:boolean;anchor?:DrawingPoint;points:DrawingPoint[];referenceSnaps?:SnapPoint[];onHandleDown?(client:DrawingPoint):AnnotationHandleDrag|null;onPick(pick:MeasurementPick):void;onPreview(pick:MeasurementPick|null):void};
 
 installXclipRendering(DxfViewer);
 installTrianglePrecisionRendering(DxfViewer);
@@ -83,22 +84,25 @@ export class DrawingViewer {
   private viewListeners = new Set<()=>void>();
   private precisionIndex: number | undefined;
   private controlsBeforeHold: { enablePan: boolean; enableZoom: boolean } | null = null;
+  private handleDrag:{id:number;input:AnnotationInput;drag:AnnotationHandleDrag}|null=null;
+  private handlePointers=new Set<number>();
+  private lockInteraction(locked:boolean):void{
+    const controls=(this.viewer as any)?.controls;if(!controls)return;
+    if(locked&&!this.controlsBeforeHold){this.controlsBeforeHold={enablePan:controls.enablePan,enableZoom:controls.enableZoom};controls.enablePan=false;controls.enableZoom=false;}
+    else if(!locked&&this.controlsBeforeHold){Object.assign(controls,this.controlsBeforeHold);this.controlsBeforeHold=null;}
+  }
+  private cancelHandle():void{const h=this.handleDrag;this.handleDrag=null;if(h){this.lockInteraction(false);h.drag.cancel();}}
+  private handlePick(event:PointerEvent):MeasurementPick{const d=this.handleDrag?.drag.offset;return this.pickAt({x:event.clientX+(d?.x??0),y:event.clientY+(d?.y??0)},false);}
   private readonly gesture = new MeasurementGesture({
-    lock: locked => {
-      const controls = (this.viewer as any)?.controls;
-      if (!controls) return;
-      if (locked && !this.controlsBeforeHold) {
-        this.controlsBeforeHold = { enablePan: controls.enablePan, enableZoom: controls.enableZoom };
-        controls.enablePan = false; controls.enableZoom = false;
-      } else if (!locked && this.controlsBeforeHold) {
-        Object.assign(controls, this.controlsBeforeHold); this.controlsBeforeHold = null;
-      }
-    },
+    lock: locked => this.lockInteraction(locked),
     preview: position => {const pick=position?this.pickAt(position,true):null;if(this.annotationInput)this.annotationInput.onPreview(pick);else this.onPreview?.(pick);},
     commit: (position, precision) => {const pick=this.pickAt(position,precision);if(this.annotationInput)this.annotationInput.onPick(pick);else this.onPick?.(pick);},
   });
   private readonly pointerDown = (event: PointerEvent): void => {
     if ((!this.measurement?.enabled && !this.annotationInput) || !this.ready || (event.button !== 0 && event.pointerType !== "touch")) return;
+    if(this.handlePointers.size){this.handlePointers.add(event.pointerId);this.cancelHandle();this.gesture.cancel();if(event.cancelable)event.preventDefault();event.stopImmediatePropagation();return;}
+    const direct=this.annotationInput?.onHandleDown?.({x:event.clientX,y:event.clientY});
+    if(direct&&this.annotationInput){this.gesture.cancel();this.handleDrag={id:event.pointerId,input:this.annotationInput,drag:direct};this.handlePointers.add(event.pointerId);this.lockInteraction(true);try{this.viewer.GetCanvas().setPointerCapture(event.pointerId);}catch{}if(event.cancelable)event.preventDefault();event.stopImmediatePropagation();return;}
     this.precisionIndex = undefined;
     if (!this.annotationInput && this.measurement && this.measurement.mode !== "object") {
       const rect = this.viewer.GetCanvas().getBoundingClientRect();
@@ -111,17 +115,20 @@ export class DrawingViewer {
     try { this.viewer.GetCanvas().setPointerCapture(event.pointerId); } catch { /* Synthetic events or a detached canvas. */ }
   };
   private readonly pointerMove = (event: PointerEvent): void => {
+    if(this.handlePointers.has(event.pointerId)){if(this.handleDrag?.id===event.pointerId)this.handleDrag.drag.move(this.handlePick(event));if(event.cancelable)event.preventDefault();event.stopImmediatePropagation();return;}
     this.gesture.move(event.pointerId, { x: event.clientX, y: event.clientY });
   };
   private readonly pointerCancel = (event: PointerEvent): void => {
+    if(this.handlePointers.has(event.pointerId)){this.handlePointers.delete(event.pointerId);this.cancelHandle();return;}
     this.gesture.cancel(event.pointerId);
   };
   private readonly pointerUp = (event: PointerEvent): void => {
+    if(this.handlePointers.has(event.pointerId)){this.handlePointers.delete(event.pointerId);const h=this.handleDrag;if(h?.id===event.pointerId){const pick=this.handlePick(event);this.handleDrag=null;this.lockInteraction(false);h.drag.end(pick);}if(event.cancelable)event.preventDefault();event.stopImmediatePropagation();return;}
     this.gesture.up(event.pointerId, { x: event.clientX, y: event.clientY });
   };
   private pickAt(position: { x: number; y: number }, precision: boolean): MeasurementPick {
-    const editor=this.annotationInput;
-    const measurement:MeasurementSettings=editor?{enabled:true,mode:editor.tool==="polyline"?"path":"distance",points:editor.points,snapping:editor.snapping,entity:null}:this.measurement!;
+    const editor=this.annotationInput??this.handleDrag?.input;
+    const measurement:MeasurementSettings=editor?{enabled:true,mode:editor.tool==="polyline"?"path":"distance",points:editor.points,snapping:this.handleDrag?editor.handleSnapping??editor.snapping:editor.snapping,entity:null}:this.measurement!;
     const canvas = this.viewer.GetCanvas();
     const rect = canvas.getBoundingClientRect();
     const v = new Vector3((position.x - rect.left) * 2 / rect.width - 1, -(Math.max(rect.top + 20, position.y) - rect.top) * 2 / rect.height + 1, 0).unproject(this.viewer.GetCamera());
@@ -139,9 +146,9 @@ export class DrawingViewer {
     const reference=measurement.snapping&&editor?.referenceSnaps?nearestSnap(editor.referenceSnaps,point,tolerance):null;
     if(reference&&(!snapped||Math.hypot(reference.x-point.x,reference.y-point.y)<Math.hypot(snapped.x-point.x,snapped.y-point.y)))snapped=reference;
     const replaceIndex = precision ? this.precisionIndex : undefined;
-    const intersection=editor?.tool==="move"&&measurement.snapping?intersectionSnap([this.geometry,this.userGeometry],point,this.worldTolerance(10),p=>!masked(p,this.masks,this.worldTolerance(3))):null;
+    const intersection=(editor?.tool==="move"||editor?.tool==="rotate"||!!this.handleDrag)&&measurement.snapping?intersectionSnap([this.geometry,this.userGeometry],point,this.worldTolerance(10),p=>!masked(p,this.masks,this.worldTolerance(3))):null;
     const start = snapToPathStart(measurement, point, tolerance, replaceIndex);
-    const anchor=editor?.anchor??(isDistanceMode(measurement.mode)?measurement.points[replaceIndex===0?1:0]:undefined);
+    const anchor=this.handleDrag?.drag.anchor??editor?.anchor??(isDistanceMode(measurement.mode)?measurement.points[replaceIndex===0?1:0]:undefined);
     let perpendicular:DrawingPoint|null=null;
     if(measurement.snapping&&anchor){
       const tol=this.worldTolerance(9),accept=(p:DrawingPoint)=>!masked(p,this.masks,this.worldTolerance(3));
@@ -153,7 +160,7 @@ export class DrawingViewer {
     else if(intersection)point=intersection;
     else if(perpendicular)point=perpendicular;
     else if (snapped) point = { x: snapped.x, y: snapped.y };
-    let entity = measurement.mode === "object" || editor?.tool==="select"||editor?.tool==="trim" ?
+    let entity = !this.handleDrag&&(measurement.mode === "object" || editor?.tool==="select"||editor?.tool==="trim") ?
       this.geometry.packed ? nearestPackedEntity(this.geometry.packed, point, tolerance, pointSegmentDistance) : nearestEntity(this.geometry.entities, point, tolerance) : null;
     if(entity)entity=visibleEntityFragment(entity,this.masks,point,tolerance);
     if(entity){let nearest=Infinity,hit=point;for(let i=1;i<entity.points.length;i++){const q=segmentFoot(point,entity.points[i-1],entity.points[i]);if(q&&Math.hypot(q.x-point.x,q.y-point.y)<nearest){hit=q;nearest=Math.hypot(q.x-point.x,q.y-point.y);}}if(masked(hit,this.masks,this.worldTolerance(3)))entity=null;}
@@ -207,10 +214,11 @@ export class DrawingViewer {
       this.onContextLost,
     );
     const canvas = this.viewer.GetCanvas();
-    canvas.addEventListener("pointerdown", this.pointerDown);
-    canvas.addEventListener("pointermove", this.pointerMove);
-    canvas.addEventListener("pointerup", this.pointerUp);
-    canvas.addEventListener("pointercancel", this.pointerCancel);
+    canvas.addEventListener("pointerdown", this.pointerDown,true);
+    canvas.addEventListener("pointermove", this.pointerMove,true);
+    canvas.addEventListener("pointerup", this.pointerUp,true);
+    canvas.addEventListener("pointercancel", this.pointerCancel,true);
+    canvas.addEventListener("lostpointercapture",this.pointerCancel);
     const render = this.viewer.Render.bind(this.viewer);
     this.viewer.Render = () => {
       // Three normally refreshes this inside renderer.render(). Project the
@@ -397,8 +405,8 @@ export class DrawingViewer {
     this.endReferences=[...(!masked(point,this.masks,tolerance)?referenceDirections(this.geometry,point,tolerance):[]),...referenceDirections(this.userGeometry,point,tolerance)];
   }
   worldTolerance(pixels:number):number{const c=this.viewer.GetCamera();return pixels*(c.right-c.left)/c.zoom/Math.max(1,this.viewer.GetCanvas().clientWidth);}
-  configureAnnotations(input:AnnotationInput|null):void{if(input?.tool!==this.annotationInput?.tool)this.gesture.cancel();this.annotationInput=input;}
-  cancelInteraction():void { this.gesture.cancel(); this.precisionIndex=undefined; }
+  configureAnnotations(input:AnnotationInput|null):void{if(input?.tool!==this.annotationInput?.tool){this.gesture.cancel();if(this.handleDrag)this.lockInteraction(true);if(input&&input.tool!==this.handleDrag?.input.tool)this.cancelHandle();}this.annotationInput=input;}
+  cancelInteraction():void { this.gesture.cancel();this.cancelHandle();this.handlePointers.clear();this.precisionIndex=undefined; }
   getCanvasElement():HTMLCanvasElement { return this.viewer.GetCanvas(); }
   clientToDrawing(position:{x:number;y:number}):DrawingPoint {
     const r=this.viewer.GetCanvas().getBoundingClientRect();
@@ -434,11 +442,12 @@ export class DrawingViewer {
     const canvas = this.viewer.GetCanvas();
     const renderer = this.viewer.GetRenderer();
     canvas.removeEventListener("webglcontextlost", this.onContextLost);
-    canvas.removeEventListener("pointerdown", this.pointerDown);
-    canvas.removeEventListener("pointermove", this.pointerMove);
-    canvas.removeEventListener("pointerup", this.pointerUp);
-    canvas.removeEventListener("pointercancel", this.pointerCancel);
-    this.gesture.cancel();
+    canvas.removeEventListener("pointerdown", this.pointerDown,true);
+    canvas.removeEventListener("pointermove", this.pointerMove,true);
+    canvas.removeEventListener("pointerup", this.pointerUp,true);
+    canvas.removeEventListener("pointercancel", this.pointerCancel,true);
+    canvas.removeEventListener("lostpointercapture",this.pointerCancel);
+    this.cancelInteraction();
     // The parent React state may retain the old geometry for one more commit.
     // The viewer owns these chunks; after destruction they must not keep
     // hundreds of MiB alive while the next cached scene is being restored.

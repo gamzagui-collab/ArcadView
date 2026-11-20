@@ -1,6 +1,7 @@
 import {ensurePointLayer,isPointAnnotation,POINT_LAYER_ID,type Annotation,type AnnotationDocument} from "./annotations";
 import {pointSegmentDistance,type SnapPoint} from "./measurementGeometry";
 import type {DrawingBounds,DrawingPoint as P} from "./savedView";
+import {rectangleCorners} from "./curveGeometry";
 export type PointStyle={width:number;color:string;fontSize:number};
 export const DEFAULT_POINT_STYLE:PointStyle={width:3,color:"#ff586d",fontSize:18};
 export const pointMoveSnaps=(object:Annotation):SnapPoint[]=>isPointAnnotation(object)?object.points.map(p=>({...p,kind:"endpoint"as const})).sort((a,b)=>a.x-b.x):[];
@@ -44,11 +45,12 @@ export function pointScreenGeometry(o:Annotation,project:(p:readonly P[])=>P[]):
   const r=Math.hypot(b.x-a.x,b.y-a.y);return{paths:[Array.from({length:97},(_,i)=>({x:a.x+r*Math.cos(i*Math.PI/48),y:a.y+r*Math.sin(i*Math.PI/48)}))]};
  }
  if(o.kind==="point-rectangle"||o.kind==="point-cloud"){
-  const x=Math.min(a.x,b.x),y=Math.min(a.y,b.y),w=Math.abs(a.x-b.x),h=Math.abs(a.y-b.y),corners=[{x,y},{x:x+w,y},{x:x+w,y:y+h},{x,y:y+h},{x,y}];
-  if(o.kind==="point-rectangle"||w<1||h<1)return{paths:[corners]};
-  const points:P[]=[corners[0]],commands=[`M${x},${y}`];
+  const raw=project(rectangleCorners(o)),x=Math.min(a.x,b.x),y=Math.min(a.y,b.y),right=Math.max(a.x,b.x),bottom=Math.max(a.y,b.y),p=o.points.length===2?[{x,y},{x:right,y},{x:right,y:bottom},{x,y:bottom}]:raw;
+  const corners=[...p,p[0]],area=p.reduce((n,a,i)=>{const b=p[(i+1)%4];return n+(a.x-p[0].x)*(b.y-p[0].y)-(a.y-p[0].y)*(b.x-p[0].x);},0),sign=area>=0?1:-1;
+  if(o.kind==="point-rectangle"||Math.abs(area)<1)return{paths:[corners]};
+  const points:P[]=[corners[0]],commands=[`M${p[0].x},${p[0].y}`];
   for(let i=0;i<4;i++){
-   const p=corners[i],q=corners[i+1],length=Math.hypot(q.x-p.x,q.y-p.y),count=Math.min(80,Math.max(2,Math.ceil(length/20))),nx=(q.y-p.y)/length,ny=-(q.x-p.x)/length,lobe=Math.min(16,length/count*.85);
+   const p=corners[i],q=corners[i+1],length=Math.hypot(q.x-p.x,q.y-p.y),count=Math.min(80,Math.max(2,Math.ceil(length/20))),nx=(q.y-p.y)/length*sign,ny=-(q.x-p.x)/length*sign,lobe=Math.min(16,length/count*.85);
    for(let j=0;j<count;j++){
     const a={x:p.x+(q.x-p.x)*j/count,y:p.y+(q.y-p.y)*j/count},b={x:p.x+(q.x-p.x)*(j+1)/count,y:p.y+(q.y-p.y)*(j+1)/count},c={x:(a.x+b.x)/2+nx*lobe,y:(a.y+b.y)/2+ny*lobe};commands.push(`Q${c.x},${c.y} ${b.x},${b.y}`);
     for(let k=1;k<=4;k++){const t=k/4;points.push({x:(1-t)**2*a.x+2*(1-t)*t*c.x+t*t*b.x,y:(1-t)**2*a.y+2*(1-t)*t*c.y+t*t*b.y});}

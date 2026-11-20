@@ -5,10 +5,11 @@ import {useI18n} from "../i18n/I18nProvider";
 import type {DrawingViewer} from "../viewer/DrawingViewer";
 import type {OffsetGuide} from "../viewer/offsetGeometry";
 
-export function GeometryDistanceDialog({kind,values,unit,error,onChange,onApply,onCancel}:{kind:"move"|"offset";values:string[];unit:string;error:string;onChange(values:string[]):void;onApply():void;onCancel():void}){
+export function GeometryDistanceDialog({kind,values,unit,error,onChange,onApply,onCancel}:{kind:"move"|"offset"|"rotate";values:string[];unit:string;error:string;onChange(values:string[]):void;onApply():void;onCancel():void}){
   const {locale}=useI18n();
   const w={ko:{move:"이동 거리",offset:"옵셋 거리",apply:"적용",go:"이동",cancel:"취소",x:"X 이동",y:"Y 이동",distance:"거리",help:"X: 오른쪽 + / 왼쪽 − · Y: 위 + / 아래 −",offsetHelp:"선택한 화살표 방향으로 평행한 객체를 추가합니다."},en:{move:"Move distance",offset:"Offset distance",apply:"Apply",go:"Move",cancel:"Cancel",x:"X displacement",y:"Y displacement",distance:"Distance",help:"X: right + / left − · Y: up + / down −",offsetHelp:"Add a parallel copy in the selected arrow direction."},tr:{move:"Taşıma mesafesi",offset:"Öteleme mesafesi",apply:"Uygula",go:"Taşı",cancel:"İptal",x:"X mesafesi",y:"Y mesafesi",distance:"Mesafe",help:"X: sağ + / sol − · Y: yukarı + / aşağı −",offsetHelp:"Seçilen ok yönünde paralel bir kopya ekler."}}[locale];
   const dialog=useRef<HTMLElement>(null),first=useRef<HTMLInputElement>(null);
+  const rotation=locale==="ko"?{title:"회전 각도",angle:"각도",help:"1도 단위 · + 반시계 방향 / − 시계 방향"}:locale==="en"?{title:"Rotation angle",angle:"Angle",help:"Whole degrees · + counterclockwise / − clockwise"}:{title:"Döndürme açısı",angle:"Açı",help:"Tam derece · + saat yönünün tersi / − saat yönü"};
   useBackNavigation(onCancel,true);
   useLayoutEffect(()=>{
     const nodes=[...document.querySelectorAll<HTMLElement>('.app-content,.canvas-layer')].map(e=>({e,prior:e.inert}));
@@ -17,15 +18,15 @@ export function GeometryDistanceDialog({kind,values,unit,error,onChange,onApply,
     return()=>{for(const{e,prior}of nodes)if(e.isConnected)e.inert=prior;};
   },[]);
   return createPortal(<div className="geometry-edit-backdrop" onPointerDown={e=>e.stopPropagation()}>
-    <section ref={dialog} className="geometry-edit-dialog" role="dialog" aria-modal="true" aria-label={w[kind]} onKeyDown={e=>{
+    <section ref={dialog} className="geometry-edit-dialog" role="dialog" aria-modal="true" aria-label={kind==="rotate"?rotation.title:w[kind]} onKeyDown={e=>{
       if(e.key==="Escape"){e.preventDefault();onCancel();}
       if(e.key==="Tab"){const nodes=[...dialog.current!.querySelectorAll<HTMLElement>('input,button')],first=nodes[0],last=nodes.at(-1);if(e.shiftKey&&document.activeElement===first){e.preventDefault();last?.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first?.focus();}}
     }}>
-      <header><strong>{w[kind]}</strong><button type="button" aria-label={w.cancel} onClick={onCancel}>×</button></header>
+      <header><strong>{kind==="rotate"?rotation.title:w[kind]}</strong><button type="button" aria-label={w.cancel} onClick={onCancel}>×</button></header>
       <form onSubmit={e=>{e.preventDefault();onApply();}}>
-        <p>{kind==="move"?w.help:w.offsetHelp}</p>
-        <div className="geometry-distance-fields">{values.map((value,i)=><label key={i}>{kind==="move"?(i===0?w.x:w.y):w.distance}<span>
-          <input ref={i===0?first:undefined} aria-label={kind==="move"?(i===0?w.x:w.y):w.distance} type="text" inputMode="decimal" autoComplete="off" spellCheck={false} value={value}
+        <p>{kind==="move"?w.help:kind==="rotate"?rotation.help:w.offsetHelp}</p>
+        <div className="geometry-distance-fields">{values.map((value,i)=><label key={i}>{kind==="move"?(i===0?w.x:w.y):kind==="rotate"?rotation.angle:w.distance}<span>
+          <input ref={i===0?first:undefined} aria-label={kind==="move"?(i===0?w.x:w.y):kind==="rotate"?rotation.angle:w.distance} type="text" inputMode="decimal" autoComplete="off" spellCheck={false} value={value}
             onFocus={e=>e.currentTarget.select()} onMouseUp={e=>e.preventDefault()} onChange={e=>onChange(values.map((v,j)=>i===j?e.target.value:v))}/><b>{unit}</b>
         </span></label>)}</div>
         {error?<p className="geometry-edit-error" role="alert">{error}</p>:null}
