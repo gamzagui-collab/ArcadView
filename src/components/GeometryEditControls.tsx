@@ -1,11 +1,11 @@
-import {useLayoutEffect,useRef} from "react";
+import {useLayoutEffect,useRef,type ReactNode} from "react";
 import {createPortal} from "react-dom";
 import {useBackNavigation} from "../app/backNavigation";
 import {useI18n} from "../i18n/I18nProvider";
 import type {DrawingViewer} from "../viewer/DrawingViewer";
 import type {OffsetGuide} from "../viewer/offsetGeometry";
 
-export function GeometryDistanceDialog({kind,values,unit,error,onChange,onApply,onCancel,title,labels,help}:{title?:string;labels?:string[];help?:string;kind:"move"|"offset"|"rotate";values:string[];unit:string;error:string;onChange(values:string[]):void;onApply():void;onCancel():void}){
+export function GeometryDistanceDialog({kind,values,unit,error,onChange,onApply,onCancel,title,labels,help,options}:{title?:string;labels?:string[];help?:string;options?:ReactNode;kind:"move"|"offset"|"rotate";values:string[];unit:string;error:string;onChange(values:string[]):void;onApply():void;onCancel():void}){
   const {locale}=useI18n();
   const w={ko:{move:"이동 거리",offset:"옵셋 거리",apply:"적용",go:"이동",cancel:"취소",x:"X 이동",y:"Y 이동",distance:"거리",help:"X: 오른쪽 + / 왼쪽 − · Y: 위 + / 아래 −",offsetHelp:"선택한 화살표 방향으로 평행한 객체를 추가합니다."},en:{move:"Move distance",offset:"Offset distance",apply:"Apply",go:"Move",cancel:"Cancel",x:"X displacement",y:"Y displacement",distance:"Distance",help:"X: right + / left − · Y: up + / down −",offsetHelp:"Add a parallel copy in the selected arrow direction."},tr:{move:"Taşıma mesafesi",offset:"Öteleme mesafesi",apply:"Uygula",go:"Taşı",cancel:"İptal",x:"X mesafesi",y:"Y mesafesi",distance:"Mesafe",help:"X: sağ + / sol − · Y: yukarı + / aşağı −",offsetHelp:"Seçilen ok yönünde paralel bir kopya ekler."}}[locale];
   const dialog=useRef<HTMLElement>(null),first=useRef<HTMLInputElement>(null);
@@ -30,6 +30,7 @@ export function GeometryDistanceDialog({kind,values,unit,error,onChange,onApply,
           <input ref={i===0?first:undefined} aria-label={field(i)} type="text" inputMode="decimal" autoComplete="off" spellCheck={false} value={value}
             onFocus={e=>e.currentTarget.select()} onMouseUp={e=>e.preventDefault()} onChange={e=>onChange(values.map((v,j)=>i===j?e.target.value:v))}/><b>{unit}</b>
         </span></label>)}</div>
+        {options}
         {error?<p className="geometry-edit-error" role="alert">{error}</p>:null}
         <div className="geometry-edit-actions"><button type="button" onClick={onCancel}>{w.cancel}</button><button type="submit" className="geometry-edit-apply">{kind==="move"?w.go:w.apply}</button></div>
       </form>
