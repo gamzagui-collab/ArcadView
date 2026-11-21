@@ -7,8 +7,11 @@ it("keeps view actions available separately and exposes selection/deletion with 
   const render=(canDelete:boolean)=>renderToStaticMarkup(<ViewerToolbar onCommand={()=>{}} canMeasure selecting canDelete={canDelete}/>);
   const locked=render(false),ready=render(true);
   const fixed=locked.split('class="viewer-tools-scroll"')[0];
-  for(const action of ["zoomIn","zoomOut","reset"])expect(fixed).toContain(`aria-label="${action}"`);
-  expect(locked).not.toContain('aria-label="fit"');
+  for(const action of ["reset","Undo","Redo","Cancel tool"])expect(fixed).toContain(`aria-label="${action}"`);
+  for(const action of ["fit","zoomIn","zoomOut"])expect(locked).not.toContain(`aria-label="${action}"`);
+  const scrolling=locked.match(/class="viewer-tools-scroll"[^>]*>([\s\S]*?)<\/div>/)![1];
+  expect(scrolling.match(/<button /g)).toHaveLength(4);
+  for(const action of ["Undo","Redo","Cancel tool"])expect(scrolling).not.toContain(`aria-label="${action}"`);
   expect(locked).toMatch(/data-tool="select"[^>]*aria-pressed="true"/);
   expect(locked).toMatch(/data-tool="delete"[^>]*disabled=""/);
   expect(ready).not.toMatch(/data-tool="delete"[^>]*disabled/);

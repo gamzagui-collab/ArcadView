@@ -1,4 +1,4 @@
-import { POINT_LAYER_ID,type AnnotationDocument,type AnnotationTool } from "../viewer/annotations";
+import { drawingLayers,type AnnotationDocument,type AnnotationTool } from "../viewer/annotations";
 /** Classify completed objects, not every UI commit (typing layer names, visibility, etc.). */
 export function annotationUsage(before:AnnotationDocument,after:AnnotationDocument,tool:AnnotationTool):string|null{
   if(tool==="trim")return null;
@@ -12,6 +12,6 @@ export function annotationUsage(before:AnnotationDocument,after:AnnotationDocume
     if(["polyline","circle","rectangle","text"].includes(tool))return"draw."+tool;
     return"edit.style";
   }
-  if(after.layers.filter(l=>l.id!==POINT_LAYER_ID).length>before.layers.filter(l=>l.id!==POINT_LAYER_ID).length)return"layer.create";
+  if(drawingLayers(after).length>drawingLayers(before).length)return"layer.create";
   return null;
 }

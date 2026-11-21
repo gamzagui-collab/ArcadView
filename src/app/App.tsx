@@ -110,6 +110,7 @@ export function App() {
   const [editHistory,setEditHistory]=useState<EditHistoryState>({canUndo:false,canRedo:false});
   const [measurementPanelOpen,setMeasurementPanelOpen]=useState(false);
   const [annotationOpen,setAnnotationOpen]=useState(false);
+  const [layersOpen,setLayersOpen]=useState(false);
   const [annotationActive,setAnnotationActive]=useState(false);
   const measurementActivated=useRef(false);
   const [measurementGeometry, setMeasurementGeometry] = useState<MeasurementGeometry | null>(null);
@@ -146,7 +147,7 @@ export function App() {
     setMeasurement(emptyMeasurement);
     measurementHistory.current.clear();setEditHistory({canUndo:false,canRedo:false});
     setMeasurementPanelOpen(false);
-    setAnnotationOpen(false);setAnnotationActive(false);
+    setAnnotationOpen(false);setAnnotationActive(false);setLayersOpen(false);
     measurementActivated.current=false;
     setMeasurementGeometry(null);
     unitPreferenceRef.current = null;
@@ -375,7 +376,7 @@ export function App() {
     setIncomingArchive(null);
     setState({ status: "home" });
     setMeasurementPanelOpen(false);
-    setAnnotationOpen(false);setAnnotationActive(false);
+    setAnnotationOpen(false);setAnnotationActive(false);setLayersOpen(false);
   }, []);
 
   const handleBack = useCallback(() => {
@@ -383,6 +384,8 @@ export function App() {
       setLibraryOpen(false);
     } else if(viewerRef.current?.finishText?.()){
       // Finish a text transaction before backing out of tools or the drawing.
+    } else if(layersOpen){
+      setLayersOpen(false);
     } else if(annotationOpen){
       setAnnotationOpen(false);
     } else if(annotationActive){
@@ -396,7 +399,7 @@ export function App() {
     } else if (Capacitor.isNativePlatform()) {
       void incomingDrawingPlugin.exitApp().catch(() => undefined);
     }
-  }, [closeDrawing, libraryOpen, state.status, measurement.enabled,measurementPanelOpen,annotationOpen,annotationActive]);
+  }, [closeDrawing, libraryOpen, state.status, measurement.enabled,measurementPanelOpen,annotationOpen,annotationActive,layersOpen]);
   useBackNavigation(handleBack);
 
   useEffect(() => {
@@ -509,6 +512,7 @@ export function App() {
     apply();
   };
   const openMeasurementTools=()=>{
+    setLayersOpen(false);
     setAnnotationActive(false);setAnnotationOpen(false);setMeasurementPanelOpen(open=>!open);
     const current=measurementRef.current;
     if(!hasToolAccess(measurementToolId(current.mode))){
@@ -530,7 +534,7 @@ export function App() {
     viewerRef.current?.cancelGesture?.();
     if(command==="cancel"){
       viewerRef.current?.edit?.("cancel");
-      setAnnotationActive(false);setAnnotationOpen(false);setMeasurementPanelOpen(false);setMeasurementFeedback(null);
+      setAnnotationActive(false);setAnnotationOpen(false);setLayersOpen(false);setMeasurementPanelOpen(false);setMeasurementFeedback(null);
       const next={...measurementRef.current,enabled:false,points:[],entity:null};measurementRef.current=next;setMeasurement(next);
       measurementHistory.current.clear();measurementActivated.current=false;
     }else if(measurementRef.current.enabled&&!annotationActive){
@@ -570,10 +574,12 @@ export function App() {
           onMeasurementReady={handleMeasurementReady}
           onMeasurementPick={handleMeasurementPick}
           onEditHistory={setEditHistory}
-          annotationActive={annotationActive} annotationOpen={annotationOpen} sourceUnit={sourceUnit} displayUnit={displayUnit}
+          annotationActive={annotationActive} annotationOpen={annotationOpen} layersOpen={layersOpen}
+          onLayersToggle={()=>{setLayersOpen(open=>!open);setAnnotationOpen(false);setMeasurementPanelOpen(false);}}
+          onLayersHide={()=>setLayersOpen(false)} sourceUnit={sourceUnit} displayUnit={displayUnit}
           precision={precision} onPrecision={handlePrecision}
           onAnnotationHide={()=>setAnnotationOpen(open=>!open)} onAnnotationPause={()=>setAnnotationActive(false)}
-          onAnnotationActivate={()=>{setAnnotationActive(true);setMeasurement(current=>({...current,enabled:false}));setMeasurementPanelOpen(false);}}
+          onAnnotationActivate={()=>{setLayersOpen(false);setAnnotationActive(true);setMeasurement(current=>({...current,enabled:false}));setMeasurementPanelOpen(false);}}
         />}
       </Suspense>
     ) : null;
@@ -646,7 +652,7 @@ export function App() {
 
       <ViewerToolbar onCommand={sendCommand}
         selecting={annotationActive&&editHistory.selecting} canDelete={annotationActive&&editHistory.canDelete}
-        onSelect={()=>{viewerRef.current?.objectAction?.("select");setAnnotationOpen(false);}}
+        onSelect={()=>{setLayersOpen(false);viewerRef.current?.objectAction?.("select");setAnnotationOpen(false);}}
         onDelete={()=>viewerRef.current?.objectAction?.("delete")}
         canUndo={measurement.enabled&&!annotationActive?measurementHistory.current.canUndo:editHistory.canUndo}
         canRedo={measurement.enabled&&!annotationActive?measurementHistory.current.canRedo:editHistory.canRedo}
@@ -654,7 +660,7 @@ export function App() {
         canMeasure={state.drawing.format !== "pdf"}
         measuring={measurement.enabled}
         panelOpen={measurementPanelOpen}
-        editing={annotationActive} editOpen={annotationOpen} onEdit={()=>{setAnnotationOpen(open=>!open);setAnnotationActive(true);setMeasurement(current=>({...current,enabled:false}));setMeasurementPanelOpen(false);}}
+        editing={annotationActive} editOpen={annotationOpen} onEdit={()=>{setLayersOpen(false);setAnnotationOpen(open=>!open);setAnnotationActive(true);setMeasurement(current=>({...current,enabled:false}));setMeasurementPanelOpen(false);}}
         onMeasure={openMeasurementTools} />
       {state.drawing.format!=="pdf"&&!annotationActive?<MeasurementStatus settings={measurement} sourceUnit={sourceUnit} displayUnit={displayUnit} feedback={measurementFeedback} precision={precision}
         onShow={()=>setMeasurementPanelOpen(open=>!open)} onFinish={finishMeasurement} finishDisabled={measurementSaving||(commerce.managed&&measurementOperation.blocked())} onToggle={toggleMeasurement}/>:null}

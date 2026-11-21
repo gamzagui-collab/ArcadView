@@ -4,6 +4,9 @@ import { segmentFoot, type Segment } from "./cadPicking";
 import {curveLength,rectangleCorners,rotatePoint} from "./curveGeometry";
 type P = DrawingPoint;
 export const POINT_LAYER_ID="arcad-point-layer",POINT_LAYER_NAME="포인트그리기";
+export const DIMENSION_LAYER_ID="arcad-dimension-layer",DIMENSION_LAYER_NAME="치수그리기";
+export const isDimensionTool=(tool:string)=>tool==="dimension-aligned"||tool==="dimension-linear";
+export const isReservedLayer=(id:string)=>id===POINT_LAYER_ID||id===DIMENSION_LAYER_ID;
 export const POINT_TOOLS=["point-arrow","point-cloud","point-circle","point-rectangle","point-leader"]as const;
 export type PointTool=typeof POINT_TOOLS[number];
 export const isPointTool=(tool:string):tool is PointTool=>(POINT_TOOLS as readonly string[]).includes(tool);
@@ -14,14 +17,20 @@ export type UserLayer = {id:string;name:string;color:string;visible:boolean};
 export type AnnotationDocument = {version:1;layers:UserLayer[];activeLayer:string;objects:Annotation[];dimensionScale:number;textHeight?:number};
 export const uid=()=>crypto.randomUUID();
 export function newAnnotationDocument():AnnotationDocument{return{version:1,layers:[{id:"base",name:"기본",color:"#49cfff",visible:true}],activeLayer:"base",objects:[],dimensionScale:20};}
-export const drawingLayers=(doc:AnnotationDocument)=>doc.layers.filter(l=>l.id!==POINT_LAYER_ID);
+export const drawingLayers=(doc:AnnotationDocument)=>doc.layers.filter(l=>!isReservedLayer(l.id));
 export const pointLayer=(doc:AnnotationDocument):UserLayer=>doc.layers.find(l=>l.id===POINT_LAYER_ID)??{id:POINT_LAYER_ID,name:POINT_LAYER_NAME,color:"#ff586d",visible:true};
-export function ensurePointLayer(doc:AnnotationDocument):AnnotationDocument{return doc.layers.some(l=>l.id===POINT_LAYER_ID)?doc:{...doc,layers:[...doc.layers,pointLayer(doc)]};}
+export const dimensionLayer=(doc:AnnotationDocument):UserLayer=>doc.layers.find(l=>l.id===DIMENSION_LAYER_ID)??{id:DIMENSION_LAYER_ID,name:DIMENSION_LAYER_NAME,color:"#fa68df",visible:true};
+export function ensurePointLayer(doc:AnnotationDocument):AnnotationDocument{return doc.layers.some(l=>l.id===POINT_LAYER_ID)?doc:{...doc,layers:[...drawingLayers(doc),pointLayer(doc),...doc.layers.filter(l=>l.id===DIMENSION_LAYER_ID)]};}
+export function ensureDimensionLayer(doc:AnnotationDocument):AnnotationDocument{return doc.layers.some(l=>l.id===DIMENSION_LAYER_ID)?doc:{...doc,layers:[...doc.layers,dimensionLayer(doc)]};}
+export function addDimensionObject(doc:AnnotationDocument,object:Annotation):AnnotationDocument {
+  if(!isDimensionTool(object.kind)||object.layerId!==DIMENSION_LAYER_ID)throw Error("Dimensions must use the reserved dimension layer");
+  const next=ensureDimensionLayer(doc);return{...next,objects:[...next.objects,object]};
+}
 /** The active drawing layer never becomes the reserved markup layer. */
 export function removeDrawingLayer(doc:AnnotationDocument,id:string):AnnotationDocument{
-  if(id===POINT_LAYER_ID||!doc.layers.some(l=>l.id===id))return doc;
-  const normal=drawingLayers(doc).filter(l=>l.id!==id),layers=[...(normal.length?normal:newAnnotationDocument().layers),...doc.layers.filter(l=>l.id===POINT_LAYER_ID)];
-  return{...doc,layers,activeLayer:layers.some(l=>l.id===doc.activeLayer&&l.id!==POINT_LAYER_ID)?doc.activeLayer:layers[0].id,objects:doc.objects.filter(o=>o.layerId!==id)};
+  if(isReservedLayer(id)||!doc.layers.some(l=>l.id===id))return doc;
+  const normal=drawingLayers(doc).filter(l=>l.id!==id),layers=[...(normal.length?normal:newAnnotationDocument().layers),...doc.layers.filter(l=>isReservedLayer(l.id))];
+  return{...doc,layers,activeLayer:layers.some(l=>l.id===doc.activeLayer&&!isReservedLayer(l.id))?doc.activeLayer:layers[0].id,objects:doc.objects.filter(o=>o.layerId!==id)};
 }
 export const visibleAnnotations=(d:AnnotationDocument)=>d.objects.filter(o=>d.layers.some(l=>l.id===o.layerId&&l.visible));
 export function annotationPoints(o:Annotation):P[]{
@@ -209,15 +218,16 @@ export function trimAnnotation(target:Annotation,cutters:Annotation[],cad:Segmen
 }
 const PREFIX="arcad.annotations.v1.";
 function validateDocument(d:AnnotationDocument):void{
-  if(d.version!==1||!Array.isArray(d.layers)||d.layers.length<1||d.layers.length>4||!Array.isArray(d.objects)||d.objects.length>3000||!d.layers.some(l=>l.id===d.activeLayer&&l.id!==POINT_LAYER_ID)||drawingLayers(d).length>3||!Number.isFinite(d.dimensionScale)||d.dimensionScale<1||d.dimensionScale>10000)throw Error();
+  if(d.version!==1||!Array.isArray(d.layers)||d.layers.length<1||d.layers.length>5||!Array.isArray(d.objects)||d.objects.length>3000||!d.layers.some(l=>l.id===d.activeLayer&&!isReservedLayer(l.id))||drawingLayers(d).length>3||!Number.isFinite(d.dimensionScale)||d.dimensionScale<1||d.dimensionScale>10000)throw Error();
   const ids=new Set(d.layers.map(l=>l.id));if(ids.size!==d.layers.length)throw Error();
-  for(const l of d.layers)if(typeof l.id!=="string"||typeof l.name!=="string"||!/^#[a-f0-9]{6}$/i.test(l.color)||typeof l.visible!=="boolean"||(l.id===POINT_LAYER_ID&&(l.name!==POINT_LAYER_NAME||l!==d.layers.at(-1))))throw Error();
+  for(const l of d.layers)if(typeof l.id!=="string"||typeof l.name!=="string"||!/^#[a-f0-9]{6}$/i.test(l.color)||typeof l.visible!=="boolean"||(l.id===POINT_LAYER_ID&&(l.name!==POINT_LAYER_NAME||d.layers.indexOf(l)!==d.layers.length-(d.layers.some(l=>l.id===DIMENSION_LAYER_ID)?2:1)))||(l.id===DIMENSION_LAYER_ID&&(l.name!==DIMENSION_LAYER_NAME||l!==d.layers.at(-1))))throw Error();
   if(d.textHeight!==undefined&&(!Number.isFinite(d.textHeight)||d.textHeight<=0||d.textHeight>1e6))throw Error();
   for(const o of d.objects){
     if(!ids.has(o.layerId)||typeof o.id!=="string"||!["text","polyline","circle","arc","rectangle","dimension-aligned","dimension-linear","mask",...POINT_TOOLS].includes(o.kind)||!Array.isArray(o.points)||o.points.length<(o.kind==="text"?1:2)||o.points.length>30000||o.points.some(p=>!Number.isFinite(p.x)||!Number.isFinite(p.y))||(o.kind==="rectangle"&&![2,4].includes(o.points.length))||((o.kind==="circle"||o.kind==="arc")&&o.points.length!==2)||(o.kind.startsWith("dimension")&&(o.points.length!==3||!Number.isFinite(o.scale)||o.scale!<1||o.scale!>10000))||(o.kind==="arc"&&(!Number.isFinite(o.start)||!Number.isFinite(o.sweep)||o.sweep!<=0||o.sweep!>TAU))||(o.kind==="text"&&(o.points.length!==1||typeof o.text!=="string"||!o.text.trim()||o.text.length>500||!Number.isFinite(o.textHeight)||o.textHeight!<=0||o.textHeight!>1e6)))throw Error();
     if(o.rotation!==undefined&&(!Number.isFinite(o.rotation)||o.rotation<0||o.rotation>=360)||o.curved!==undefined&&typeof o.curved!=="boolean")throw Error();
     if(o.color!==undefined&&!/^#[a-f0-9]{6}$/i.test(o.color))throw Error();
     if(isPointAnnotation(o)!==(o.layerId===POINT_LAYER_ID))throw Error();
+    if(o.layerId===DIMENSION_LAYER_ID&&!isDimensionTool(o.kind))throw Error();
     if(isPointAnnotation(o)&&((!(["point-rectangle","point-cloud"].includes(o.kind)?[2,4]:[2]).includes(o.points.length))||!Number.isFinite(o.screenWidth)||o.screenWidth!<1||o.screenWidth!>12||!o.color))throw Error();
     if(o.kind==="point-leader"&&(typeof o.text!=="string"||!o.text.trim()||o.text.length>500||!Number.isFinite(o.screenFontSize)||o.screenFontSize!<10||o.screenFontSize!>48))throw Error();
   }

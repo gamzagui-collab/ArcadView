@@ -1,3 +1,4 @@
+import {ToolStrip} from "./ToolStrip";
 import { useI18n } from "../i18n/I18nProvider";
 import { CloseIcon } from "./Icons";
 import { ToolIcon } from "./ToolIcon";
@@ -42,11 +43,11 @@ export function MeasurementPanel({ settings, geometry, sourceUnit, displayUnit, 
         {settings.mode === "object" && settings.entity?.area !== undefined ? <span>{t("measureArea")}: {format(settings.entity.area, true)}</span> : null}
       </div>
       <button type="button" className="icon-button" aria-label={t("closeMeasurement")} onClick={onHide}><CloseIcon /></button></div>
-      <div className="measurement-modes">
+      <ToolStrip className="measurement-modes" tabIndex={0}>
         {(["distance", "linear", "path", "area", "angle", "object"] as MeasurementMode[]).map((mode) => (
           <button key={mode} type="button" aria-pressed={settings.mode === mode} onClick={() => onSettings({ ...settings, enabled: true, displayOnly:false, mode, points: [], entity: null })}><ToolIcon name={mode}/><span>{t(modeKeys[mode])}{mode==="distance"?<small className="tool-free-label">{locale==="ko"?"무료 · 무제한":locale==="en"?"Free · unlimited":"Ücretsiz · sınırsız"}</small>:null}</span></button>
         ))}
-      </div>
+      </ToolStrip>
       <details className="measurement-help"><summary>{t("measureHelp")}</summary><p className="measurement-instruction">{instruction}</p></details>
       {settings.mode === "linear" ? <label className="measurement-linear-axis">{t("measureLinearAxis")}<select value={settings.linearAxis ?? "auto"} onChange={e => onSettings({ ...settings, linearAxis: e.target.value as LinearAxis })}>
         <option value="auto">{t("measureAxisAuto")}</option><option value="x">{t("measureHorizontal")}</option><option value="y">{t("measureVertical")}</option>

@@ -35,6 +35,9 @@ type Props = {
   onMeasurementReady(geometry: MeasurementGeometry): void;
   annotationActive:boolean;
   annotationOpen:boolean;
+  layersOpen:boolean;
+  onLayersToggle():void;
+  onLayersHide():void;
   sourceUnit:MeasurementUnit;
   displayUnit:MeasurementUnit;
   precision:number;
@@ -46,7 +49,7 @@ type Props = {
 };
 
 export const DrawingCanvas = forwardRef<ViewerHandle, Props>(
-  function DrawingCanvas({ file, onProgress, onReady, onError, measurement, onMeasurementPick, onMeasurementReady,annotationActive,annotationOpen,sourceUnit,displayUnit,precision,onPrecision,onAnnotationHide,onAnnotationActivate,onAnnotationPause,onEditHistory }, ref) {
+  function DrawingCanvas({ file, onProgress, onReady, onError, measurement, onMeasurementPick, onMeasurementReady,annotationActive,annotationOpen,layersOpen,onLayersToggle,onLayersHide,sourceUnit,displayUnit,precision,onPrecision,onAnnotationHide,onAnnotationActivate,onAnnotationPause,onEditHistory }, ref) {
     const {locale}=useI18n();
     const containerRef = useRef<HTMLDivElement>(null);
     const viewerRef = useRef<DrawingViewer | null>(null);
@@ -149,7 +152,7 @@ export const DrawingCanvas = forwardRef<ViewerHandle, Props>(
     return (
       <div className={`drawing-canvas ${measurement.enabled ? "measurement-active" : ""}`}>
         <div ref={containerRef} className="drawing-surface" />
-        {readyViewer?<AnnotationEditor ref={annotationRef} viewer={readyViewer} active={annotationActive} open={annotationOpen} sourceUnit={sourceUnit} displayUnit={displayUnit} precision={precision} onPrecision={onPrecision} onHide={onAnnotationHide} onActivate={onAnnotationActivate} onPause={onAnnotationPause} onHistoryState={onEditHistory}/>:null}
+        {readyViewer?<AnnotationEditor ref={annotationRef} viewer={readyViewer} active={annotationActive} open={annotationOpen} layersOpen={layersOpen} onLayersToggle={onLayersToggle} onLayersHide={onLayersHide} sourceUnit={sourceUnit} displayUnit={displayUnit} precision={precision} onPrecision={onPrecision} onHide={onAnnotationHide} onActivate={onAnnotationActivate} onPause={onAnnotationPause} onHistoryState={onEditHistory}/>:null}
         <svg ref={overlayRef} className="measurement-overlay" aria-hidden="true" />
       </div>
     );

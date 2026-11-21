@@ -24,6 +24,7 @@ export const PdfViewer = forwardRef<ViewerHandle, Props>(function PdfViewer(
   const [document, setDocument] = useState<PDFDocumentProxy | null>(null);
   const [page, setPage] = useState(1);
   const [zoom, setZoom] = useState(1);
+  const zoomRef=useRef(zoom);zoomRef.current=zoom;
   const [width, setWidth] = useState(0);
   const [rendering, setRendering] = useState(true);
 
@@ -46,6 +47,19 @@ export const PdfViewer = forwardRef<ViewerHandle, Props>(function PdfViewer(
     setWidth(element.clientWidth);
     return () => observer.disconnect();
   }, []);
+
+  // The compact toolbar has no zoom buttons; retain PDF zoom through two fingers.
+  useEffect(()=>{
+    const element=scrollRef.current;if(!element)return;
+    let pinch:{distance:number;zoom:number}|null=null;
+    const span=(e:TouchEvent)=>Math.hypot(e.touches[1].clientX-e.touches[0].clientX,e.touches[1].clientY-e.touches[0].clientY);
+    const start=(e:TouchEvent)=>{pinch=e.touches.length===2?{distance:span(e),zoom:zoomRef.current}:null;};
+    const move=(e:TouchEvent)=>{if(!pinch||e.touches.length!==2||pinch.distance<4)return;if(e.cancelable)e.preventDefault();setZoom(Math.max(.25,Math.min(6,pinch.zoom*span(e)/pinch.distance)));};
+    const end=()=>{pinch=null;};
+    element.addEventListener("touchstart",start,{passive:true});element.addEventListener("touchmove",move,{passive:false});
+    element.addEventListener("touchend",end);element.addEventListener("touchcancel",end);
+    return()=>{element.removeEventListener("touchstart",start);element.removeEventListener("touchmove",move);element.removeEventListener("touchend",end);element.removeEventListener("touchcancel",end);};
+  },[]);
 
   useEffect(() => {
     let active = true;
