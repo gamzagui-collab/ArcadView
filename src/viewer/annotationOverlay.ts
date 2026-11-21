@@ -8,7 +8,8 @@ const NS="http://www.w3.org/2000/svg";
 export function drawAnnotations(svg:SVGSVGElement,doc:AnnotationDocument,selected:string|null,draft:Annotation|null,project:(p:readonly DrawingPoint[])=>DrawingPoint[],source:MeasurementUnit,display:MeasurementUnit,precision=3,locale="ko",draftPointWindow?:string):void{
   const children:SVGElement[]=[];
   const el=(tag:string,attrs:Record<string,string|number>)=>{const e=document.createElementNS(NS,tag);for(const[k,v]of Object.entries(attrs))e.setAttribute(k,String(v));children.push(e);return e;};
-  const line=(points:DrawingPoint[],color:string,css:string,id:string)=>el("polyline",{points:project(points).map(p=>`${p.x},${p.y}`).join(" "),stroke:color,class:css,"data-object":id});
+  let objectWidth:number|undefined;
+  const line=(points:DrawingPoint[],color:string,css:string,id:string)=>el("polyline",{points:project(points).map(p=>`${p.x},${p.y}`).join(" "),stroke:color,class:css,"data-object":id,...(objectWidth!==undefined&&/annotation-(line|halo|extension)/.test(css)?{style:`stroke-width:${css==="annotation-halo"?objectWidth+3:css==="annotation-extension"?Math.max(1,objectWidth*.6):objectWidth}px`}:{})});
   const objects=visibleAnnotations(doc);
   // Erasures are a reversible overlay, drawn below all user geometry.
   for(const o of objects.filter(o=>o.kind==="mask")){
@@ -17,6 +18,7 @@ export function drawAnnotations(svg:SVGSVGElement,doc:AnnotationDocument,selecte
   }
   for(const o of [...objects.filter(o=>o.kind!=="mask"&&!isPointAnnotation(o)),...objects.filter(isPointAnnotation),...(draft?[draft]:[])]){
     const first=children.length;
+    objectWidth=o.screenWidth;
     const color=o.color??doc.layers.find(l=>l.id===o.layerId)?.color??"#49cfff",active=o.id===selected;
     const dim=o.kind.startsWith("dimension")?dimensionGeometry(o,source):null;
     if(isPointAnnotation(o))drawPointAnnotation(o,project,el);

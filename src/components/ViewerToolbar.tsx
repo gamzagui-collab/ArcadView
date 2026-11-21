@@ -33,12 +33,12 @@ export function ViewerToolbar({ onCommand, canMeasure, measuring, panelOpen, onM
   const words={ko:{view:"보기",tools:"작업 도구",select:"객체 선택",remove:"객체 삭제",history:"실행 취소 · 다시 실행 · 도구 해제",undo:"실행 취소",redo:"다시 실행",cancel:"도구 해제"},en:{view:"View",tools:"Tools",select:"Select object",remove:"Delete object",history:"Undo, redo and cancel tool",undo:"Undo",redo:"Redo",cancel:"Cancel tool"},tr:{view:"Görünüm",tools:"Araçlar",select:"Nesne seç",remove:"Nesneyi sil",history:"Geri al, yinele ve aracı bırak",undo:"Geri al",redo:"Yinele",cancel:"Aracı bırak"}}[locale];
 
   return (
-    <nav className={`viewer-toolbar ${canMeasure ? "with-measure with-edit" : ""}`} aria-label={t("viewerControls")}>
-      {canMeasure?<div className="viewer-fixed-row"><div className="viewer-history-group" role="group" aria-label={words.history}>
+    <>
+      {canMeasure?<aside className="viewer-history-dock" role="group" aria-label={words.history}>
         <button type="button" aria-label={words.undo} title={words.undo} disabled={!canUndo} onClick={onUndo}><UndoIcon/></button>
         <button type="button" aria-label={words.redo} title={words.redo} disabled={!canRedo} onClick={onRedo}><RedoIcon/></button>
-        <button type="button" aria-label={words.cancel} title={words.cancel} onClick={onCancel}><CancelToolIcon/></button>
-      </div></div>:null}
+      </aside>:null}
+    <nav className={`viewer-toolbar ${canMeasure ? "with-measure with-edit" : ""}`} aria-label={t("viewerControls")}>
       <div className="viewer-tool-row">
         <div className="viewer-view-group" role="group" aria-label={words.view}>
           <button type="button" aria-label={t("reset")} title={t("reset")} onClick={()=>onCommand("reset")}><ResetIcon/></button>
@@ -49,8 +49,10 @@ export function ViewerToolbar({ onCommand, canMeasure, measuring, panelOpen, onM
           <button type="button" data-tool="select" aria-label={words.select} title={words.select} aria-pressed={!!selecting} onClick={onSelect}><ToolIcon name="select"/><span>{words.select}</span></button>
           <button type="button" data-tool="delete" aria-label={words.remove} title={words.remove} disabled={!canDelete} onClick={onDelete}><ToolIcon name="delete"/><span>{words.remove}</span></button>
         </ToolStrip>:null}
+        {canMeasure?<button type="button" className="viewer-cancel-tool" aria-label={words.cancel} title={words.cancel} onClick={onCancel}><CancelToolIcon/></button>:null}
       </div>
     </nav>
+    </>
   );
 }
 

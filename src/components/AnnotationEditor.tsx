@@ -25,6 +25,8 @@ import { PointLeaderEditor, PointStyleControls } from "./PointControls";
 import {moveHandlePosition,objectGrips,reshapeObject,rotateObject,rotationDegrees,rotationReference} from "../viewer/objectEditing";
 import {rotatePoint} from "../viewer/curveGeometry";
 import {extendToBoundary} from "../viewer/extendGeometry";
+import {objectColor,objectStyleValue,styleAnnotation,type ObjectStyle} from "../viewer/annotationStyle";
+import {ObjectStyleControls} from "./ObjectStyleControls";
 const words={
   ko:{title:"레이어 · 그리기",add:"레이어 추가",remove:"레이어 삭제",layer:"레이어",select:"선택",polyline:"폴리라인",circle:"원",rectangle:"사각형","dimension-aligned":"정렬 치수","dimension-linear":"선형 치수",trim:"라인 삭제 (트림)",erase:"객체 삭제",finish:"완료",cancel:"취소",undo:"실행 취소",snap:"스냅",scale:"치수 배율",saved:"자동 저장됨",unsaved:"저장 실패 — 공간을 확인하세요",close:"그리기 창 닫기",pause:"그리기 중지",pick:"원본 선 또는 추가 객체를 선택하세요",polyHelp:"점을 차례로 찍고 완료를 누르세요. 시작점 스냅으로 닫을 수 있습니다.",twoHelp:"두 점을 선택하세요. 길게 누르면 위쪽 조준점으로 정밀하게 찍습니다.",dimHelp:"기준점 2개 → 치수선 위치를 선택하세요.",trimHelp:"제거할 구간을 누르세요. 보이는 선·원과의 교차점이 절단 경계입니다.",noBoundary:"절단할 교차 경계가 없습니다.",hidden:"숨긴 레이어입니다. 표시를 켜세요.",noHit:"선택할 객체가 없습니다.",masked:"원본 가림 추가",deleted:"객체 삭제됨",trimmed:"선 구간 제거됨",source:"원본 객체",need:"점을 더 선택하세요",limit:"객체 또는 경계 수 한도를 초과했습니다.",scaleHelp:"새 치수와 선택한 치수에 적용",restore:"레이어를 숨기거나 삭제하면 가린 원본이 다시 보입니다."},
   en:{title:"Layers · Draw",add:"Add layer",remove:"Delete layer",layer:"Layer",select:"Select",polyline:"Polyline",circle:"Circle",rectangle:"Rectangle","dimension-aligned":"Aligned dim","dimension-linear":"Linear dim",trim:"Trim line",erase:"Delete object",finish:"Finish",cancel:"Cancel",undo:"Undo",snap:"Snap",scale:"Dim scale",saved:"Auto saved",unsaved:"Save failed — check storage",close:"Close drawing tools",pause:"Stop editing",pick:"Select original geometry or a user object",polyHelp:"Pick vertices, then Finish. Snap back to the start to close.",twoHelp:"Pick two points. Hold for the precision target above your finger.",dimHelp:"Pick two references, then the dimension position.",trimHelp:"Tap the segment to remove. Visible intersections are cutting boundaries.",noBoundary:"No cutting intersection found.",hidden:"Show the active layer first.",noHit:"No selectable object here.",masked:"Original masked",deleted:"Object deleted",trimmed:"Segment trimmed",source:"Original object",need:"Pick more points",limit:"Too many objects or cutting edges.",scaleHelp:"Applies to new and selected dimensions",restore:"Hide or delete a layer to reveal masked originals."},
@@ -80,6 +82,8 @@ export const AnnotationEditor=forwardRef<AnnotationEditorHandle,Props>(function 
   const pickingMasks=useMemo(()=>[...visible.filter(o=>o.kind==="mask"),...((handleActive||["move","rotate"].includes(tool)&&draft.length>=1)&&original?[{id:"moving-source",layerId:doc.activeLayer,kind:"mask"as const,points:original.points}]:[])],[visible,tool,draft.length,original,doc.activeLayer,handleActive]);
   const selectedObject=doc.objects.find(o=>o.id===selected);
   const editedModel=useMemo(()=>selectedObject??(original?{...sourceAnnotation(original,doc.activeLayer),id:"source-selection"}:null),[selectedObject,original,doc.activeLayer]);
+  const [stylePreview,setStylePreview]=useState<Annotation|null>(null);
+  useLayoutEffect(()=>setStylePreview(null),[selected,original,active,tool]);
   const originalText=textSession?.originalId?doc.objects.find(o=>o.id===textSession.originalId):undefined;
   const textChanged=!!textSession&&(originalText?
     textSession.text.replace(/\r\n?/g,"\n")!==originalText.text||textSession.height!==originalText.textHeight||textSession.color!==originalText.color:!!textSession.text.trim());
@@ -107,6 +111,13 @@ export const AnnotationEditor=forwardRef<AnnotationEditorHandle,Props>(function 
     const d=docRef.current,next=source?{...object,id:uid(),layerId:d.activeLayer}:object;
     const objects=source?[...d.objects,{id:uid(),layerId:d.activeLayer,kind:"mask"as const,points:source.points.map(p=>({...p}))},next]:d.objects.map(o=>o.id===object.id?next:o);
     if(commit({...d,objects})){setSelected(next.id);setDraft([]);return true;}return false;
+  };
+  const previewStyle=(style:ObjectStyle|null)=>{setStylePreview(style&&editedModel?styleAnnotation(editedModel,style):null);};
+  const applyStyle=(style:ObjectStyle)=>{
+    setStylePreview(null);
+    if(!editedModel||editedModel.kind==="mask"||commercial.blocked())return;
+    if(!original&&Object.entries(style).every(([key,value])=>value===(key==="color"?objectColor(editedModel,doc):key==="screenWidth"||key==="textHeight"||key==="screenFontSize"?objectStyleValue(editedModel):undefined)))return;
+    replaceObject(styleAnnotation(editedModel,style),original);
   };
   const beginHandle=(client:DrawingPoint):AnnotationHandleDrag|null=>{
     if(!active||tool!=="select"||!editedModel||editedModel.kind==="mask"||pending||textSession||pointSession||original&&!current.visible)return null;
@@ -275,12 +286,17 @@ export const AnnotationEditor=forwardRef<AnnotationEditorHandle,Props>(function 
     if(active&&tool==="select"&&preview.current){const hit=pointHit(visible,preview.current.point,18,p=>viewer.projectPoints(p))??annotationHit(visible,preview.current.point,viewer.worldTolerance(18),sourceUnit);temporary=hit?{...hit,id:"selection-preview",color:"#ffffff"}:preview.current.entity?{...sourceAnnotation(preview.current.entity,doc.activeLayer),id:"selection-preview",color:"#ffffff"}:null;}
     if(directPreview.current){temporary=directPreview.current;renderingSelected=temporary.id;renderingDoc={...doc,objects:doc.objects.filter(o=>o.id!==selected)};if(original)renderingDoc={...renderingDoc,objects:[...renderingDoc.objects,{id:"grip-mask",layerId:doc.activeLayer,kind:"mask",points:original.points}]};}
     if(pointSession){if(pointSession.originalId)renderingDoc={...renderingDoc,objects:renderingDoc.objects.filter(o=>o.id!==pointSession.originalId)};temporary={...pointSession.object,text:""};}
-    const originalOutline=original&&active&&!moving&&!directPreview.current&&!(tool==="rotate"&&draft.length)?editedModel:null;
+    let originalOutline=original&&active&&!moving&&!directPreview.current&&!(tool==="rotate"&&draft.length)?editedModel:null;
+    if(active&&tool==="select"&&stylePreview&&!directPreview.current){
+      temporary=null;renderingSelected=stylePreview.id;originalOutline=null;
+      renderingDoc=original?{...doc,objects:[...doc.objects,{id:"style-mask",layerId:doc.activeLayer,kind:"mask",points:original.points},stylePreview]}:{...doc,objects:doc.objects.map(o=>o.id===selected?stylePreview:o)};
+    }
     const draftPointWindow=drawMeasurementOverlay(target.current,{enabled:active&&!handleActive&&tool!=="extend"&&tool!=="trim"&&tool!=="offset"&&(tool!=="move"||!!selected||!!original),mode:"path",points:pending?.kind==="move"&&destination?[pending.base,destination]:pending?.kind==="rotate"&&rotationAngle!==null?[pending.center,rotatePoint(pending.reference,pending.center,rotationAngle)]:tool==="select"?[]:draft,snapping,entity:null},p=>viewer.projectPoints(p),preview.current,[],[],rotationAngle!==null?`${rotationAngle}°`:undefined);
     drawAnnotations(overlay.current,originalOutline?{...renderingDoc,objects:[...renderingDoc.objects,originalOutline]}:renderingDoc,active?(originalOutline?.id??renderingSelected):null,active?temporary:null,p=>viewer.projectPoints(p),sourceUnit,displayUnit,precision,locale,draftPointWindow);
     if(active&&tool==="rotate"&&editedModel&&draft.length){const reference=rotationReference(editedModel,draft[0]);if(reference){const[a,b]=viewer.projectPoints([draft[0],reference]),g=document.createElementNS("http://www.w3.org/2000/svg","g"),line=document.createElementNS(g.namespaceURI,"line"),dot=document.createElementNS(g.namespaceURI,"circle");for(const[k,v]of Object.entries({x1:a.x,y1:a.y,x2:b.x,y2:b.y,stroke:"#a0b5c5","stroke-width":1.5,"stroke-dasharray":"5 5","data-rotation-reference":"true"}))line.setAttribute(k,String(v));for(const[k,v]of Object.entries({cx:b.x,cy:b.y,r:6,fill:"#071a30",stroke:"#ecfaff","stroke-width":2}))dot.setAttribute(k,String(v));g.append(line,dot);target.current.prepend(g);}}
   };
   const renderRef=useRef(render);renderRef.current=render;
+  useLayoutEffect(()=>renderRef.current(),[stylePreview]);
   useLayoutEffect(()=>viewer.subscribeView(()=>renderRef.current()),[viewer]);
   useLayoutEffect(()=>{let mounted=true;void document.fonts?.load('16px ArcadAnnotation').then(()=>{if(mounted)renderRef.current();}).catch(()=>undefined);return()=>{mounted=false;};},[]);
   useLayoutEffect(()=>{viewer.setUserGeometry(geometry,pickingMasks);return()=>viewer.setUserGeometry(annotationGeometry([]),[]);},[viewer,geometry,pickingMasks]);
@@ -322,6 +338,7 @@ export const AnnotationEditor=forwardRef<AnnotationEditorHandle,Props>(function 
     <CanvasTextEditor viewer={viewer} session={textSession} active={active&&tool==="text"&&!open} height={textSession?.height??+heightInput}
       color={(textSession?textSession.color:textColor)??doc.layers.find(l=>l.id===(textSession?.layerId??doc.activeLayer))?.color??"#49cfff"}
       onText={updateText} onStyle={updateTextStyle} onFinish={finishText}/>
+    {active&&tool==="select"&&editedModel&&editedModel.kind!=="mask"&&!handleActive?<ObjectStyleControls object={editedModel} color={objectColor(editedModel,doc)} onPreview={previewStyle} onApply={applyStyle}/>:null}
     {active?<div className="annotation-status" role="status"><button type="button" onClick={onHide}><span>{current.name} · {w[tool]} {draft.length?`· ${draft.length}`:""}</span><small>{notice||(!saved?w.unsaved:w.saved)}</small></button>{tool==="polyline"?<button type="button" className="annotation-finish" disabled={draft.length<2||commercial.blocked()} onClick={()=>add(make(draft,"polyline"))}>{w.finish} ✓</button>:null}<button type="button" onClick={onPause} aria-label={w.pause}>Ⅱ</button></div>:null}
     {layersOpen?<section id="arcad-layer-panel" className="annotation-panel layer-panel" role="dialog" aria-label={u.layers}>
       <header><strong>{u.layers}</strong><span><ToolIcon name="shield"/>{u.original}</span><button type="button" aria-label={layerText.close} onClick={onLayersHide}>×</button></header>

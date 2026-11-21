@@ -239,17 +239,18 @@ button:disabled{opacity:.45}
   .viewer-shell .measurement-status,.viewer-shell .annotation-status {right:12px}
 }
 
-/* Fixed history row above a single reset button and the four scrollable tools. */
+/* One bottom tool row, with history docked vertically at the left. */
 .viewer-shell .viewer-toolbar {
   flex-direction:column; align-items:stretch; gap:4px; padding:0;
   border:0; border-radius:0; background:transparent; box-shadow:none;
 }
-.viewer-shell .viewer-toolbar.with-edit {width:min(360px,calc(100% - 20px))}
-.viewer-fixed-row {display:flex;justify-content:flex-end}
-.viewer-shell .viewer-fixed-row .viewer-history-group {
-  gap:2px; padding:2px; border:1px solid #2c4965; border-radius:9px; background:#0d2439;
-}
-.viewer-shell .viewer-fixed-row button {flex:0 0 34px;width:34px;min-height:32px;height:32px;padding:6px}
+.viewer-shell .viewer-toolbar.with-edit {left:68px;right:10px;width:min(360px,calc(100% - 78px));max-width:calc(100% - 78px)}
+.viewer-history-dock {position:absolute;z-index:7;left:10px;bottom:calc(10px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:2px;padding:3px;border:1px solid #2c4965;border-radius:10px;background:#0d2439;box-shadow:0 5px 16px #0003;pointer-events:auto}
+.viewer-history-dock button {display:grid;place-items:center;width:38px;min-height:38px;height:38px;padding:8px;border:0;border-radius:7px;background:transparent;color:#a6c6df;touch-action:manipulation}
+.viewer-history-dock button:disabled {opacity:.3}
+.viewer-history-dock button:active:not(:disabled) {background:#183f62;color:white}
+.viewer-history-dock svg {width:21px;height:21px}
+.viewer-shell .viewer-toolbar .viewer-cancel-tool {flex:0 0 34px;width:34px;min-height:38px;height:38px;padding:7px;color:#8ddfff;border-left:1px solid #34506c;border-radius:0 7px 7px 0}
 .viewer-tool-row {display:flex;align-items:center;gap:5px;min-width:0;padding:4px;border:1px solid #2c4965;border-radius:12px;background:#0d2439;box-shadow:0 5px 16px #0003}
 .viewer-shell .viewer-view-group {padding:1px}
 .viewer-shell .viewer-view-group button {min-height:38px;height:38px}
@@ -259,9 +260,9 @@ button:disabled{opacity:.45}
 .viewer-shell .viewer-tools-scroll,.viewer-shell .annotation-tools,.viewer-shell .measurement-modes {
   touch-action:pan-y pinch-zoom; user-select:none; -webkit-user-select:none; scroll-behavior:auto;
 }
-.viewer-shell .measurement-status,.viewer-shell .annotation-status {bottom:calc(112px + env(safe-area-inset-bottom))}
+.viewer-shell .measurement-status,.viewer-shell .annotation-status {bottom:calc(73px + env(safe-area-inset-bottom));max-width:min(340px,calc(100% - 78px))}
 .viewer-shell .annotation-panel,.viewer-shell .measurement-panel,.viewer-shell .annotation-panel:focus-within {
-  --inspector-bottom:163px; max-height:calc(100dvh - 240px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  --inspector-bottom:124px; max-height:calc(100dvh - 201px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
 }
 .viewer-shell .annotation-panel .annotation-tabs {grid-template-columns:repeat(3,minmax(0,1fr))}
 .active-layer-badge {pointer-events:auto;cursor:pointer;min-height:32px;height:32px;width:32px;padding:0;line-height:1;z-index:7}
@@ -275,3 +276,12 @@ button:disabled{opacity:.45}
 .layer-panel .reserved-point-layer input[type=color] {width:26px;height:26px;flex-shrink:0;padding:0;border:0}
 .layer-panel .layer-lock-note {margin:7px 0;color:#40688e;font-size:10px;line-height:1.5}
 .layer-panel input:disabled,.layer-panel button:disabled {opacity:.45;cursor:default}
+
+/* The selected object's slider and single palette button sit above history. */
+.object-style-sidebar {position:absolute;z-index:7;left:10px;bottom:calc(103px + env(safe-area-inset-bottom));display:flex;flex-direction:column;align-items:center;gap:5px;width:46px;padding:7px 3px;background:#0d2439f5;color:#c9e9ff;border:1px solid #365d7c;border-radius:10px;box-shadow:0 5px 16px #0003;pointer-events:auto}
+.object-size-symbol {font-size:19px;font-weight:600;line-height:1}
+.object-style-sidebar output {max-width:42px;font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.object-size-track {display:flex;align-items:center;justify-content:center;width:34px;height:clamp(50px,calc(100dvh - 380px),126px)}
+.object-size-track input {width:clamp(50px,calc(100dvh - 380px),126px);min-width:clamp(50px,calc(100dvh - 380px),126px);height:30px;margin:0;transform:rotate(-90deg);accent-color:#39b8ff;touch-action:none;cursor:pointer}
+.object-style-sidebar .object-palette-button {width:36px;height:36px;padding:7px;border-radius:8px}
+.object-color-palette {left:68px;bottom:calc(103px + env(safe-area-inset-bottom));max-width:calc(100vw - 82px);max-height:calc(100dvh - 195px - env(safe-area-inset-top) - env(safe-area-inset-bottom))}
