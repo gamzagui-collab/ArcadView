@@ -311,3 +311,20 @@ button:disabled{opacity:.45}
  .takeoff-history{bottom:calc(73px + env(safe-area-inset-bottom))}
  #takeoff-toolbar-slot{display:flex;flex-shrink:0;min-width:0}
 }
+
+/* Grow to the tools' content; only the tool strip shrinks on narrow screens. */
+.viewer-shell .viewer-toolbar.with-edit{left:68px;right:10px;width:max-content;max-width:calc(100% - 78px)}
+.viewer-shell .viewer-tools-scroll{flex:0 1 auto;min-width:0}
+.viewer-shell .viewer-tools-scroll>button{width:64px;min-width:64px}
+.toolbar-status-wrapper{display:contents}
+#viewer-status-slot{display:flex;flex:0 0 auto;min-width:0}
+#viewer-status-slot:empty{display:none}
+.viewer-shell #viewer-status-slot .annotation-status,.viewer-shell #viewer-status-slot .measurement-status{
+ position:static;flex:0 0 auto;width:max-content;max-width:340px;min-height:38px;padding:0 0 0 5px;
+ border:0;border-left:1px solid #34506c;border-radius:0;background:transparent;box-shadow:none;
+}
+.viewer-shell #viewer-status-slot .annotation-status span,.viewer-shell #viewer-status-slot .measurement-status-copy>span{font-size:10px}
+.viewer-shell #viewer-status-slot .annotation-status button,.viewer-shell #viewer-status-slot .measurement-status button{min-height:32px}
+.viewer-shell #viewer-status-slot .takeoff-compact{position:static;flex:0 0 auto;width:max-content;max-width:340px;padding:3px 5px;box-shadow:none;border:0;border-left:1px solid #34506c;border-radius:0;background:transparent}
+.viewer-shell #viewer-status-slot .takeoff-compact>button{min-height:32px}
+.viewer-shell.toolbar-status-inline .takeoff-history{bottom:calc(10px + env(safe-area-inset-bottom))}

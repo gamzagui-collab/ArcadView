@@ -14,6 +14,7 @@ import { useI18n } from "../i18n/I18nProvider";
 import { useUx } from "../i18n/ux";
 import { ToolIcon } from "./ToolIcon";
 import { ToolStrip } from "./ToolStrip";
+import {ToolbarStatus} from "./ToolbarStatus";
 import { UndoHistory, type EditCommand, type EditHistoryState } from "../viewer/undoHistory";
 import { completeTextEdit, type TextEditSession } from "../viewer/textEditing";
 import { CanvasTextEditor } from "./CanvasTextEditor";
@@ -431,7 +432,7 @@ export const AnnotationEditor=forwardRef<AnnotationEditorHandle,Props>(function 
       onText={updateText} onStyle={updateTextStyle} onFinish={finishText}/>
     {active&&tool==="select"&&editedModel&&editedModel.kind!=="mask"&&!handleActive&&!numericEdit?<ObjectStyleControls object={editedModel} color={objectColor(editedModel,doc)} onPreview={previewStyle} onApply={applyStyle}/>:null}
     {active&&tool==="select"&&editedModel&&selectedSize&&!handleActive&&!numericEdit&&!open&&!layersOpen?<ObjectSizeControls id={editedModel.id} info={selectedSize} unit={sourceUnit==="drawing"?w.drawingUnit:sourceUnit} onEdit={beginNumericEdit} onSegment={index=>setSelectionSegment({id:editedModel.id,index})}/>:null}
-    {active?<div className="annotation-status" role="status"><button type="button" onClick={onHide}><span>{current.name} · {tool==="arc"?cw.arc:w[tool]} {draft.length?`· ${draft.length}`:""}</span><small>{notice||(!saved?w.unsaved:w.saved)}</small></button>{tool==="polyline"?<button type="button" className="annotation-finish" disabled={draft.length<2||commercial.blocked()||!!construction} onClick={()=>add(make(draft,"polyline"))}>{w.finish} ✓</button>:null}<button type="button" onClick={onPause} aria-label={w.pause}>Ⅱ</button></div>:null}
+    {active?<ToolbarStatus><div className="annotation-status" role="status"><button type="button" onClick={onHide}><span>{current.name} · {tool==="arc"?cw.arc:w[tool]} {draft.length?`· ${draft.length}`:""}</span><small>{notice||(!saved?w.unsaved:w.saved)}</small></button>{tool==="polyline"?<button type="button" className="annotation-finish" disabled={draft.length<2||commercial.blocked()||!!construction} onClick={()=>add(make(draft,"polyline"))}>{w.finish} ✓</button>:null}<button type="button" onClick={onPause} aria-label={w.pause}>Ⅱ</button></div></ToolbarStatus>:null}
     {layersOpen?<section id="arcad-layer-panel" className="annotation-panel layer-panel" role="dialog" aria-label={u.layers}>
       <header><strong>{u.layers}</strong><span><ToolIcon name="shield"/>{u.original}</span><button type="button" aria-label={layerText.close} onClick={onLayersHide}>×</button></header>
       {layerTabs}

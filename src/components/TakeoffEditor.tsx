@@ -1,6 +1,6 @@
 import {forwardRef,useEffect,useImperativeHandle,useLayoutEffect,useRef,useState} from "react";
 import type {ReactNode} from "react";
-import {createPortal} from "react-dom";
+import {ToolbarStatus} from "./ToolbarStatus";
 import type {AnnotationHandleDrag,DrawingViewer,MeasurementPick} from "../viewer/DrawingViewer";
 import {annotationGeometry,translateAnnotation,uid,type Annotation} from "../viewer/annotations";
 import {distance,pointSegmentDistance,type MeasurementUnit} from "../viewer/measurementGeometry";
@@ -24,7 +24,7 @@ export const TakeoffEditor=forwardRef<TakeoffHandle,Props>(function TakeoffEdito
  const[doc,setDoc]=useState(()=>newTakeoff(drawing,sourceUnit)),docRef=useRef(doc);docRef.current=doc;
  const[loaded,setLoaded]=useState(false),[loadError,setLoadError]=useState(""),[loadRevision,reload]=useState(0),[revisions,setRevisions]=useState<Array<{key:string;count:number;revision:number}>>([]);
  const[tool,setTool]=useState<TakeoffKind|"select"|"insert">("wall"),[open,setOpen]=useState(false),[draft,setDraft]=useState<P[]>([]),[selected,setSelected]=useState<string|null>(null),[vertex,setVertex]=useState<number|null>(null),[snap,setSnap]=useState(true),[notice,setNotice]=useState("");
- const[inlineHost,setInlineHost]=useState<HTMLElement|null>(null),[layerDelete,setLayerDelete]=useState<string|null>(null);
+ const[layerDelete,setLayerDelete]=useState<string|null>(null);
  const[pickingColor,setPickingColor]=useState(false);
  const[form,setForm]=useState<Form|null>(null),[values,setValues]=useState<string[]>([]),[heightUnit,setHeightUnit]=useState<"m"|"mm">("m"),[formError,setFormError]=useState(""),[unitChange,setUnitChange]=useState<MeasurementUnit|null>(null);
  const[busy,setBusy]=useState(false),[saveError,setSaveError]=useState(""),[saved,setSaved]=useState(false),lock=useRef(false),mounted=useRef(true),history=useRef(new UndoHistory<TakeoffDocument>());
@@ -32,7 +32,6 @@ export const TakeoffEditor=forwardRef<TakeoffHandle,Props>(function TakeoffEdito
  const svg=useRef<SVGSVGElement>(null),target=useRef<SVGSVGElement>(null),preview=useRef<MeasurementPick|null>(null),dragPreview=useRef<TakeoffObject|null>(null),[dragging,setDragging]=useState(false),renderRef=useRef<()=>void>(()=>{}),firstInput=useRef<HTMLInputElement>(null);
  const selectedObject=doc.objects.find(o=>o.id===selected),visible=doc.objects.filter(o=>takeoffVisible(doc,o)),[cadOptions]=useState(()=>viewer.getCadFocusOptions()),currentLayer=doc.layers.find(l=>l.id===doc.activeLayerId)!;
  const blocked=()=>!loaded||!!loadError||!!revisions.length||lock.current||!!failed.current;
- useLayoutEffect(()=>{const update=()=>setInlineHost(active&&innerWidth>=620&&innerWidth>innerHeight?document.getElementById("takeoff-toolbar-slot"):null);update();window.addEventListener("resize",update);return()=>window.removeEventListener("resize",update);},[active]);
  useEffect(()=>{if(layersOpen)setOpen(false);},[layersOpen]);
  useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;};},[]);
  useEffect(()=>{let live=true;setLoaded(false);setLoadError("");if(!key){setLoadError("도면 내용 식별자를 준비하지 못했습니다. 다시 열어 주세요.");return;}
@@ -120,7 +119,7 @@ export const TakeoffEditor=forwardRef<TakeoffHandle,Props>(function TakeoffEdito
  const deleteVertex=()=>{if(!selectedObject||vertex===null)return;const points=selectedObject.geometry.points.filter((_,i)=>i!==vertex),error=geometryError(points,selectedObject.kind==="slab");if(error){setNotice(error);return;}commit({...doc,objects:doc.objects.map(o=>o.id===selected?{...o,geometry:{...o.geometry,points}}:o)},()=>setVertex(null));};
  const selectLayer=(id:string)=>{cancelDraft();setSelected(null);commit({...doc,activeLayerId:id,layers:doc.layers.map(l=>l.id===id?{...l,visible:true}:l)});};
  const layerButton=()=>{setOpen(false);onLayersToggle();};
- const compact=<div className={`takeoff-compact ${inlineHost?"inline":""}`}><button aria-label="적산 도구 펼치기" onClick={()=>{onLayersHide();setOpen(v=>!v);}} title={currentLayer.name}>적산 · {pickingColor?"색상 선택":tool==="select"?"선택":tool==="insert"?"점 추가":NAMES[tool]} <span>{open?"⌄":"⌃"}</span><small>{currentLayer.name}</small></button><button type="button" className="takeoff-label-toggle" aria-label="적산 물량 라벨 표시" aria-pressed={doc.options.labelsVisible!==false} title={doc.options.labelsVisible!==false?"물량 라벨 숨기기":"물량 라벨 표시"} disabled={blocked()} onClick={()=>toggleOption({labelsVisible:doc.options.labelsVisible===false})}>물량</button>{draft.length?<><span>{draft.length}점</span><button className="takeoff-finish" disabled={blocked()} onClick={finish}>완료</button><button aria-label="적산 이전 점 취소" onClick={()=>setDraft(p=>p.slice(0,-1))}>↶</button></>:null}</div>;
+ const compact=<div className="takeoff-compact"><button aria-label="적산 도구 펼치기" onClick={()=>{onLayersHide();setOpen(v=>!v);}} title={currentLayer.name}>적산 · {pickingColor?"색상 선택":tool==="select"?"선택":tool==="insert"?"점 추가":NAMES[tool]} <span>{open?"⌄":"⌃"}</span><small>{currentLayer.name}</small></button><button type="button" className="takeoff-label-toggle" aria-label="적산 물량 라벨 표시" aria-pressed={doc.options.labelsVisible!==false} title={doc.options.labelsVisible!==false?"물량 라벨 숨기기":"물량 라벨 표시"} disabled={blocked()} onClick={()=>toggleOption({labelsVisible:doc.options.labelsVisible===false})}>물량</button>{draft.length?<><span>{draft.length}점</span><button className="takeoff-finish" disabled={blocked()} onClick={finish}>완료</button><button aria-label="적산 이전 점 취소" onClick={()=>setDraft(p=>p.slice(0,-1))}>↶</button></>:null}</div>;
  return <>
   <svg ref={svg} className="takeoff-overlay" aria-hidden="true"/><svg ref={target} className="takeoff-overlay measurement-overlay takeoff-target" aria-hidden="true"/>
   {active?<button type="button" className={`active-layer-badge takeoff-layer-badge ${currentLayer.visible?"":"layer-hidden"}`} aria-label={`적산 레이어 열기 · ${currentLayer.name}`} aria-controls="arcad-layer-panel" aria-expanded={layersOpen} onClick={layerButton} title={currentLayer.name}>적{doc.layers.findIndex(l=>l.id===currentLayer.id)+1}</button>:null}
@@ -134,7 +133,7 @@ export const TakeoffEditor=forwardRef<TakeoffHandle,Props>(function TakeoffEdito
    <aside className={`takeoff-summary ${doc.options.collapsed?"collapsed":""}`} aria-label="콘크리트 적산 합계"><button className="takeoff-summary-heading" aria-label={doc.options.collapsed?"적산 합계 펼치기":"적산 합계 접기"} aria-expanded={!doc.options.collapsed} onClick={()=>toggleOption({collapsed:!doc.options.collapsed})} disabled={blocked()}>{doc.options.collapsed?<>합계 <output data-takeoff-total>{sum.volumeM3.toFixed(3)} m³</output></>:"콘크리트 적산"}<span>{doc.options.collapsed?"⌄":"⌃"}</span></button>
     {!doc.options.collapsed?<><div>{KINDS.map(k=><button key={k} data-takeoff-group={k} aria-pressed={tool===k||selectedObject?.kind===k} onClick={()=>{resetTool(k);onLayersHide();setOpen(true);}}><i style={{background:doc.groups.find(g=>g.id===k)?.color}}/>{NAMES[k]}<b data-volume={k}>{sum.groups[k].volumeM3.toFixed(3)} m³</b></button>)}</div><strong>전체 <output data-takeoff-total>{sum.volumeM3.toFixed(3)} m³</output></strong><small>표시 {sum.visibleVolumeM3.toFixed(3)} m³</small><button className="takeoff-current-total" onClick={layerButton}><span>{currentLayer.name}</span><b data-takeoff-layer-total>{sum.layers[doc.activeLayerId].volumeM3.toFixed(3)} m³</b></button><small>중첩·개구부 공제 전</small></>:null}
    </aside>
-   {inlineHost?createPortal(compact,inlineHost):compact}
+   <ToolbarStatus>{compact}</ToolbarStatus>
    {open?<section className="takeoff-panel" aria-label="독립 적산 도구"><header><strong>적산 도구</strong><span>{busy?"저장 중…":saved?"저장 완료":"원본 보존"}</span><button onClick={()=>setOpen(false)} aria-label="적산 도구 접기">×</button></header>
     <div className="takeoff-tool-row">{KINDS.map(k=><button key={k} data-takeoff-tool={k} aria-pressed={tool===k} disabled={blocked()} onClick={()=>resetTool(k)}><ToolIcon name={k==="slab"?"area":"polyline"}/>{NAMES[k]}</button>)}<button data-takeoff-tool="select" aria-pressed={tool==="select"} onClick={()=>resetTool("select")} disabled={blocked()}><ToolIcon name="select"/>선택</button></div>
     <div className="takeoff-display-row"><label><input aria-label="원본 도면 표시" type="checkbox" checked={doc.options.cadVisible} disabled={blocked()} onChange={e=>toggleOption({cadVisible:e.target.checked})}/> 원본 도면</label><label><input aria-label="적산 집중 보기" type="checkbox" checked={doc.options.focus} disabled={blocked()} onChange={e=>toggleOption({focus:e.target.checked})}/> 집중 보기</label></div>

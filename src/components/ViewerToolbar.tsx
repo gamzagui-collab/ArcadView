@@ -53,7 +53,7 @@ export function ViewerToolbar({ onCommand,takeoffActive,onTakeoff, canMeasure, m
           <button type="button" data-tool="delete" aria-label={words.remove} title={words.remove} disabled={!canDelete} onClick={onDelete}><ToolIcon name="delete"/><span>{words.remove}</span></button>
         </ToolStrip>:null}
         {canMeasure?<button type="button" className="viewer-cancel-tool" aria-label={words.cancel} title={words.cancel} onClick={onCancel}><CancelToolIcon/></button>:null}
-        {takeoffActive?<div id="takeoff-toolbar-slot"/>:null}
+        {canMeasure?<div id="viewer-status-slot"/>:null}
       </div>
     </nav>
     </>

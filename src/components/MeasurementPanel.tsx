@@ -1,4 +1,5 @@
 import {ToolStrip} from "./ToolStrip";
+import {ToolbarStatus} from "./ToolbarStatus";
 import { useI18n } from "../i18n/I18nProvider";
 import { CloseIcon } from "./Icons";
 import { ToolIcon } from "./ToolIcon";
@@ -77,9 +78,9 @@ export function MeasurementStatus({settings,sourceUnit,displayUnit,feedback,prec
   const result=value===undefined?"—":settings.mode==="angle"?formatCadNumber(value,precision,locale)+"°":`${settings.mode==="radius"?"R ":""}${formatCadNumber(convertMeasurement(value,sourceUnit,displayUnit,area),precision,locale)} ${unit}${area?"²":""}`;
   const direction=settings.mode==="linear"?linearMeasurement(settings.points,settings.linearAxis)?.axis:undefined;
   const mode=t(modeKeys[settings.mode])+(settings.mode==="distance"?` · ${locale==="ko"?"무료 · 무제한":locale==="en"?"Free · unlimited":"Ücretsiz · sınırsız"}`:"")+(direction?` · ${t(direction==="x"?"measureHorizontal":"measureVertical")}`:"");
-  return <div className={`measurement-status ${settings.enabled?"is-active":""}`} role="status">
+  return <ToolbarStatus><div className={`measurement-status ${settings.enabled?"is-active":""}`} role="status">
     <button type="button" className="measurement-status-copy" onClick={onShow}><span>{settings.enabled?mode:`${t("measureNavigate")} · ${mode}`} · {settings.points.length}{settings.mode==="angle"?"/3":isDistanceMode(settings.mode)||settings.mode==="radius"?"/2":""} · {settings.snapping?t("measureSnap"):t("measureSnapOff")}{settings.mode==="path"&&pathIsClosed(settings.points)?` · ${t("measureClosed")}`:""}{segment?` · ${locale==="ko"?"직전 구간":locale==="en"?"Last segment":"Son parça"}`:""}</span><strong className="measurement-status-result">{result}</strong>{settings.enabled&&feedback?<small>{feedback}</small>:null}</button>
     {!settings.displayOnly&&(settings.mode==="path"||settings.mode==="area")?<button type="button" className="measurement-finish" disabled={finishDisabled||!canFinishMeasurement(settings)} onClick={onFinish}>{locale==="ko"?"측정 완료 ✓":locale==="en"?"Finish ✓":"Bitir ✓"}</button>:null}
     <button type="button" className="measurement-toggle" onClick={onToggle} aria-label={settings.enabled&&!settings.displayOnly?t("measurePause"):t("measureResume")} title={settings.enabled&&!settings.displayOnly?t("measurePause"):t("measureResume")}>{settings.enabled&&!settings.displayOnly?"Ⅱ":"▶"}</button>
-  </div>;
+  </div></ToolbarStatus>;
 }
