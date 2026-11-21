@@ -40,6 +40,7 @@ import {snapToCircularEdge} from "./circularSnap";
 import { intersectionSnap } from "./intersectionSnapping";
 import { perpendicularSnap, segmentFoot } from "./cadPicking";
 import { masked, visibleEntityFragment, type Annotation } from "./annotations";
+import {CadFocusFilter,type CadFocus} from "../takeoff/cadFocus";
 import {createMoveSnap,type MoveContact} from "./moveSnapping";
 
 export type MeasurementPick = { point: DrawingPoint; snapped: SnapPoint["kind"] | "start" | "perpendicular" | "intersection" | "curve" | "edge" | null; entity: MeasurableEntity | null; replaceIndex?: number;contact?:MoveContact };
@@ -81,6 +82,9 @@ export class DrawingViewer {
   private endAnchor: DrawingPoint | null = null;
   private endReferences: DrawingPoint[] = [];
   private annotationInput: AnnotationInput | null = null;
+  private annotationOwner="annotations";
+  private takeoffGeometry:MeasurementGeometry={units:"drawing",entities:[],snaps:[],limited:false,completeBounds:false,fitBounds:[],fitCompleteBounds:false};
+  private takeoffFocus:CadFocusFilter|null=null;
   private userGeometry: MeasurementGeometry = {units:"drawing",entities:[],snaps:[],limited:false,completeBounds:false,fitBounds:[],fitCompleteBounds:false};
   private masks: Annotation[] = [];
   private viewListeners = new Set<()=>void>();
@@ -149,7 +153,10 @@ export class DrawingViewer {
     let snapped:SnapPoint|null = measurement.snapping && measurement.mode !== "object" ?
       this.geometry.packed ? nearestPackedSnap(this.geometry.packed, point, tolerance,centerKind) : nearestSnap(this.geometry.snaps, point, tolerance,centerKind) : null;
     if(snapped&&masked(snapped,this.masks,this.worldTolerance(3)))snapped=null;
-    const own=measurement.snapping?nearestSnap(this.userGeometry.snaps,point,tolerance,centerKind):null;
+    const supplemental=editor&&this.annotationOwner==="takeoff"?this.takeoffGeometry:null;
+    let own=measurement.snapping?nearestSnap(this.userGeometry.snaps,point,tolerance,centerKind):null;
+    const takeoff=measurement.snapping&&supplemental?nearestSnap(supplemental.snaps,point,tolerance,centerKind):null;
+    if(takeoff&&(!own||Math.hypot(takeoff.x-point.x,takeoff.y-point.y)<Math.hypot(own.x-point.x,own.y-point.y)))own=takeoff;
     if(own&&(!snapped||Math.hypot(own.x-point.x,own.y-point.y)<Math.hypot(snapped.x-point.x,snapped.y-point.y)))snapped=own;
     // Markup is excluded from CAD measurement. A selected mark may still use
     // its own exact anchors when choosing the base of a move operation.
@@ -162,14 +169,16 @@ export class DrawingViewer {
       if(q&&(!curve||Math.hypot(q.x-point.x,q.y-point.y)<Math.hypot(curve.x-point.x,curve.y-point.y)))curve=q;
       if(curve&&snapped&&Math.abs(Math.hypot(snapped.x-measurement.points[0].x,snapped.y-measurement.points[0].y)-Math.hypot(curve.x-measurement.points[0].x,curve.y-measurement.points[0].y))>Math.max(tolerance*1e-6,1e-7))snapped=null;
     }
-    const intersection=(editor?.tool==="move"||editor?.tool==="rotate"||!!this.handleDrag)&&measurement.snapping?intersectionSnap([this.geometry,this.userGeometry],point,this.worldTolerance(10),p=>!masked(p,this.masks,this.worldTolerance(3))):null;
+    const intersection=(editor?.tool==="move"||editor?.tool==="rotate"||!!this.handleDrag)&&measurement.snapping?intersectionSnap([this.geometry,this.userGeometry,...supplemental?[supplemental]:[]],point,this.worldTolerance(10),p=>!masked(p,this.masks,this.worldTolerance(3))):null;
     const start = snapToPathStart(measurement, point, tolerance, replaceIndex);
     const anchor=this.handleDrag?.drag.anchor??editor?.anchor??(isDistanceMode(measurement.mode)?measurement.points[replaceIndex===0?1:0]:undefined);
     let perpendicular:DrawingPoint|null=null;
     if(measurement.snapping&&anchor&&measurement.mode!=="radius"){
       const tol=this.worldTolerance(9),accept=(p:DrawingPoint)=>!masked(p,this.masks,this.worldTolerance(3));
       perpendicular=perpendicularSnap(this.geometry,anchor,point,tol,accept);
-      const ownFoot=perpendicularSnap(this.userGeometry,anchor,point,tol);
+      let ownFoot=perpendicularSnap(this.userGeometry,anchor,point,tol);
+      const takeoffFoot=supplemental?perpendicularSnap(supplemental,anchor,point,tol):null;
+      if(takeoffFoot&&(!ownFoot||Math.hypot(takeoffFoot.x-point.x,takeoffFoot.y-point.y)<Math.hypot(ownFoot.x-point.x,ownFoot.y-point.y)))ownFoot=takeoffFoot;
       if(ownFoot&&(!perpendicular||Math.hypot(ownFoot.x-point.x,ownFoot.y-point.y)<Math.hypot(perpendicular.x-point.x,perpendicular.y-point.y)))perpendicular=ownFoot;
     }
     if (start) point = start;
@@ -422,7 +431,7 @@ export class DrawingViewer {
     this.endReferences=[...(!masked(point,this.masks,tolerance)?referenceDirections(this.geometry,point,tolerance):[]),...referenceDirections(this.userGeometry,point,tolerance)];
   }
   worldTolerance(pixels:number):number{const c=this.viewer.GetCamera();return pixels*(c.right-c.left)/c.zoom/Math.max(1,this.viewer.GetCanvas().clientWidth);}
-  configureAnnotations(input:AnnotationInput|null):void{if(input?.tool!==this.annotationInput?.tool){this.gesture.cancel();if(this.handleDrag)this.lockInteraction(true);if(input&&input.tool!==this.handleDrag?.input.tool)this.cancelHandle();}this.annotationInput=input;}
+  configureAnnotations(input:AnnotationInput|null,owner="annotations"):void{if(!input&&owner!==this.annotationOwner)return;if(input&&owner!==this.annotationOwner){this.cancelInteraction();this.annotationOwner=owner;}if(input?.tool!==this.annotationInput?.tool){this.gesture.cancel();if(this.handleDrag)this.lockInteraction(true);if(input&&input.tool!==this.handleDrag?.input.tool)this.cancelHandle();}this.annotationInput=input;}
   cancelInteraction():void { this.gesture.cancel();this.cancelHandle();this.handlePointers.clear();this.precisionIndex=undefined; }
   getCanvasElement():HTMLCanvasElement { return this.viewer.GetCanvas(); }
   clientToDrawing(position:{x:number;y:number}):DrawingPoint {
@@ -431,6 +440,10 @@ export class DrawingViewer {
     const origin=this.viewer.GetOrigin();return{x:v.x+origin.x,y:v.y+origin.y};
   }
   setUserGeometry(geometry:MeasurementGeometry,masks:Annotation[]):void{this.userGeometry=geometry;this.masks=masks;this.anchor=null;this.endAnchor=null;if(this.measurement)this.configureMeasurement(this.measurement);}
+  getAnnotationTargets(){return{geometry:this.userGeometry,masks:this.masks};}
+  setTakeoffGeometry(geometry:MeasurementGeometry){this.takeoffGeometry=geometry;}
+  getCadFocusOptions(){this.takeoffFocus??=new CadFocusFilter((this.viewer as any).scene);return this.takeoffFocus.options();}
+  setTakeoffFocus(filter:CadFocus){if(this.destroyed)return;this.takeoffFocus??=new CadFocusFilter((this.viewer as any).scene);this.takeoffFocus.set(filter);this.viewer.Render();}
   subscribeView(listener:()=>void):()=>void{this.viewListeners.add(listener);return()=>{this.viewListeners.delete(listener);};}
 
   projectPoints(points: readonly DrawingPoint[]): DrawingPoint[] {
@@ -447,6 +460,7 @@ export class DrawingViewer {
     if (this.destroyed) {
       return;
     }
+    this.takeoffFocus?.clear();this.takeoffFocus=null;this.takeoffGeometry.entities=[];this.takeoffGeometry.snaps=[];
     this.destroyed = true;
     this.viewListeners.clear();this.annotationInput=null;this.masks=[];this.userGeometry.entities=[];this.userGeometry.snaps=[];
     this.culler?.restore(); this.culler = null;

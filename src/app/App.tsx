@@ -112,6 +112,7 @@ export function App() {
   const [annotationOpen,setAnnotationOpen]=useState(false);
   const [layersOpen,setLayersOpen]=useState(false);
   const [annotationActive,setAnnotationActive]=useState(false);
+  const [takeoffActive,setTakeoffActive]=useState(false);
   const measurementActivated=useRef(false);
   const [measurementGeometry, setMeasurementGeometry] = useState<MeasurementGeometry | null>(null);
   const measurementKey=measurementGeometry?.unitPreferenceKey;
@@ -147,7 +148,7 @@ export function App() {
     setMeasurement(emptyMeasurement);
     measurementHistory.current.clear();setEditHistory({canUndo:false,canRedo:false});
     setMeasurementPanelOpen(false);
-    setAnnotationOpen(false);setAnnotationActive(false);setLayersOpen(false);
+    setTakeoffActive(false);setAnnotationOpen(false);setAnnotationActive(false);setLayersOpen(false);
     measurementActivated.current=false;
     setMeasurementGeometry(null);
     unitPreferenceRef.current = null;
@@ -376,7 +377,7 @@ export function App() {
     setIncomingArchive(null);
     setState({ status: "home" });
     setMeasurementPanelOpen(false);
-    setAnnotationOpen(false);setAnnotationActive(false);setLayersOpen(false);
+    setTakeoffActive(false);setAnnotationOpen(false);setAnnotationActive(false);setLayersOpen(false);
   }, []);
 
   const handleBack = useCallback(() => {
@@ -386,6 +387,8 @@ export function App() {
       // Finish a text transaction before backing out of tools or the drawing.
     } else if(layersOpen){
       setLayersOpen(false);
+    } else if(takeoffActive){
+      viewerRef.current?.edit?.("cancel");setTakeoffActive(false);
     } else if(annotationOpen){
       setAnnotationOpen(false);
     } else if(annotationActive){
@@ -399,7 +402,7 @@ export function App() {
     } else if (Capacitor.isNativePlatform()) {
       void incomingDrawingPlugin.exitApp().catch(() => undefined);
     }
-  }, [closeDrawing, libraryOpen, state.status, measurement.enabled,measurementPanelOpen,annotationOpen,annotationActive,layersOpen]);
+  }, [closeDrawing, libraryOpen, state.status, measurement.enabled,measurementPanelOpen,annotationOpen,annotationActive,layersOpen,takeoffActive]);
   useBackNavigation(handleBack);
 
   useEffect(() => {
@@ -513,7 +516,7 @@ export function App() {
   };
   const openMeasurementTools=()=>{
     setLayersOpen(false);
-    setAnnotationActive(false);setAnnotationOpen(false);setMeasurementPanelOpen(open=>!open);
+    setTakeoffActive(false);setAnnotationActive(false);setAnnotationOpen(false);setMeasurementPanelOpen(open=>!open);
     const current=measurementRef.current;
     if(!hasToolAccess(measurementToolId(current.mode))){
       const next={...current,mode:"distance" as const,enabled:true,displayOnly:false,points:[],entity:null};
@@ -529,12 +532,13 @@ export function App() {
   };
 
   const handleEditCommand=(command:EditCommand)=>{
+    if(takeoffActive){viewerRef.current?.edit?.(command);if(command==="cancel")setTakeoffActive(false);return;}
     if(localMeasurementSaving.current)return;
     if(commerce.managed&&!isUnmeteredTool(measurementToolId(measurementRef.current.mode))&&measurementOperation.blocked())return;
     viewerRef.current?.cancelGesture?.();
     if(command==="cancel"){
       viewerRef.current?.edit?.("cancel");
-      setAnnotationActive(false);setAnnotationOpen(false);setLayersOpen(false);setMeasurementPanelOpen(false);setMeasurementFeedback(null);
+      setTakeoffActive(false);setAnnotationActive(false);setAnnotationOpen(false);setLayersOpen(false);setMeasurementPanelOpen(false);setMeasurementFeedback(null);
       const next={...measurementRef.current,enabled:false,points:[],entity:null};measurementRef.current=next;setMeasurement(next);
       measurementHistory.current.clear();measurementActivated.current=false;
     }else if(measurementRef.current.enabled&&!annotationActive){
@@ -574,12 +578,13 @@ export function App() {
           onMeasurementReady={handleMeasurementReady}
           onMeasurementPick={handleMeasurementPick}
           onEditHistory={setEditHistory}
+          takeoffActive={takeoffActive} drawingIdentity={{name:state.drawing.name,size:state.drawing.size,lastModified:state.drawing.file.lastModified}}
           annotationActive={annotationActive} annotationOpen={annotationOpen} layersOpen={layersOpen}
-          onLayersToggle={()=>{setLayersOpen(open=>!open);setAnnotationOpen(false);setMeasurementPanelOpen(false);}}
+          onLayersToggle={()=>{setTakeoffActive(false);setLayersOpen(open=>!open);setAnnotationOpen(false);setMeasurementPanelOpen(false);}}
           onLayersHide={()=>setLayersOpen(false)} sourceUnit={sourceUnit} displayUnit={displayUnit}
           precision={precision} onPrecision={handlePrecision}
           onAnnotationHide={()=>setAnnotationOpen(open=>!open)} onAnnotationPause={()=>setAnnotationActive(false)}
-          onAnnotationActivate={()=>{setLayersOpen(false);setAnnotationActive(true);setMeasurement(current=>({...current,enabled:false}));setMeasurementPanelOpen(false);}}
+          onAnnotationActivate={()=>{setTakeoffActive(false);setLayersOpen(false);setAnnotationActive(true);setMeasurement(current=>({...current,enabled:false}));setMeasurementPanelOpen(false);}}
         />}
       </Suspense>
     ) : null;
@@ -650,19 +655,19 @@ export function App() {
         </div>
       </header>
 
-      <ViewerToolbar onCommand={sendCommand}
-        selecting={annotationActive&&editHistory.selecting} canDelete={annotationActive&&editHistory.canDelete}
+      <ViewerToolbar takeoffActive={takeoffActive} onTakeoff={()=>{viewerRef.current?.cancelGesture?.();setTakeoffActive(v=>!v);setAnnotationActive(false);setAnnotationOpen(false);setLayersOpen(false);setMeasurementPanelOpen(false);setMeasurement(m=>({...m,enabled:false}));}} onCommand={sendCommand}
+        selecting={(annotationActive||takeoffActive)&&editHistory.selecting} canDelete={(annotationActive||takeoffActive)&&editHistory.canDelete}
         onSelect={()=>{setLayersOpen(false);viewerRef.current?.objectAction?.("select");setAnnotationOpen(false);}}
         onDelete={()=>viewerRef.current?.objectAction?.("delete")}
-        canUndo={measurement.enabled&&!annotationActive?measurementHistory.current.canUndo:editHistory.canUndo}
-        canRedo={measurement.enabled&&!annotationActive?measurementHistory.current.canRedo:editHistory.canRedo}
+        canUndo={measurement.enabled&&!annotationActive&&!takeoffActive?measurementHistory.current.canUndo:editHistory.canUndo}
+        canRedo={measurement.enabled&&!annotationActive&&!takeoffActive?measurementHistory.current.canRedo:editHistory.canRedo}
         onUndo={()=>handleEditCommand("undo")} onRedo={()=>handleEditCommand("redo")} onCancel={()=>handleEditCommand("cancel")}
         canMeasure={state.drawing.format !== "pdf"}
         measuring={measurement.enabled}
         panelOpen={measurementPanelOpen}
-        editing={annotationActive} editOpen={annotationOpen} onEdit={()=>{setLayersOpen(false);setAnnotationOpen(open=>!open);setAnnotationActive(true);setMeasurement(current=>({...current,enabled:false}));setMeasurementPanelOpen(false);}}
+        editing={annotationActive} editOpen={annotationOpen} onEdit={()=>{setTakeoffActive(false);setLayersOpen(false);setAnnotationOpen(open=>!open);setAnnotationActive(true);setMeasurement(current=>({...current,enabled:false}));setMeasurementPanelOpen(false);}}
         onMeasure={openMeasurementTools} />
-      {state.drawing.format!=="pdf"&&!annotationActive?<MeasurementStatus settings={measurement} sourceUnit={sourceUnit} displayUnit={displayUnit} feedback={measurementFeedback} precision={precision}
+      {state.drawing.format!=="pdf"&&!annotationActive&&!takeoffActive?<MeasurementStatus settings={measurement} sourceUnit={sourceUnit} displayUnit={displayUnit} feedback={measurementFeedback} precision={precision}
         onShow={()=>setMeasurementPanelOpen(open=>!open)} onFinish={finishMeasurement} finishDisabled={measurementSaving||(commerce.managed&&measurementOperation.blocked())} onToggle={toggleMeasurement}/>:null}
       {measurementPanelOpen && state.drawing.format !== "pdf" ? <MeasurementPanel settings={measurement} geometry={measurementGeometry}
         sourceUnit={sourceUnit} displayUnit={displayUnit} feedback={measurementFeedback} precision={precision} onPrecision={handlePrecision}

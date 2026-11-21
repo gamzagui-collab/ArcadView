@@ -1,0 +1,81 @@
+# Arcad View concrete takeoff development checkpoint
+
+## Project and version — 2026-11-21 (Asia/Seoul)
+
+- Repository: D:/GUI_Arc/GUI_Arc_Arc view/izCAD. Preserve its izCAD DWG/DXF engine. The sibling ProCad project is excluded.
+- Baseline: clean main, HEAD d61b27f03d4ce6e9d1b827f7e1213dbb492030bc, package/versionName 2.1.30, Android versionCode 57, latest local/public tag/release v2.1.30. No tracked unfinished user changes existed. Do not replace with old v2.1.19 ZIP.
+- Current branch: feature/concrete-takeoff; development version **2.1.31 (58)** in package.json, package-lock.json, release-config.json and generated Android metadata. Run git rev-parse HEAD for final local commit; parent is the baseline above.
+- No push/tag/public GitHub release/Play rollout authorized. CHANGELOG marks this unpublished. Public release notes/download links remain v2.1.30. Internal APK/source/evidence: ../artifacts/takeoff-development/.
+
+## Implementation complete
+
+- src/takeoff/model.ts: independent wall/beam/slab groups, original world coordinates and mm specifications, derived quantities. Reuses pathLength, polygonArea and UNIT_METERS. mm/cm/m/in/ft; unknown unit blocks finalization. Validates finite ranges, duplicate/short edges, zero area, polygon crossings/overlaps. Polygon closure is implicit in storage. Immutable geometry quantity cache avoids revalidation per pan frame.
+- src/components/TakeoffEditor.tsx: snapped path/polygon, Finish then specification confirmation, prior-spec proposals, height m/mm, spec edit, vertex drag/insertion/removal, rigid movement, label drag/hide, deletion and independent UndoHistory. No commerce gate or usage calls.
+- src/takeoff/overlay.ts + takeoff.css: bright rails/dark halo/hollow circles/small white centers, translucent slab fill, screen-size formula labels and short IDs. Path labels use cumulative half-length; concave polygon label uses an interior scanline. Compact tools and collapsible top-right full/visible totals; portrait/landscape layout.
+- src/takeoff/cadFocus.ts: display-only per-draw shader uniform overrides; keep chosen CAD layers OR colors, gray others; restore shared materials/callbacks on exit. No DWG conversion/geometry mutation, original colors/XCLIP/layer visibility/snap retained.
+- DrawingViewer.ts: annotation input ownership isolates ordinary and takeoff editors; supplemental takeoff snapping only in active takeoff editing. Existing CAD projection/geometry/move-contact snaps reused.
+- DrawingCanvas.tsx/App.tsx/ViewerToolbar.tsx: scrolling takeoff action, active command/history routing, original identity metadata, safe mode exits. Ordinary three-layer limit remains independent.
+
+## Storage and policy
+
+- Separate IndexedDB **arcad-concrete-takeoff v1**, store documents keyPath drawing.key; nonunique drawingName index. No migration/deletion of ordinary drawing/library/account data.
+- Identity reuses original DWG v1 fingerprint from drawingUnitPreferences: versioned size header plus ordered 1 MiB SHA-256 chunk hashes, then SHA-256. Every byte participates. Generated DXF retains original identity. Name/timestamp do not determine identity.
+- Store schema, original drawing metadata, source unit, groups/colors/visibility, object IDs/coordinates/specifications/labels, previous specs and display options. Derived values are never persisted separately.
+- Same-name/different-content asks confirmation; old data stays with original fingerprint. Acknowledgment is durably saved even for an empty new document and survives restart.
+- Transaction completion is save ACK. Only then promote state/totals. Failure retains prior values and displays retry/cancel. Corrupt/unsupported data fails without overwriting.
+- Local arcad:takeoff-completed post-save event is an isolated future hook. No real debit, authentication gate or billing integration. Actual Play billing remains disabled; OAuth/Cloudflare/server DB/signing keys unchanged.
+- QA data on actual DWGs used arbitrary test specifications, NOT an actual project BOQ. Only known QA fingerprints/object IDs were backed up and removed afterward. Final employee library **33 files / 188,521,125 bytes**, all file SHA-256 values and **27 exact settings** match baseline. Staging's 3 drawings/session/journal preserved.
+
+## Automated verification
+
+- Baseline 415 Vitest + 37 Node = 452 PASS.
+- Final **432 Vitest (71 files) + 37 Node = 469 PASS**, including 17 new takeoff cases. final-tests.log.
+- W01 20m*3m*200mm=12.000m3, W02 10m*3.2m*250mm=8.000m3; wall 30m/20.000m3. B01 12m*300mm*600mm=2.160m3. S01 40m2*180mm=7.200m3. Overall **29.360m3**.
+- Unit conversions, winding/closure/multiple segments/large coordinates, concave label, self intersections/invalid input, spec/vertex/delete/history/hide totals, storage reopen/isolation/revisions/quota/write failures, no billing request, shared shader restoration and handle placement covered.
+- Android testDebugUnitTest **22 PASS**: 8 block pruning, 7 incoming filenames, 7 update rules. android-github.log and Android test-results XML.
+- android:prepare (TypeScript/Vite/Capacitor/source checks), assembleDebug + signed local assembleRelease PASS. Artifact verifier: exact production web assets, offline fonts/WASM/licenses, no source maps, four native ABIs and 16KB ELF/ZIP alignment PASS. Gradle deprecation/Vite chunk warnings are retained in logs; no dependency upgrades were performed.
+
+## LDPlayer verification (actual device, separate from unit tests)
+
+- LDPlayer9 **9.5.15.1**, instance **LDPlayer-8**, ADB **emulator-5570**, Android9/API28, WebView124. Portrait1080x1920/CSS360x616 DPR3; landscape CSS640x336. All ADB explicitly target this serial. Do not touch LDPlayer-9 or ProCad.
+- core-results.json / known-quantities.json / restart-restoration.json: UI points+specs yield 29.360m3; hide leaves full total; real process kill/restart restores geometry/specs/labels/totals.
+- edit-results.json: specifications, insertion/removal/vertex/label/rigid move, deletion/Undo/Redo; injected quota failure retains saved state and visible retry; self-crossing rejected; actual WebGL layer/color filter and original restoration; no JS errors or usage calls.
+- dwg-results.json: actual izcad-cover.dwg **109,211 entities** and izcad-base.dwg **472,260 entities**. Create 2 walls/beam/slab, CAD endpoint/perpendicular snaps, computed/rounded totals, two-finger pan/projection registration, filter without reconversion, actual restart/reopen equality. COVER sample 1.0815162885677485->1.082m3; BASE 0.15008001957715986->0.150m3. Test overlays cleaned afterward.
+- identity-results.json: same-name changed-content confirmation, old data preserved, durable acknowledgment, unknown units block, explicit units and change confirmation/cancel/recompute/Undo, restart restore.
+- regression-results.json: normal aligned CAD measurement 12,000mm; ordinary numeric polyline+Undo/Redo; 3 ordinary layers separate from 3 takeoff groups; correct active history. Ordinary settings/operation journal restored.
+- responsive-results.json and 06-/07- screenshots: real portrait/landscape layouts inside viewport above toolbar. Native rotate button through computer-use skill; original portrait restored. Android user_rotation setting alone did not rotate LDPlayer and was restored; native toolbar resolved the test.
+- play-results.json: staging com.guisarc.arcadview updated without uninstall, existing Google session authenticates after real process restart. Free **76->76**, paid **0->0**, plan/session digest/3 drawings/measurement journal preserved. 12m3 takeoff produces **zero usage requests**. Billing false. **Fresh interactive Google sign-in/account selection NOT RUN** (existing authenticated session reused). No purchase activated/tested.
+- cleanup-results.json: original employee files/settings byte-identical; only task-owned QA data removed. No physical phone or Play rollout tested.
+
+## Resolved issues from QA
+
+- Label leader's transparent bounds intercepted vertices -> hit-test actual label rect.
+- Offscreen labels left empty SVG hit targets -> only create actual visible label groups and guard missing label rectangles. New overlay culling regression and actual LDPlayer offscreen-label vertex drag/Undo/pan-back pass (offscreen-label-results.json), with no JavaScript errors.
+- Bottom-clamped movement cross covered a vertex -> fallback non-overlapping above/side position.
+- Stale ordinary Undo state crossed modes -> owner/history callback guard with correct restoration.
+- Revision acknowledgment repeated after restart -> persist new empty document.
+- Ordinary measurement regression tap hit bottom status UI -> recenter fixture and verify 12,000mm via actual unobscured endpoints; no CAD math change.
+- Initial staging replacement correctly failed UPDATE_INCOMPATIBLE because installed app used another existing debug cert. No uninstall/reset. Reused existing default user debug key and installed matching signed debug artifact; data/session preserved. No key generated/modified.
+
+## Reproduction and artifacts
+
+- Node24.18/npm11.16; JDK21 ../.build-tools/jdk21/jdk-21.0.13+9; SDK/API36 D:/GUI_Arc/tools/android-official-release-v020/sdk; existing ../.build-tools/gradle-home.
+- From repo: npm.cmd test; npm.cmd run android:prepare; then with existing environment/signing configured:
+
+```powershell
+.\android\gradlew.bat -p android assembleDebug testDebugUnitTest assembleRelease -PIZCAD_VERSION_CODE=58 -PARCAD_DISTRIBUTION=github --console=plain
+node scripts/verify-android-release.mjs android/app/build/outputs/apk/release/app-release.apk
+```
+
+- Workspace helper ../.diagnostics/build-takeoff.ps1 -Release sets existing environment and saves logs/APKs; -Install uses adb -s emulator-5570 install -r only, never uninstall. Debug inspection only; Release WebView debugging disabled.
+- Employee com.izcad.viewer existing cert SHA256 60e2731fb432e7ed0cde34f255ea42a9faea115131346cbf08ff0b8b5afaccd1. Staging com.guisarc.arcadview existing user debug cert SHA256 ebb661dde5bf5020e5bddc56952e93a040baf0193d90f2186c5262e5934e9be8. Play upload key/DPAPI material excluded. Do not uninstall on signature mismatch.
+- CDP employee16601/staging16602; after restart forward to localabstract:webview_devtools_remote_<confirmed package PID>.
+- Workspace-only helpers: takeoff-qa.mjs, takeoff-edit-qa.mjs, takeoff-dwg-qa.mjs, takeoff-identity-qa.mjs, takeoff-play-qa.mjs, takeoff-regression-qa.mjs, takeoff-landscape-qa.mjs, takeoff-cleanup-qa.mjs; ld-cdp.mjs/guest-policy-common.mjs. They are outside app source. Start a new QA baseline for a fresh run and update dependent artifact keys; never run reset/cleanup against unknown IDs.
+- Final APK/source paths, hashes, feature commit and complete test summary: **../artifacts/takeoff-development/final-report.json**. Source ZIP is the full local committed version; no drawings, keys or session secrets.
+
+## Next work
+
+- Core requested scope implemented and locally verified. Read docs/CONCRETE_TAKEOFF.md and CHANGELOG2.1.31.
+- Physical phone field trial: long-press snaps, dense labels, large object counts, keyboard/rotation, storage pressure and project-specific depth conventions.
+- Intentional limits: no automatic intersection/overlap/opening deduction, complex label collision avoidance, JSON/cloud backup, reinforcing/BIM, new payment or CAD engine replacement. Result is pre-deduction approximate concrete volume.
+- Agree separately on takeoff entitlement/debit policy before connecting the completion hook. Obtain explicit approval before public GitHub release or Google Play publication.
