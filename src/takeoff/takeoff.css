@@ -25,6 +25,8 @@
 .viewer-shell .takeoff-compact{left:10px;bottom:calc(74px + env(safe-area-inset-bottom));max-width:calc(100% - 20px);padding:3px 5px;gap:5px;border-radius:9px;flex-wrap:nowrap}
 .takeoff-compact>button:first-child{max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left}
 .takeoff-compact small{display:block;max-width:130px;overflow:hidden;text-overflow:ellipsis;font-size:9px;color:#9abdd5}
+.viewer-shell .takeoff-compact .takeoff-label-toggle{flex:0 0 34px;min-width:34px;max-width:34px;padding:3px;font-size:10px;border:1px solid #44647c;color:#9bb2c6;background:transparent}
+.viewer-shell .takeoff-compact .takeoff-label-toggle[aria-pressed=true]{border-color:#61cfff;color:#c2efff;background:#175473}
 .viewer-shell .takeoff-panel{left:64px;right:10px;bottom:calc(122px + env(safe-area-inset-bottom));width:auto;max-width:420px;transform:none;max-height:calc(100dvh - 205px - env(safe-area-inset-top));padding:8px}
 .takeoff-current-layer{display:flex;align-items:center;gap:5px;margin-top:6px}
 .takeoff-current-layer label{display:flex;align-items:center;gap:5px;font-size:10px;min-width:0;flex:1}
