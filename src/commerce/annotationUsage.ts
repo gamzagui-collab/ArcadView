@@ -1,9 +1,16 @@
 import { drawingLayers,type AnnotationDocument,type AnnotationTool } from "../viewer/annotations";
+import {isRadialDimension} from "../viewer/radialDimensions";
 /** Classify completed objects, not every UI commit (typing layer names, visibility, etc.). */
 export function annotationUsage(before:AnnotationDocument,after:AnnotationDocument,tool:AnnotationTool):string|null{
   if(tool==="trim")return null;
   const old=new Map(before.objects.map(o=>[o.id,o]));
-  const changed=after.objects.filter(o=>o.kind!=="mask"&&JSON.stringify(old.get(o.id))!==JSON.stringify(o));
+  const changed=after.objects.filter(o=>{
+    if(o.kind==="mask")return false;
+    const previous=old.get(o.id);
+    // Placing the completed label/arc exposes no new measured value.
+    if(previous&&isRadialDimension(o)&&JSON.stringify({...previous,labelPoint:undefined})===JSON.stringify({...o,labelPoint:undefined}))return false;
+    return JSON.stringify(previous)!==JSON.stringify(o);
+  });
   if(changed.length){
     if(["move","rotate","offset","trim","extend"].includes(tool))return"edit."+tool;
     if(tool==="select")return"edit.reshape";

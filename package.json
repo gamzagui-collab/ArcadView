@@ -1,7 +1,7 @@
 {
   "name": "arcad-view",
   "private": true,
-  "version": "2.1.24",
+  "version": "2.1.25",
   "description": "Arcad View — offline CAD viewing, measurement and markup by GUI's Arc Industry",
   "license": "GPL-3.0-only",
   "author": {

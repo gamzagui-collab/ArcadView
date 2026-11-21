@@ -4,7 +4,7 @@ import type { DrawingBounds, DrawingPoint } from "./savedView";
 import { MeasurementPacker, SupplementalSnaps, type PackedMeasurement } from "./packedMeasurement";
 import { collectSnapFeatures, type SnapEntity, type SplineInterpolator } from "./snapFeatures";
 
-export type MeasurementMode = "distance" | "linear" | "path" | "area" | "angle" | "object";
+export type MeasurementMode = "distance" | "linear" | "path" | "area" | "radius" | "angle" | "object";
 export type LinearAxis = "auto" | "x" | "y";
 export type MeasurementUnit = "drawing" | "mm" | "cm" | "m" | "in" | "ft";
 export type SnapPoint = DrawingPoint & { kind: "endpoint" | "midpoint" | "center" | "insertion" };
@@ -468,12 +468,13 @@ export function buildMeasurementGeometry(
   return result;
 }
 
-export function nearestSnap(points: readonly SnapPoint[], target: DrawingPoint, tolerance: number): SnapPoint | null {
+export function nearestSnap(points: readonly SnapPoint[], target: DrawingPoint, tolerance: number,kind?:SnapPoint["kind"]): SnapPoint | null {
   if (!validPoint(target) || !Number.isFinite(tolerance) || tolerance < 0) return null;
   let low = 0, high = points.length;
   while (low < high) { const mid = (low + high) >>> 1; if (points[mid].x < target.x - tolerance) low = mid + 1; else high = mid; }
   let closest: SnapPoint | null = null, best = tolerance;
   for (let i = low; i < points.length && points[i].x <= target.x + tolerance; i++) {
+    if(kind&&points[i].kind!==kind)continue;
     const d = distance(points[i], target);
     if (d <= best) { best = d; closest = points[i]; }
   }

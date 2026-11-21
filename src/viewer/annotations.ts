@@ -2,16 +2,17 @@ import { distance, pathLength, pointSegmentDistance, type MeasurableEntity, type
 import type { DrawingPoint } from "./savedView";
 import { segmentFoot, type Segment } from "./cadPicking";
 import {curveLength,rectangleCorners,rotatePoint} from "./curveGeometry";
+import {isRadialDimension,radialDimensionGeometry} from "./radialDimensions";
 type P = DrawingPoint;
 export const POINT_LAYER_ID="arcad-point-layer",POINT_LAYER_NAME="포인트그리기";
 export const DIMENSION_LAYER_ID="arcad-dimension-layer",DIMENSION_LAYER_NAME="치수그리기";
-export const isDimensionTool=(tool:string)=>tool==="dimension-aligned"||tool==="dimension-linear";
+export const isDimensionTool=(tool:string)=>["dimension-aligned","dimension-linear","dimension-angle","dimension-radius"].includes(tool);
 export const isReservedLayer=(id:string)=>id===POINT_LAYER_ID||id===DIMENSION_LAYER_ID;
 export const POINT_TOOLS=["point-arrow","point-cloud","point-circle","point-rectangle","point-leader"]as const;
 export type PointTool=typeof POINT_TOOLS[number];
 export const isPointTool=(tool:string):tool is PointTool=>(POINT_TOOLS as readonly string[]).includes(tool);
-export type AnnotationTool = "select"|"move"|"rotate"|"extend"|"offset"|"text"|"polyline"|"circle"|"rectangle"|"dimension-aligned"|"dimension-linear"|"trim"|PointTool;
-export type Annotation = {id:string;layerId:string;kind:"text"|"polyline"|"circle"|"arc"|"rectangle"|"dimension-aligned"|"dimension-linear"|"mask"|PointTool;points:P[];scale?:number;start?:number;sweep?:number;text?:string;textHeight?:number;color?:string;approximate?:boolean;curved?:boolean;rotation?:number;screenWidth?:number;screenFontSize?:number};
+export type AnnotationTool = "select"|"move"|"rotate"|"extend"|"offset"|"text"|"polyline"|"circle"|"rectangle"|"dimension-aligned"|"dimension-linear"|"dimension-angle"|"dimension-radius"|"trim"|PointTool;
+export type Annotation = {id:string;layerId:string;kind:"text"|"polyline"|"circle"|"arc"|"rectangle"|"dimension-aligned"|"dimension-linear"|"dimension-angle"|"dimension-radius"|"mask"|PointTool;points:P[];labelPoint?:P;scale?:number;start?:number;sweep?:number;text?:string;textHeight?:number;color?:string;approximate?:boolean;curved?:boolean;rotation?:number;screenWidth?:number;screenFontSize?:number};
 export const isPointAnnotation=(object:Annotation)=>isPointTool(object.kind);
 export type UserLayer = {id:string;name:string;color:string;visible:boolean};
 export type AnnotationDocument = {version:1;layers:UserLayer[];activeLayer:string;objects:Annotation[];dimensionScale:number;textHeight?:number};
@@ -62,7 +63,7 @@ function textCanvasContext(){if(textContext===undefined)textContext=document.cre
 export function translateAnnotation(o:Annotation,base:P,destination:P):Annotation{
   if(o.kind==="mask")throw Error("A source erasure cannot be moved independently");
   const dx=destination.x-base.x,dy=destination.y-base.y;
-  return{...o,points:o.points.map(p=>({x:p.x+dx,y:p.y+dy}))};
+  return{...o,points:o.points.map(p=>({x:p.x+dx,y:p.y+dy})),...(o.labelPoint?{labelPoint:{x:o.labelPoint.x+dx,y:o.labelPoint.y+dy}}:{})};
 }
 /** Moving source geometry adds a reversible erasure and a translated user object. */
 export function sourceMoveObjects(entity:MeasurableEntity,layerId:string,base:P,destination:P):Annotation[]{
@@ -88,6 +89,7 @@ export function sourceAnnotation(entity:MeasurableEntity,layerId:string):Annotat
 export function annotationGeometry(objects:Annotation[]):MeasurementGeometry{
   const entities:MeasurableEntity[]=[],snaps:SnapPoint[]=[];
   for(const o of objects){if(o.kind==="mask"||isPointAnnotation(o))continue;
+    if(isRadialDimension(o)){for(const p of o.points)snaps.push({...p,kind:"endpoint"});continue;}
     if(o.kind.startsWith("dimension")){const d=dimensionGeometry(o,"drawing");for(const p of o.points.slice(0,2))snaps.push({...p,kind:"endpoint"});if(d)snaps.push({...d.first,kind:"endpoint"},{...d.second,kind:"endpoint"},{x:(d.first.x+d.second.x)/2,y:(d.first.y+d.second.y)/2,kind:"midpoint"});continue;}
     if(o.kind==="text"){snaps.push({...o.points[0],kind:"endpoint"});continue;}
     const points=annotationPoints(o);if(!points.length)continue;
@@ -131,6 +133,7 @@ export function visibleEntityFragment(entity:MeasurableEntity,masks:Annotation[]
   return{kind:picked.length===2?"LINE":"LWPOLYLINE",points:picked,bounds:{minX:Math.min(...xs),maxX:Math.max(...xs),minY:Math.min(...ys),maxY:Math.max(...ys)},length:pathLength(picked),approximate:entity.approximate||["CIRCLE","ARC","ELLIPSE","SPLINE"].includes(entity.kind)};
 }
 export function dimensionGeometry(o:Annotation,sourceUnit:MeasurementUnit){
+  if(isRadialDimension(o))return null;
   let[a,b,p]=o.points;if(!a||!b||!p)return null;const pivot=a,rotation=o.kind==="dimension-linear"?o.rotation??0:0;if(rotation)[a,b,p]=[a,b,p].map(p=>rotatePoint(p,pivot,-rotation));
   const length=distance(a,b);if(length<1e-12)return null;
   let first:P,second:P,value:number;
@@ -155,8 +158,10 @@ export function annotationHit(objects:Annotation[],point:P,tolerance:number,sour
       const b=textBounds(o),d=Math.hypot(Math.max(b.minX-point.x,0,point.x-b.maxX),Math.max(b.minY-point.y,0,point.y-b.maxY));
       if(d<best){best=d;found=o;}continue;
     }
+    const radial=isRadialDimension(o)?radialDimensionGeometry(o,sourceUnit):null;
+    if(radial&&distance(radial.label,point)<Math.max(tolerance,radial.textHeight)){found=o;best=0;continue;}
     const dim=o.kind.startsWith("dimension")?dimensionGeometry(o,sourceUnit):null;
-    const lines=dim?[[dim.first,dim.second],...dim.extensions]as Segment[]:segments(annotationPoints(o));
+    const lines=radial?[...radial.lines.flatMap(segments),...radial.extensions]:dim?[[dim.first,dim.second],...dim.extensions]as Segment[]:segments(annotationPoints(o));
     for(const[a,b]of lines){const d=pointSegmentDistance(point,a,b);if(d<best){best=d;found=o;}}
   }return found;
 }
@@ -223,8 +228,10 @@ function validateDocument(d:AnnotationDocument):void{
   for(const l of d.layers)if(typeof l.id!=="string"||typeof l.name!=="string"||!/^#[a-f0-9]{6}$/i.test(l.color)||typeof l.visible!=="boolean"||(l.id===POINT_LAYER_ID&&(l.name!==POINT_LAYER_NAME||d.layers.indexOf(l)!==d.layers.length-(d.layers.some(l=>l.id===DIMENSION_LAYER_ID)?2:1)))||(l.id===DIMENSION_LAYER_ID&&(l.name!==DIMENSION_LAYER_NAME||l!==d.layers.at(-1))))throw Error();
   if(d.textHeight!==undefined&&(!Number.isFinite(d.textHeight)||d.textHeight<=0||d.textHeight>1e6))throw Error();
   for(const o of d.objects){
-    if(!ids.has(o.layerId)||typeof o.id!=="string"||!["text","polyline","circle","arc","rectangle","dimension-aligned","dimension-linear","mask",...POINT_TOOLS].includes(o.kind)||!Array.isArray(o.points)||o.points.length<(o.kind==="text"?1:2)||o.points.length>30000||o.points.some(p=>!Number.isFinite(p.x)||!Number.isFinite(p.y))||(o.kind==="rectangle"&&![2,4].includes(o.points.length))||((o.kind==="circle"||o.kind==="arc")&&o.points.length!==2)||(o.kind.startsWith("dimension")&&(o.points.length!==3||!Number.isFinite(o.scale)||o.scale!<1||o.scale!>10000))||(o.kind==="arc"&&(!Number.isFinite(o.start)||!Number.isFinite(o.sweep)||o.sweep!<=0||o.sweep!>TAU))||(o.kind==="text"&&(o.points.length!==1||typeof o.text!=="string"||!o.text.trim()||o.text.length>500||!Number.isFinite(o.textHeight)||o.textHeight!<=0||o.textHeight!>1e6)))throw Error();
+    if(!ids.has(o.layerId)||typeof o.id!=="string"||!["text","polyline","circle","arc","rectangle","dimension-aligned","dimension-linear","dimension-angle","dimension-radius","mask",...POINT_TOOLS].includes(o.kind)||!Array.isArray(o.points)||o.points.length<(o.kind==="text"?1:2)||o.points.length>30000||o.points.some(p=>!Number.isFinite(p.x)||!Number.isFinite(p.y))||(o.kind==="rectangle"&&![2,4].includes(o.points.length))||((o.kind==="circle"||o.kind==="arc")&&o.points.length!==2)||(o.kind.startsWith("dimension")&&(o.points.length!==(o.kind==="dimension-radius"?2:3)||!Number.isFinite(o.scale)||o.scale!<1||o.scale!>10000))||(o.kind==="arc"&&(!Number.isFinite(o.start)||!Number.isFinite(o.sweep)||o.sweep!<=0||o.sweep!>TAU))||(o.kind==="text"&&(o.points.length!==1||typeof o.text!=="string"||!o.text.trim()||o.text.length>500||!Number.isFinite(o.textHeight)||o.textHeight!<=0||o.textHeight!>1e6)))throw Error();
     if(o.rotation!==undefined&&(!Number.isFinite(o.rotation)||o.rotation<0||o.rotation>=360)||o.curved!==undefined&&typeof o.curved!=="boolean")throw Error();
+    if(o.labelPoint!==undefined&&(!isRadialDimension(o)||!Number.isFinite(o.labelPoint.x)||!Number.isFinite(o.labelPoint.y)))throw Error();
+    if(isRadialDimension(o)&&!radialDimensionGeometry(o))throw Error();
     if(o.color!==undefined&&!/^#[a-f0-9]{6}$/i.test(o.color))throw Error();
     if(o.screenWidth!==undefined&&(!Number.isFinite(o.screenWidth)||o.screenWidth<1||o.screenWidth>12))throw Error();
     if(isPointAnnotation(o)!==(o.layerId===POINT_LAYER_ID))throw Error();

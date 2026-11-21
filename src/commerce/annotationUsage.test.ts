@@ -22,3 +22,13 @@ it("completed move and ordinary layer creation are classified independently of U
  expect(annotationUsage({...d,objects:[o]},{...d,objects:[{...o,points:[{x:2,y:2},{x:3,y:3}]}]},"move")).toBe("edit.move");
  expect(annotationUsage(d,{...d,layers:[...d.layers,{id:"new",name:"2",color:"#ffffff",visible:true}]},"select")).toBe("layer.create");
 });
+
+it("charges a new angular or radius dimension once, while label placement does not create a second measurement debit",()=>{
+ const d=newAnnotationDocument();
+ for(const kind of ["dimension-radius","dimension-angle"]as const){
+  const o:Annotation={id:"radial",layerId:"arcad-dimension-layer",kind,points:kind==="dimension-radius"?[{x:0,y:0},{x:500,y:0}]:[{x:500,y:0},{x:0,y:0},{x:0,y:500}],scale:20},before={...d,objects:[o]};
+  expect(annotationUsage(d,before,kind)).toBe("draw.dimension");
+  expect(annotationUsage(before,{...before,objects:[{...o,labelPoint:{x:1000,y:1000}}]},kind)).toBeNull();
+  expect(annotationUsage(before,{...before,objects:[{...o,points:o.points.map(p=>({x:p.x*2,y:p.y*2}))}]},kind)).toBe("draw.dimension");
+ }
+});

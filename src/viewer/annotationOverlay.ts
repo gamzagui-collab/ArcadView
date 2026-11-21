@@ -4,6 +4,7 @@ import { annotationPoints, dimensionGeometry, isPointAnnotation, textBounds, vis
 import { drawPointAnnotation } from "./pointMarkup";
 import { formatCadNumber } from "./displayPrecision";
 import {moveHandlePosition,objectGrips} from "./objectEditing";
+import {isRadialDimension,radialDimensionGeometry} from "./radialDimensions";
 const NS="http://www.w3.org/2000/svg";
 export function drawAnnotations(svg:SVGSVGElement,doc:AnnotationDocument,selected:string|null,draft:Annotation|null,project:(p:readonly DrawingPoint[])=>DrawingPoint[],source:MeasurementUnit,display:MeasurementUnit,precision=3,locale="ko",draftPointWindow?:string):void{
   const children:SVGElement[]=[];
@@ -29,6 +30,15 @@ export function drawAnnotations(svg:SVGSVGElement,doc:AnnotationDocument,selecte
         const span=document.createElementNS(NS,"tspan");span.setAttribute("x",String(a.x));span.setAttribute("y",String(a.y+i*height*1.3));span.textContent=line||" ";text.append(span);
       }
       if(active){const b=textBounds(o);line([{x:b.minX,y:b.minY},{x:b.maxX,y:b.minY},{x:b.maxX,y:b.maxY},{x:b.minX,y:b.maxY},{x:b.minX,y:b.minY}],"#e9fbff","annotation-text-selection",o.id);}
+    }else if(isRadialDimension(o)){
+      const g=radialDimensionGeometry(o,source);if(!g)continue;
+      for(const edge of g.extensions)line(edge,color,"annotation-extension",o.id);
+      for(const chain of g.lines){line(chain,"#03101d","annotation-halo",o.id);line(chain,color,active?"annotation-line selected":"annotation-line",o.id);}
+      const [a,b]=project([g.label,{x:g.label.x,y:g.label.y+g.textHeight}]),height=Math.max(.1,Math.hypot(b.x-a.x,b.y-a.y));
+      for(const arrow of g.arrows){const[tip,tail]=project([arrow.tip,arrow.tail]),dx=tail.x-tip.x,dy=tail.y-tip.y,l=Math.hypot(dx,dy);if(l<1e-9)continue;const h=Math.min(height*.65,l*.65),ux=dx/l,uy=dy/l,x=tip.x+ux*h,y=tip.y+uy*h;el("polygon",{points:`${tip.x},${tip.y} ${x-uy*h*.27},${y+ux*h*.27} ${x+uy*h*.27},${y-ux*h*.27}`,fill:color,class:"annotation-arrow","data-object":o.id});}
+      const text=el("text",{x:a.x,y:a.y,dy:-height*.35,"text-anchor":"middle","font-size":height,fill:color,class:"annotation-dimension-text","data-object":o.id,"data-dimension":o.kind});
+      text.textContent=o.kind==="dimension-angle"?formatCadNumber(g.value,precision,locale)+"°":"R "+formatCadNumber(convertMeasurement(g.value,source,display),precision,locale)+(display==="drawing"?"":` ${display}`);
+      const center=project([g.center])[0];el("path",{d:`M${center.x-4},${center.y}h8 M${center.x},${center.y-4}v8`,stroke:color,"stroke-width":1.2,fill:"none","data-object":o.id});
     }else if(dim){
       const[a,b]=project([dim.first,dim.second]),dx=b.x-a.x,dy=b.y-a.y,l=Math.hypot(dx,dy);if(l<1e-6)continue;
       for(const edge of dim.extensions)line(edge,color,"annotation-extension",o.id);
@@ -51,7 +61,7 @@ export function drawAnnotations(svg:SVGSVGElement,doc:AnnotationDocument,selecte
         el("rect",{x:p.x-4,y:p.y-4,width:8,height:8,fill:"#fff",stroke:color,"stroke-width":1.5,"data-grip":g.id,"data-grip-index":i,"data-object":o.id});
       }
       const p=moveHandlePosition(o,project,svg.clientWidth,svg.clientHeight);
-      if(p){el("circle",{cx:p.x,cy:p.y,r:17,fill:"#0a263ce8",stroke:"#9fe5ff","stroke-width":1.5,"data-free-move":o.id});el("path",{d:`M${p.x-10},${p.y}h20 M${p.x},${p.y-10}v20 M${p.x-6},${p.y-4}l-4,4 4,4 M${p.x+6},${p.y-4}l4,4 -4,4 M${p.x-4},${p.y-6}l4,-4 4,4 M${p.x-4},${p.y+6}l4,4 4,-4`,fill:"none",stroke:"#b8f0ff","stroke-width":1.6});}
+      if(p){el("circle",{cx:p.x,cy:p.y,r:17,fill:"#0a263ce8",stroke:"#9fe5ff","stroke-width":1.5,"data-free-move":o.id,...(isRadialDimension(o)?{"data-dimension-handle":o.id}:{})});el("path",{d:`M${p.x-10},${p.y}h20 M${p.x},${p.y-10}v20 M${p.x-6},${p.y-4}l-4,4 4,4 M${p.x+6},${p.y-4}l4,4 -4,4 M${p.x-4},${p.y-6}l4,-4 4,4 M${p.x-4},${p.y+6}l4,4 4,-4`,fill:"none",stroke:"#b8f0ff","stroke-width":1.6});}
     }
     if(o===draft&&draftPointWindow){const group=document.createElementNS(NS,"g");group.setAttribute("mask",`url(#${draftPointWindow})`);group.append(...children.splice(first));children.push(group);}
   }

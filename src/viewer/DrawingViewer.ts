@@ -36,11 +36,12 @@ import { ViewportCuller } from "./viewportCulling";
 import { DWG_CACHE_VERSION } from "../dwg/conversionCache";
 import { referenceDirections } from "./rightAngles";
 import { isDistanceMode, pathIsClosed, snapToPathStart } from "./measurementTools";
+import {snapToCircularEdge} from "./circularSnap";
 import { intersectionSnap } from "./intersectionSnapping";
 import { perpendicularSnap, segmentFoot } from "./cadPicking";
 import { masked, visibleEntityFragment, type Annotation } from "./annotations";
 
-export type MeasurementPick = { point: DrawingPoint; snapped: SnapPoint["kind"] | "start" | "perpendicular" | "intersection" | null; entity: MeasurableEntity | null; replaceIndex?: number };
+export type MeasurementPick = { point: DrawingPoint; snapped: SnapPoint["kind"] | "start" | "perpendicular" | "intersection" | "curve" | null; entity: MeasurableEntity | null; replaceIndex?: number };
 export type AnnotationHandleDrag={offset?:DrawingPoint;anchor?:DrawingPoint;move(pick:MeasurementPick):void;end(pick:MeasurementPick):void;cancel():void};
 export type AnnotationInput = {tool:string;snapping:boolean;handleSnapping?:boolean;anchor?:DrawingPoint;points:DrawingPoint[];referenceSnaps?:SnapPoint[];onHandleDown?(client:DrawingPoint):AnnotationHandleDrag|null;onPick(pick:MeasurementPick):void;onPreview(pick:MeasurementPick|null):void};
 
@@ -128,7 +129,7 @@ export class DrawingViewer {
   };
   private pickAt(position: { x: number; y: number }, precision: boolean): MeasurementPick {
     const editor=this.annotationInput??this.handleDrag?.input;
-    const measurement:MeasurementSettings=editor?{enabled:true,mode:editor.tool==="polyline"?"path":"distance",points:editor.points,snapping:this.handleDrag?editor.handleSnapping??editor.snapping:editor.snapping,entity:null}:this.measurement!;
+    const measurement:MeasurementSettings=editor?{enabled:true,mode:editor.tool==="polyline"?"path":!this.handleDrag&&editor.tool==="dimension-radius"?"radius":editor.tool==="dimension-angle"?"angle":"distance",points:editor.points,snapping:this.handleDrag?editor.handleSnapping??editor.snapping:editor.snapping,entity:null}:this.measurement!;
     const canvas = this.viewer.GetCanvas();
     const rect = canvas.getBoundingClientRect();
     const v = new Vector3((position.x - rect.left) * 2 / rect.width - 1, -(Math.max(rect.top + 20, position.y) - rect.top) * 2 / rect.height + 1, 0).unproject(this.viewer.GetCamera());
@@ -136,21 +137,29 @@ export class DrawingViewer {
     let point: DrawingPoint = { x: v.x + origin.x, y: v.y + origin.y };
     const camera = this.viewer.GetCamera();
     const tolerance = 18 * (camera.right - camera.left) / camera.zoom / rect.width;
+    const replaceIndex = precision ? this.precisionIndex : undefined;
+    const radiusSlot=replaceIndex??(measurement.points.length>=2?0:measurement.points.length),centerKind=measurement.mode==="radius"&&radiusSlot===0?"center":undefined;
     let snapped:SnapPoint|null = measurement.snapping && measurement.mode !== "object" ?
-      this.geometry.packed ? nearestPackedSnap(this.geometry.packed, point, tolerance) : nearestSnap(this.geometry.snaps, point, tolerance) : null;
+      this.geometry.packed ? nearestPackedSnap(this.geometry.packed, point, tolerance,centerKind) : nearestSnap(this.geometry.snaps, point, tolerance,centerKind) : null;
     if(snapped&&masked(snapped,this.masks,this.worldTolerance(3)))snapped=null;
-    const own=measurement.snapping?nearestSnap(this.userGeometry.snaps,point,tolerance):null;
+    const own=measurement.snapping?nearestSnap(this.userGeometry.snaps,point,tolerance,centerKind):null;
     if(own&&(!snapped||Math.hypot(own.x-point.x,own.y-point.y)<Math.hypot(snapped.x-point.x,snapped.y-point.y)))snapped=own;
     // Markup is excluded from CAD measurement. A selected mark may still use
     // its own exact anchors when choosing the base of a move operation.
     const reference=measurement.snapping&&editor?.referenceSnaps?nearestSnap(editor.referenceSnaps,point,tolerance):null;
     if(reference&&(!snapped||Math.hypot(reference.x-point.x,reference.y-point.y)<Math.hypot(snapped.x-point.x,snapped.y-point.y)))snapped=reference;
-    const replaceIndex = precision ? this.precisionIndex : undefined;
+    let curve:DrawingPoint|null=null;
+    if(measurement.mode==="radius"&&radiusSlot===1&&measurement.snapping){
+      curve=snapToCircularEdge(this.geometry,measurement.points[0],point,tolerance,p=>!masked(p,this.masks,this.worldTolerance(3)));
+      const q=snapToCircularEdge(this.userGeometry,measurement.points[0],point,tolerance);
+      if(q&&(!curve||Math.hypot(q.x-point.x,q.y-point.y)<Math.hypot(curve.x-point.x,curve.y-point.y)))curve=q;
+      if(curve&&snapped&&Math.abs(Math.hypot(snapped.x-measurement.points[0].x,snapped.y-measurement.points[0].y)-Math.hypot(curve.x-measurement.points[0].x,curve.y-measurement.points[0].y))>Math.max(tolerance*1e-6,1e-7))snapped=null;
+    }
     const intersection=(editor?.tool==="move"||editor?.tool==="rotate"||!!this.handleDrag)&&measurement.snapping?intersectionSnap([this.geometry,this.userGeometry],point,this.worldTolerance(10),p=>!masked(p,this.masks,this.worldTolerance(3))):null;
     const start = snapToPathStart(measurement, point, tolerance, replaceIndex);
     const anchor=this.handleDrag?.drag.anchor??editor?.anchor??(isDistanceMode(measurement.mode)?measurement.points[replaceIndex===0?1:0]:undefined);
     let perpendicular:DrawingPoint|null=null;
-    if(measurement.snapping&&anchor){
+    if(measurement.snapping&&anchor&&measurement.mode!=="radius"){
       const tol=this.worldTolerance(9),accept=(p:DrawingPoint)=>!masked(p,this.masks,this.worldTolerance(3));
       perpendicular=perpendicularSnap(this.geometry,anchor,point,tol,accept);
       const ownFoot=perpendicularSnap(this.userGeometry,anchor,point,tol);
@@ -160,13 +169,14 @@ export class DrawingViewer {
     else if(intersection)point=intersection;
     else if(perpendicular)point=perpendicular;
     else if (snapped) point = { x: snapped.x, y: snapped.y };
+    else if(curve)point=curve;
     let entity = !this.handleDrag&&(measurement.mode === "object" || editor?.tool==="select"||editor?.tool==="trim") ?
       this.geometry.packed ? nearestPackedEntity(this.geometry.packed, point, tolerance, pointSegmentDistance) : nearestEntity(this.geometry.entities, point, tolerance) : null;
     if(entity)entity=visibleEntityFragment(entity,this.masks,point,tolerance);
     if(entity){let nearest=Infinity,hit=point;for(let i=1;i<entity.points.length;i++){const q=segmentFoot(point,entity.points[i-1],entity.points[i]);if(q&&Math.hypot(q.x-point.x,q.y-point.y)<nearest){hit=q;nearest=Math.hypot(q.x-point.x,q.y-point.y);}}if(masked(hit,this.masks,this.worldTolerance(3)))entity=null;}
     if(measurement.mode==="object"){const candidate=nearestEntity(this.userGeometry.entities,point,tolerance);if(candidate)entity=candidate;}
     if(!editor&&isDistanceMode(measurement.mode))this.updateEndReferences(point);
-    return { point, snapped: start ? "start" : intersection ? "intersection" : perpendicular ? "perpendicular" : snapped?.kind ?? null, entity, ...(replaceIndex !== undefined ? { replaceIndex } : {}) };
+    return { point, snapped: start ? "start" : intersection ? "intersection" : perpendicular ? "perpendicular" : snapped?.kind ?? (curve?"curve":null), entity, ...(replaceIndex !== undefined ? { replaceIndex } : {}) };
   }
   private readonly onContextLost = (event: Event): void => {
     event.preventDefault();

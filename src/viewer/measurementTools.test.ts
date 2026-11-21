@@ -38,7 +38,12 @@ it("restarts after a closed path, reopens with undo and keeps closure when editi
   expect(s.points[0]).toEqual(triangle[0]);
 });
 it("uses the same two-point reset for linear and aligned measurements", () => {
-  for (const mode of ["linear", "distance"] as const) expect(measurementPointsAfterPick(settings({ mode, points: triangle.slice(0, 2) }), triangle[2])).toEqual([triangle[2]]);
+  for (const mode of ["linear", "distance","radius"] as const) expect(measurementPointsAfterPick(settings({ mode, points: triangle.slice(0, 2) }), triangle[2])).toEqual([triangle[2]]);
+});
+it("measures a radius from exactly the center and picked rim, including edits to either reference",()=>{
+ const s=settings({mode:"radius",points:[{x:1e9,y:1e9},{x:1e9+300,y:1e9+400}]});expect(measurementValue(s)).toBe(500);
+ expect(measurementValue({...s,points:s.points.slice(0,1)})).toBeUndefined();
+ expect(measurementValue({...s,points:measurementPointsAfterPick(s,{x:1e9+600,y:1e9+800},1)})).toBe(1000);
 });
 it("shows only the latest segment until open path or area completion is saved, even while paused",()=>{
   for(const mode of ["path","area"] as const){

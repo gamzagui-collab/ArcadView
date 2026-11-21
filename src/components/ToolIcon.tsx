@@ -1,5 +1,8 @@
 import type { SVGProps } from "react";
 const paths:Record<string,string>={
+ radius:"M4 17a9 9 0 1 1 15-10M4 17 17 5M4 14v6M1 17h6M12 5h5v5",
+ 'dimension-radius':"M4 17a9 9 0 1 1 15-10M4 17 17 5M4 14v6M1 17h6M12 5h5v5",
+ 'dimension-angle':"M3 3v18h18M3 9a12 12 0 0 1 12 12M3 12l3-3 2 4M12 17l3 4 3-3",
  rotate:"M20 9A8 8 0 1 0 21 15M20 3v6h-6M12 8v4l3 2",extend:"M3 16h10M13 9v12M13 16h8M17 12l4 4-4 4M20 3v4",
  'point-arrow':"M4 20 20 4M9 4h11v11",'point-cloud':"M6 19a4 4 0 0 1-3-7 4 4 0 0 1 4-6 5 5 0 0 1 9-2 4 4 0 0 1 5 6 5 5 0 0 1-2 9 4 4 0 0 1-7 2 5 5 0 0 1-6-2Z",'point-circle':"M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z",'point-rectangle':"M3 4h18v16H3Z",'point-leader':"M3 20 10 10h11M3 14v6h6M13 3h8M17 3v7",
  offset:"M3 5h12v12M8 10h13v11M4 20l7-7M4 16v4h4",

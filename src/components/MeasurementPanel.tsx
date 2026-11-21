@@ -26,26 +26,26 @@ type Props = {
   finishDisabled?: boolean;
 };
 const unitOptions: MeasurementUnit[] = ["drawing", "mm", "cm", "m", "in", "ft"];
-const modeKeys = { distance: "measureDistance", linear: "measureLinear", path: "measurePath", area: "measureArea", angle: "measureAngle", object: "measureObject" } as const;
+const modeKeys = { distance: "measureDistance", linear: "measureLinear", path: "measurePath", area: "measureArea", radius:"measureRadius", angle: "measureAngle", object: "measureObject" } as const;
 
 export function MeasurementPanel({ settings, geometry, sourceUnit, displayUnit, feedback,precision,onPrecision, onHide, onSettings, onSourceUnit, onDisplayUnit,onFinish,finishDisabled }: Props) {
   const { t, locale } = useI18n();
   const format = (value: number, area = false) => `${formatCadNumber(convertMeasurement(value, sourceUnit, displayUnit, area),precision,locale)} ${displayUnit === "drawing" ? t("drawingUnit") : displayUnit}${area ? "²" : ""}`;
   const { value, area, segment } = measurementReadout(settings);
-  const instruction = settings.mode === "object" ? t("measurePickObject") : settings.mode === "angle" ? t("measurePickAngle") : settings.mode === "area" ? t("measurePickArea") : settings.mode === "path" ? t("measurePickPath") : settings.mode === "linear" ? t("measurePickLinear") : t("measurePickDistance");
+  const instruction = settings.mode === "object" ? t("measurePickObject") : settings.mode === "angle" ? t("measurePickAngle") : settings.mode==="radius"?t("measurePickRadius"):settings.mode === "area" ? t("measurePickArea") : settings.mode === "path" ? t("measurePickPath") : settings.mode === "linear" ? t("measurePickLinear") : t("measurePickDistance");
   return (
     <section className="measurement-panel" aria-label={t("measure")}>
       <div className="measurement-title"><strong>{t("measure")}</strong>
       <div className="measurement-result" role="status">
         {segment?<span>{locale==="ko"?"직전 구간":locale==="en"?"Last segment":"Son parça"}</span>:null}
-        <strong>{value === undefined ? "—" : `${settings.entity?.approximate && settings.mode === "object" ? "≈ " : ""}${settings.mode === "angle" ? `${formatCadNumber(value,precision,locale)}°` : format(value, area)}`}</strong>
+        <strong>{value === undefined ? "—" : `${settings.entity?.approximate && settings.mode === "object" ? "≈ " : ""}${settings.mode === "angle" ? `${formatCadNumber(value,precision,locale)}°` : (settings.mode==="radius"?"R ":"")+format(value, area)}`}</strong>
         {settings.mode === "area" && settings.displayOnly && settings.points.length >= 3 ? <span>{t("measurePerimeter")}: {format(pathLength(settings.points, true))}</span> : null}
         {settings.mode === "object" && settings.entity?.area !== undefined ? <span>{t("measureArea")}: {format(settings.entity.area, true)}</span> : null}
       </div>
       <button type="button" className="icon-button" aria-label={t("closeMeasurement")} onClick={onHide}><CloseIcon /></button></div>
       <ToolStrip className="measurement-modes" tabIndex={0}>
-        {(["distance", "linear", "path", "area", "angle", "object"] as MeasurementMode[]).map((mode) => (
-          <button key={mode} type="button" aria-pressed={settings.mode === mode} onClick={() => onSettings({ ...settings, enabled: true, displayOnly:false, mode, points: [], entity: null })}><ToolIcon name={mode}/><span>{t(modeKeys[mode])}{mode==="distance"?<small className="tool-free-label">{locale==="ko"?"무료 · 무제한":locale==="en"?"Free · unlimited":"Ücretsiz · sınırsız"}</small>:null}</span></button>
+        {(["distance", "linear", "path", "area", "radius", "angle", "object"] as MeasurementMode[]).map((mode) => (
+          <button key={mode} data-mode={mode} type="button" aria-pressed={settings.mode === mode} onClick={() => onSettings({ ...settings, enabled: true, displayOnly:false, mode, points: [], entity: null })}><ToolIcon name={mode}/><span>{t(modeKeys[mode])}{mode==="distance"?<small className="tool-free-label">{locale==="ko"?"무료 · 무제한":locale==="en"?"Free · unlimited":"Ücretsiz · sınırsız"}</small>:null}</span></button>
         ))}
       </ToolStrip>
       <details className="measurement-help"><summary>{t("measureHelp")}</summary><p className="measurement-instruction">{instruction}</p></details>
@@ -74,11 +74,11 @@ export function MeasurementStatus({settings,sourceUnit,displayUnit,feedback,prec
   const {t,locale}=useI18n();
   const {value,area,segment}=measurementReadout(settings);
   const unit=displayUnit==="drawing"?t("drawingUnit"):displayUnit;
-  const result=value===undefined?"—":settings.mode==="angle"?formatCadNumber(value,precision,locale)+"°":`${formatCadNumber(convertMeasurement(value,sourceUnit,displayUnit,area),precision,locale)} ${unit}${area?"²":""}`;
+  const result=value===undefined?"—":settings.mode==="angle"?formatCadNumber(value,precision,locale)+"°":`${settings.mode==="radius"?"R ":""}${formatCadNumber(convertMeasurement(value,sourceUnit,displayUnit,area),precision,locale)} ${unit}${area?"²":""}`;
   const direction=settings.mode==="linear"?linearMeasurement(settings.points,settings.linearAxis)?.axis:undefined;
   const mode=t(modeKeys[settings.mode])+(settings.mode==="distance"?` · ${locale==="ko"?"무료 · 무제한":locale==="en"?"Free · unlimited":"Ücretsiz · sınırsız"}`:"")+(direction?` · ${t(direction==="x"?"measureHorizontal":"measureVertical")}`:"");
   return <div className={`measurement-status ${settings.enabled?"is-active":""}`} role="status">
-    <button type="button" className="measurement-status-copy" onClick={onShow}><span>{settings.enabled?mode:`${t("measureNavigate")} · ${mode}`} · {settings.points.length}{settings.mode==="angle"?"/3":isDistanceMode(settings.mode)?"/2":""} · {settings.snapping?t("measureSnap"):t("measureSnapOff")}{settings.mode==="path"&&pathIsClosed(settings.points)?` · ${t("measureClosed")}`:""}{segment?` · ${locale==="ko"?"직전 구간":locale==="en"?"Last segment":"Son parça"}`:""}</span><strong className="measurement-status-result">{result}</strong>{settings.enabled&&feedback?<small>{feedback}</small>:null}</button>
+    <button type="button" className="measurement-status-copy" onClick={onShow}><span>{settings.enabled?mode:`${t("measureNavigate")} · ${mode}`} · {settings.points.length}{settings.mode==="angle"?"/3":isDistanceMode(settings.mode)||settings.mode==="radius"?"/2":""} · {settings.snapping?t("measureSnap"):t("measureSnapOff")}{settings.mode==="path"&&pathIsClosed(settings.points)?` · ${t("measureClosed")}`:""}{segment?` · ${locale==="ko"?"직전 구간":locale==="en"?"Last segment":"Son parça"}`:""}</span><strong className="measurement-status-result">{result}</strong>{settings.enabled&&feedback?<small>{feedback}</small>:null}</button>
     {!settings.displayOnly&&(settings.mode==="path"||settings.mode==="area")?<button type="button" className="measurement-finish" disabled={finishDisabled||!canFinishMeasurement(settings)} onClick={onFinish}>{locale==="ko"?"측정 완료 ✓":locale==="en"?"Finish ✓":"Bitir ✓"}</button>:null}
     <button type="button" className="measurement-toggle" onClick={onToggle} aria-label={settings.enabled&&!settings.displayOnly?t("measurePause"):t("measureResume")} title={settings.enabled&&!settings.displayOnly?t("measurePause"):t("measureResume")}>{settings.enabled&&!settings.displayOnly?"Ⅱ":"▶"}</button>
   </div>;

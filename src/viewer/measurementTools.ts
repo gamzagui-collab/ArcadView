@@ -2,7 +2,7 @@ import { distance, measuredAngle, pathLength, polygonArea, type LinearAxis, type
 import type { DrawingPoint } from "./savedView";
 
 export const isDistanceMode = (mode: MeasurementSettings["mode"]): boolean => mode === "distance" || mode === "linear";
-export const measurementPointLimit = (mode: MeasurementSettings["mode"]): number => isDistanceMode(mode) ? 2 : mode === "angle" ? 3 : 256;
+export const measurementPointLimit = (mode: MeasurementSettings["mode"]): number => isDistanceMode(mode)||mode==="radius" ? 2 : mode === "angle" ? 3 : 256;
 export function linearMeasurement(points: readonly DrawingPoint[], axis: LinearAxis = "auto") {
   if (points.length < 2) return null;
   const [a, b] = points;
@@ -16,6 +16,7 @@ export function measurementValue(settings: MeasurementSettings): number | undefi
   if (settings.mode === "angle") return measuredAngle(settings.points) ?? undefined;
   if (settings.mode === "area") return settings.points.length >= 3 ? polygonArea(settings.points) : undefined;
   if (settings.mode === "linear") return linearMeasurement(settings.points, settings.linearAxis)?.value;
+  if (settings.mode === "radius") return settings.points.length===2?distance(settings.points[0],settings.points[1]):undefined;
   return settings.points.length >= 2 ? pathLength(settings.points) : undefined;
 }
 /** Drafts expose only the latest edge; totals become readable after completion is saved. */

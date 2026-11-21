@@ -1,10 +1,12 @@
 import{annotationPoints,isPointAnnotation,textBounds,translateAnnotation,type Annotation}from"./annotations";
 import{normAngle,pointDistance,rectangleCorners,rotatePoint,TAU}from"./curveGeometry";
 import type{DrawingPoint as P}from"./savedView";
+import{dimensionLabelPoint,isRadialDimension,radialDimensionGeometry}from"./radialDimensions";
 export type Grip={id:string;point:P};
 const rectangular=(o:Annotation)=>["rectangle","point-rectangle","point-cloud"].includes(o.kind);
 export function objectGrips(o:Annotation):Grip[]{
  if(o.kind==="mask")return[];
+ if(isRadialDimension(o))return[];
  if(rectangular(o))return rectangleCorners(o).map((point,i)=>({id:`corner:${i}`,point}));
  if(o.kind==="circle"||o.kind==="point-circle"){
   const c=o.points[0],r=pointDistance(c,o.points[1]);return[{id:"center",point:c},...[0,1,2,3].map(i=>({id:`radius:${i}`,point:{x:c.x+r*Math.cos(i*Math.PI/2),y:c.y+r*Math.sin(i*Math.PI/2)}}))];
@@ -42,7 +44,7 @@ export function rotateObject(o:Annotation,center:P,degrees:number):Annotation{
  if(o.kind==="mask")throw Error("Erasures cannot rotate independently");
  if(!Number.isFinite(degrees)||!Number.isInteger(degrees))throw Error("Rotation requires integer degrees");
  if(degrees%360===0)return o;
- const points=(rectangular(o)?rectangleCorners(o):o.points).map(p=>rotatePoint(p,center,degrees)),next={...o,points};
+ const points=(rectangular(o)?rectangleCorners(o):o.points).map(p=>rotatePoint(p,center,degrees)),next={...o,points,...(o.labelPoint?{labelPoint:rotatePoint(o.labelPoint,center,degrees)}:{})};
  if(o.kind==="arc")next.start=normAngle((o.start??0)+degrees*Math.PI/180);
  if(o.kind==="text"||o.kind==="dimension-linear")next.rotation=(((o.rotation??0)+degrees)%360+360)%360;
  return next;
@@ -53,12 +55,14 @@ export function rotationDegrees(center:P,reference:P,target:P):number|null{
  return Math.round(normAngle(Math.atan2(a.x*b.y-a.y*b.x,a.x*b.x+a.y*b.y))*180/Math.PI)%360;
 }
 export function selectionPoints(o:Annotation):P[]{
+ if(isRadialDimension(o)){const g=radialDimensionGeometry(o);if(g)return[...g.lines.flat(),g.label];}
  if(rectangular(o))return rectangleCorners(o);
  if(o.kind==="point-circle"){const[c,p]=o.points,r=pointDistance(c,p);return[{x:c.x-r,y:c.y-r},{x:c.x+r,y:c.y+r}];}
  if(o.kind==="text"){const b=textBounds(o);return[{x:b.minX,y:b.minY},{x:b.maxX,y:b.maxY}];}
  return isPointAnnotation(o)?o.points:annotationPoints(o);
 }
 export function moveHandlePosition(o:Annotation,project:(p:readonly P[])=>P[],width:number,height:number):P|null{
+ if(isRadialDimension(o)){const label=dimensionLabelPoint(o);if(!label)return null;const p=project([label])[0];return{x:Math.max(22,Math.min(width-22,p.x)),y:Math.max(22,Math.min(height-112,p.y+30))};}
  const p=project(selectionPoints(o)),x=p.map(p=>p.x),y=p.map(p=>p.y),minX=Math.min(...x),maxX=Math.max(...x),minY=Math.min(...y),maxY=Math.max(...y);
  if(maxX<0||minX>width||maxY<0||minY>height)return null;
  return{x:Math.max(22,Math.min(width-22,(Math.max(0,minX)+Math.min(width,maxX))/2)),y:Math.max(22,Math.min(height-112,maxY+30))};

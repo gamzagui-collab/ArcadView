@@ -65,7 +65,7 @@ export function packedEntity(p: PackedMeasurement, index: number): MeasurableEnt
     length: values[k + 4], area: Number.isNaN(values[k + 5]) ? undefined : values[k + 5], approximate: !!values[k + 6] };
 }
 
-export function nearestPackedSnap(p: PackedMeasurement, target: DrawingPoint, tolerance: number): SnapPoint | null {
+export function nearestPackedSnap(p: PackedMeasurement, target: DrawingPoint, tolerance: number,kind?:SnapPoint["kind"]): SnapPoint | null {
   if (![target.x, target.y, tolerance].every(Number.isFinite) || tolerance < 0) return null;
   let low = 0, high = p.snapCount;
   while (low < high) { const mid = (low + high) >>> 1, r = row(p.snaps, mid, 3); if (r.chunk[r.offset] < target.x - tolerance) low = mid + 1; else high = mid; }
@@ -73,11 +73,12 @@ export function nearestPackedSnap(p: PackedMeasurement, target: DrawingPoint, to
   for (let i = low; i < p.snapCount; i++) {
     const r = row(p.snaps, i, 3), x = r.chunk[r.offset], y = r.chunk[r.offset + 1];
     if (x > target.x + tolerance) break;
+    if(kind&&snapKinds[r.chunk[r.offset+2]]!==kind)continue;
     const d = Math.hypot(x - target.x, y - target.y);
     if (d <= best) { best = d; closest = { x, y, kind: snapKinds[r.chunk[r.offset + 2]] }; }
   }
   if(p.extraSnaps&&p.extraSnapCount){
-    const extra=nearestPackedSnap({...p,snaps:p.extraSnaps,snapCount:p.extraSnapCount,extraSnaps:undefined,extraSnapCount:0},target,best);
+    const extra=nearestPackedSnap({...p,snaps:p.extraSnaps,snapCount:p.extraSnapCount,extraSnaps:undefined,extraSnapCount:0},target,best,kind);
     if(extra&&(!closest||Math.hypot(extra.x-target.x,extra.y-target.y)<best))closest=extra;
   }
   return closest;
