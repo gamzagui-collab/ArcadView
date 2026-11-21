@@ -1,6 +1,6 @@
 import {migrateTakeoff,newTakeoff,validateDocument,type TakeoffDocument} from "./model";
 import type {MeasurementUnit} from "../viewer/measurementGeometry";
-export const TAKEOFF_DB="arcad-concrete-takeoff",TAKEOFF_DB_VERSION=2;
+export const TAKEOFF_DB="arcad-concrete-takeoff",TAKEOFF_DB_VERSION=3;
 /** A separate versioned database: no migration or writes to drawings, ordinary
  * annotations, accounts or usage journals. Transaction completion is the ACK. */
 function open():Promise<IDBDatabase>{return new Promise((resolve,reject)=>{
@@ -20,6 +20,6 @@ export async function loadTakeoff(drawing:TakeoffDocument["drawing"],unit:Measur
 export async function saveTakeoff(document:TakeoffDocument):Promise<void>{
  validateDocument(document);const db=await open();try{await new Promise<void>((resolve,reject)=>{const t=db.transaction("documents","readwrite");t.oncomplete=()=>resolve();t.onabort=()=>reject(t.error??Error("적산 저장이 취소되었습니다."));t.onerror=()=>reject(t.error??Error("적산 저장에 실패했습니다."));t.objectStore("documents").put(document);});}finally{db.close();}
 }
-export type TakeoffCompletion={drawingKey:string;objectId:string;kind:"wall"|"beam"|"slab"};
+export type TakeoffCompletion={drawingKey:string;objectId:string;kind:"wall"|"beam"|"slab"|"column"};
 /** Future usage integration point. Deliberately has no billing implementation. */
 export function notifyTakeoffCompleted(detail:TakeoffCompletion){globalThis.dispatchEvent?.(new CustomEvent("arcad:takeoff-completed",{detail}));}

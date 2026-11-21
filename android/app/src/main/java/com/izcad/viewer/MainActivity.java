@@ -22,6 +22,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(DwgConversionPlugin.class);
         registerPlugin(AppUpdatesPlugin.class);
         registerPlugin(ArcadCommercePlugin.class);
+        registerPlugin(TakeoffExportPlugin.class);
         super.onCreate(savedInstanceState);
         bridge.addWebViewListener(new WebViewListener() {
             @Override public boolean onRenderProcessGone(WebView view, RenderProcessGoneDetail detail) {

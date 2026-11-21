@@ -1,11 +1,11 @@
 import {expect,it} from "vitest";
-import {asAnnotation,cleanPoints,fromAnnotation,geometryError,insidePolygon,labelPosition,migrateTakeoff,moveTakeoffToLayer,newTakeoff,quantity,takeoffVisible,totals,validateDocument,type TakeoffKind,type TakeoffObject} from "./model";
+import {asAnnotation,cleanPoints,fromAnnotation,geometryError,insidePolygon,isAreaKind,labelPosition,migrateTakeoff,moveTakeoffToLayer,newTakeoff,quantity,takeoffVisible,totals,validateDocument,type TakeoffKind,type TakeoffObject} from "./model";
 import {takeoffMovePoint} from "./overlay";
 import {UndoHistory} from "../viewer/undoHistory";
 import {translateAnnotation} from "../viewer/annotations";
 import {UNIT_METERS,type MeasurementUnit} from "../viewer/measurementGeometry";
 const drawing={key:"v1-"+"a".repeat(64),name:"site.dwg",size:123,lastModified:1};
-const obj=(id:string,kind:TakeoffKind,points:Array<{x:number;y:number}>,dimensions:TakeoffObject["dimensions"]):TakeoffObject=>({id,layerId:"takeoff-default",kind,groupId:kind,geometry:{type:kind==="slab"?"polygon":"path",points},dimensions,label:{visible:true}});
+const obj=(id:string,kind:TakeoffKind,points:Array<{x:number;y:number}>,dimensions:TakeoffObject["dimensions"]):TakeoffObject=>({id,layerId:"takeoff-default",kind,groupId:kind,geometry:{type:isAreaKind(kind)?"polygon":"path",points},dimensions,label:{visible:true}});
 const w1=obj("W01","wall",[{x:0,y:0},{x:12000,y:0},{x:12000,y:8000}],{heightMm:3000,thicknessMm:200});
 const w2=obj("W02","wall",[{x:0,y:0},{x:10000,y:0}],{heightMm:3200,thicknessMm:250});
 const b1=obj("B01","beam",[{x:0,y:0},{x:12000,y:0}],{widthMm:300,depthMm:600});
@@ -17,6 +17,9 @@ it("W01=12.000, W02=8.000, B01=2.160, S01=7.200 and concrete total=29.360 m³",(
 it.each(["mm","cm","m","in","ft"]as MeasurementUnit[])("converts %s coordinates before computing length, squared area and volume",unit=>{
  const ratio=UNIT_METERS[unit],scale=(o:TakeoffObject)=>({...o,geometry:{...o.geometry,points:o.geometry.points.map(p=>({x:p.x*.001/ratio,y:p.y*.001/ratio}))}});
  expect(quantity(scale(w1),unit).volumeM3).toBeCloseTo(12,10);expect(quantity(scale(s1),unit).areaM2).toBeCloseTo(40,10);expect(quantity(scale(s1),unit).volumeM3).toBeCloseTo(7.2,10);
+});
+it.each(["mm","cm","m","in","ft"]as MeasurementUnit[])("computes column footprint volume in %s and retains closed geometry through annotation editing",unit=>{
+ const ratio=UNIT_METERS[unit],column=obj("C01","column",[{x:0,y:0},{x:.6/ratio,y:0},{x:.6/ratio,y:.3/ratio},{x:0,y:.3/ratio}],{heightMm:3000});expect(quantity(column,unit).areaM2).toBeCloseTo(.18,12);expect(quantity(column,unit).volumeM3).toBeCloseTo(.54,12);expect(asAnnotation(column).points.at(-1)).toEqual(column.geometry.points[0]);expect(fromAnnotation(column,asAnnotation(column))).toEqual(column);expect(()=>quantity({...column,dimensions:{heightMm:0}},unit)).toThrow();
 });
 it("keeps closure aliases, winding and large world coordinates from changing area",()=>{
  for(const points of [s1.geometry.points,[...s1.geometry.points].reverse(),[...s1.geometry.points,s1.geometry.points[0]],s1.geometry.points.map(p=>({x:p.x+1e9,y:p.y-2e9}))])expect(quantity({...s1,geometry:{type:"polygon",points}},"mm").areaM2).toBe(40);
@@ -37,7 +40,7 @@ it("derives totals after spec/vertex edits, deletion, Undo/Redo and hidden group
  const translated=fromAnnotation(w1,translateAnnotation(asAnnotation(w1),{x:0,y:0},{x:1e9,y:1e9}));expect(quantity(translated,"mm")).toEqual(quantity(w1,"mm"));
 });
 it("refuses unsupported schemas and foreign drawing identities instead of overwriting data",()=>{
- const d=newTakeoff(drawing,"drawing");validateDocument(d);expect(()=>validateDocument({...d,schemaVersion:3})).toThrow();expect(()=>validateDocument(d,"v1-"+"b".repeat(64))).toThrow();expect(()=>validateDocument({...d,objects:[w1]})).toThrow();
+ const d=newTakeoff(drawing,"drawing");validateDocument(d);expect(()=>validateDocument({...d,schemaVersion:4})).toThrow();expect(()=>validateDocument(d,"v1-"+"b".repeat(64))).toThrow();expect(()=>validateDocument({...d,objects:[w1]})).toThrow();
 });
 
 it("keeps a movement handle away from editable points when the lower toolbar forces clamping",()=>{const points=[{x:84,y:488},{x:156,y:488},{x:228,y:488},{x:228,y:392}],handle=takeoffMovePoint(points,360,616);expect(points.every(p=>Math.hypot(p.x-handle.x,p.y-handle.y)>=30)).toBe(true);expect(handle.y).toBeLessThan(392);});
@@ -50,8 +53,8 @@ it("separates regional layers from member types and keeps hidden quantities in t
  expect(()=>validateDocument({...d,objects:[{...w1,layerId:"missing"}]})).toThrow();
 });
 it("upgrades v1 into a default region without changing original quantities, identities or labels",()=>{
- const original={...newTakeoff(drawing,"mm"),schemaVersion:1,objects:[w1,s1]};
- const upgraded=migrateTakeoff(original);expect(upgraded.schemaVersion).toBe(2);expect(upgraded.layers).toEqual([{id:"takeoff-default",name:"적산 1",visible:true}]);expect(upgraded.objects).toEqual(original.objects);expect(upgraded.drawing).toEqual(drawing);expect(totals(upgraded).volumeM3).toBeCloseTo(19.2);expect(upgraded.options.cadVisible).toBe(true);expect(original.schemaVersion).toBe(1);
+ const original={...newTakeoff(drawing,"mm"),schemaVersion:1,groups:newTakeoff(drawing,"mm").groups.filter(g=>g.id!=="column"),objects:[w1,s1]};
+ const upgraded=migrateTakeoff(original);expect(upgraded.schemaVersion).toBe(3);expect(upgraded.layers).toEqual([{id:"takeoff-default",name:"적산 1",visible:true}]);expect(upgraded.objects).toEqual(original.objects);expect(upgraded.drawing).toEqual(drawing);expect(totals(upgraded).volumeM3).toBeCloseTo(19.2);expect(upgraded.options.cadVisible).toBe(true);expect(original.schemaVersion).toBe(1);
  expect(migrateTakeoff(upgraded)).toBe(upgraded);expect(()=>migrateTakeoff({...original,objects:[{...w1,dimensions:{heightMm:0}}]})).toThrow();
 });
 

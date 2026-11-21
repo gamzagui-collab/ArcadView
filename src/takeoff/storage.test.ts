@@ -20,13 +20,24 @@ it("keeps the prior saved document intact when a write fails after opening the d
  await expect(saveTakeoff({...before,revision:2,unit:"m"})).rejects.toThrow("full");put.mockRestore();expect((await loadTakeoff(drawing,"m")).document).toEqual(before);
 });
 
-it("atomically migrates an existing v1 database to regional schema v2 and preserves ordinary databases",async()=>{
- const factory=new IDBFactory();vi.stubGlobal("indexedDB",factory);const original={...newTakeoff(drawing,"m"),schemaVersion:1};
+it("atomically migrates an existing v1 database to schema v3 and preserves ordinary databases",async()=>{
+ const factory=new IDBFactory();vi.stubGlobal("indexedDB",factory);const original={...newTakeoff(drawing,"m"),schemaVersion:1,groups:newTakeoff(drawing,"m").groups.filter(g=>g.id!=="column")};
  const db=await new Promise<IDBDatabase>((resolve,reject)=>{const r=factory.open(TAKEOFF_DB,1);r.onupgradeneeded=()=>{const s=r.result.createObjectStore("documents",{keyPath:"drawing.key"});s.createIndex("drawingName","drawing.name");s.put(original);};r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});db.close();
- const saved=await loadTakeoff(drawing,"mm");expect(saved.document.schemaVersion).toBe(2);expect(saved.document.unit).toBe("m");expect(saved.document.layers[0].name).toBe("적산 1");expect((await factory.databases()).find(d=>d.name===TAKEOFF_DB)?.version).toBe(2);
+ const saved=await loadTakeoff(drawing,"mm");expect(saved.document.schemaVersion).toBe(3);expect(saved.document.unit).toBe("m");expect(saved.document.layers[0].name).toBe("적산 1");expect((await factory.databases()).find(d=>d.name===TAKEOFF_DB)?.version).toBe(3);
+});
+it("migrates genuine v2 documents atomically and leaves legacy geometry, region data and preferences intact",async()=>{
+ const factory=new IDBFactory();vi.stubGlobal("indexedDB",factory);const current=newTakeoff(drawing,"m"),{column:removed,...defaults}=current.defaults;void removed;
+ const original={...current,schemaVersion:2,groups:current.groups.filter(g=>g.id!=="column"),defaults,options:{...current.options,labelsVisible:false,keepColors:["#ff0000"]}};
+ const db=await new Promise<IDBDatabase>(resolve=>{const r=factory.open(TAKEOFF_DB,2);r.onupgradeneeded=()=>{const s=r.result.createObjectStore("documents",{keyPath:"drawing.key"});s.createIndex("drawingName","drawing.name");s.put(original);};r.onsuccess=()=>resolve(r.result);});db.close();
+ const after=(await loadTakeoff(drawing,"mm")).document;expect(after.schemaVersion).toBe(3);expect(after.objects).toEqual(original.objects);expect(after.layers).toEqual(original.layers);expect(after.options).toEqual(original.options);expect(after.defaults).toEqual({...defaults,column:{heightMm:3000}});expect(after.groups).toEqual([...original.groups,{id:"column",visible:true,color:"#83e4bc"}]);expect((await factory.databases()).find(d=>d.name===TAKEOFF_DB)?.version).toBe(3);
+});
+it("rolls back every v2 document if one corrupt row prevents the v3 upgrade",async()=>{
+ const factory=new IDBFactory();vi.stubGlobal("indexedDB",factory);const current=newTakeoff(drawing,"m"),original={...current,schemaVersion:2,groups:current.groups.filter(g=>g.id!=="column")},bad={...original,drawing:{...drawing,key:"v1-"+"f".repeat(64)},groups:[]};
+ const db=await new Promise<IDBDatabase>(resolve=>{const r=factory.open(TAKEOFF_DB,2);r.onupgradeneeded=()=>{const s=r.result.createObjectStore("documents",{keyPath:"drawing.key"});s.createIndex("drawingName","drawing.name");s.put(original);s.put(bad);};r.onsuccess=()=>resolve(r.result);});db.close();await expect(loadTakeoff(drawing,"m")).rejects.toBeTruthy();expect((await factory.databases()).find(d=>d.name===TAKEOFF_DB)?.version).toBe(2);
+ const old=await new Promise<IDBDatabase>(resolve=>{const r=factory.open(TAKEOFF_DB,2);r.onsuccess=()=>resolve(r.result);});const r=old.transaction("documents").objectStore("documents").get(drawing.key);expect(await new Promise(resolve=>{r.onsuccess=()=>resolve(r.result);})).toEqual(original);old.close();
 });
 it("aborts the entire upgrade if any legacy document is corrupt instead of replacing or deleting it",async()=>{
- const factory=new IDBFactory();vi.stubGlobal("indexedDB",factory);const original={...newTakeoff(drawing,"m"),schemaVersion:1,objects:[{id:"bad"}]};
+ const factory=new IDBFactory();vi.stubGlobal("indexedDB",factory);const original={...newTakeoff(drawing,"m"),schemaVersion:1,groups:newTakeoff(drawing,"m").groups.filter(g=>g.id!=="column"),objects:[{id:"bad"}]};
  const db=await new Promise<IDBDatabase>(resolve=>{const r=factory.open(TAKEOFF_DB,1);r.onupgradeneeded=()=>{const s=r.result.createObjectStore("documents",{keyPath:"drawing.key"});s.createIndex("drawingName","drawing.name");s.put(original);};r.onsuccess=()=>resolve(r.result);});db.close();
  await expect(loadTakeoff(drawing,"mm")).rejects.toBeTruthy();expect((await factory.databases()).find(d=>d.name===TAKEOFF_DB)?.version).toBe(1);
  const old=await new Promise<IDBDatabase>(resolve=>{const r=factory.open(TAKEOFF_DB,1);r.onsuccess=()=>resolve(r.result);});const request=old.transaction("documents").objectStore("documents").get(drawing.key);expect(await new Promise(resolve=>{request.onsuccess=()=>resolve(request.result);})).toEqual(original);old.close();
