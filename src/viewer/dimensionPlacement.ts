@@ -11,8 +11,18 @@ export function dimensionPosition(o:Annotation):P|null{
 }
 export function positionDimension(o:Annotation,target:P):Annotation|null{
   if(!Number.isFinite(target.x)||!Number.isFinite(target.y))return null;
-  if(isRadialDimension(o))return positionRadialDimension(o,target);
+  if(isRadialDimension(o)){const next=positionRadialDimension(o,target);return next?followDimensionText(o,next):null;}
   // Store only the constrained dimension-line midpoint. Never replace any picked reference.
   const labelPoint=dimensionPosition({...o,labelPoint:target});
-  return labelPoint?{...o,labelPoint}:null;
+  return labelPoint?followDimensionText(o,{...o,labelPoint}):null;
+}
+
+function followDimensionText(before:Annotation,after:Annotation):Annotation{
+ if(!before.textPoint)return after;const a=dimensionPosition(before),b=dimensionPosition(after);if(!a||!b)return after;
+ return{...after,textPoint:{x:before.textPoint.x+(b.x-a.x),y:before.textPoint.y+(b.y-a.y)}};
+}
+export function dimensionTextPosition(o:Annotation):P|null{return o.textPoint??dimensionPosition(o);}
+export function positionDimensionText(o:Annotation,target:P):Annotation|null{
+ if(!Number.isFinite(target.x)||!Number.isFinite(target.y)||!dimensionPosition(o))return null;
+ return{...o,textPoint:{...target}};
 }

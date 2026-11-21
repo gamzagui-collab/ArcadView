@@ -1,5 +1,6 @@
 import type { SVGProps } from "react";
 const paths:Record<string,string>={
+ arc:"M3 18A13 13 0 0 1 21 5M2 16v4h4M19 3h4v4",
  radius:"M4 17a9 9 0 1 1 15-10M4 17 17 5M4 14v6M1 17h6M12 5h5v5",
  'dimension-radius':"M4 17a9 9 0 1 1 15-10M4 17 17 5M4 14v6M1 17h6M12 5h5v5",
  'dimension-angle':"M3 3v18h18M3 9a12 12 0 0 1 12 12M3 12l3-3 2 4M12 17l3 4 3-3",

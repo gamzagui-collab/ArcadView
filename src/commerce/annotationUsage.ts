@@ -7,7 +7,7 @@ export function annotationUsage(before:AnnotationDocument,after:AnnotationDocume
     if(o.kind==="mask")return false;
     const previous=old.get(o.id);
     // Placing the completed label/arc exposes no new measured value.
-    if(previous&&isDimensionTool(o.kind)&&JSON.stringify({...previous,labelPoint:undefined})===JSON.stringify({...o,labelPoint:undefined}))return false;
+    if(previous&&isDimensionTool(o.kind)&&JSON.stringify({...previous,labelPoint:undefined,textPoint:undefined})===JSON.stringify({...o,labelPoint:undefined,textPoint:undefined}))return false;
     return JSON.stringify(previous)!==JSON.stringify(o);
   });
   if(changed.length){
@@ -15,6 +15,7 @@ export function annotationUsage(before:AnnotationDocument,after:AnnotationDocume
     if(tool==="select")return"edit.reshape";
     if(tool.startsWith("dimension"))return"draw.dimension";
     if(tool.startsWith("point-"))return"draw.point";
+    if(tool==="arc")return "draw.circle"; // Circular drawing uses the existing circle operation.
     if(["polyline","circle","rectangle","text"].includes(tool))return"draw."+tool;
     return"edit.style";
   }

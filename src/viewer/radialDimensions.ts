@@ -23,17 +23,17 @@ export function positionRadialDimension(o:Annotation,target:P):Annotation|null {
   const length=distance(center,base),r=distance(center,target);return{...o,labelPoint:{x:center.x+(base.x-center.x)*r/length,y:center.y+(base.y-center.y)*r/length}};
 }
 export function radialDimensionGeometry(o:Annotation,source:MeasurementUnit="drawing") {
-  const label=dimensionLabelPoint(o);if(!label)return null;
+  const placement=dimensionLabelPoint(o);if(!placement)return null;const label=o.textPoint??placement;
   const textHeight=2.5*(o.scale??20)*(source==="drawing"?1:.001/UNIT_METERS[source]);
   const lines:P[][]=[],extensions:Array<[P,P]>=[],arrows:Array<{tip:P;tail:P}>=[];
   if(o.kind==="dimension-radius"){
     const[center,rim]=o.points,r=distance(center,rim);if(r<1e-9)return null;
-    lines.push([center,rim],[rim,label]);arrows.push({tip:rim,tail:center});return{center,label,textHeight,value:r,lines,extensions,arrows};
+    lines.push([center,rim],[rim,placement]);if(o.textPoint)lines.push([placement,label]);arrows.push({tip:rim,tail:center});return{center,label,textHeight,value:r,lines,extensions,arrows};
   }
   if(o.kind==="dimension-angle"){
     const[a,center,b]=o.points,value=measuredAngle(o.points);if(value===null||value<1e-8)return null;
-    const start=Math.atan2(a.y-center.y,a.x-center.x),sweep=Math.atan2((a.x-center.x)*(b.y-center.y)-(a.y-center.y)*(b.x-center.x),(a.x-center.x)*(b.x-center.x)+(a.y-center.y)*(b.y-center.y)),r=distance(center,label);if(r<1e-9)return null;
+    const start=Math.atan2(a.y-center.y,a.x-center.x),sweep=Math.atan2((a.x-center.x)*(b.y-center.y)-(a.y-center.y)*(b.x-center.x),(a.x-center.x)*(b.x-center.x)+(a.y-center.y)*(b.y-center.y)),r=distance(center,placement);if(r<1e-9)return null;
     const n=Math.max(12,Math.ceil(Math.abs(sweep)*48)),arc=Array.from({length:n+1},(_,i)=>({x:center.x+r*Math.cos(start+sweep*i/n),y:center.y+r*Math.sin(start+sweep*i/n)}));
-    const headStep=Math.max(1,Math.ceil(n/5));lines.push(arc);extensions.push([center,arc[0]],[center,arc.at(-1)!]);arrows.push({tip:arc[0],tail:arc[headStep]},{tip:arc.at(-1)!,tail:arc[n-headStep]});return{center,label,textHeight,value,lines,extensions,arrows};
+    const headStep=Math.max(1,Math.ceil(n/5));lines.push(arc);if(o.textPoint)lines.push([placement,label]);extensions.push([center,arc[0]],[center,arc.at(-1)!]);arrows.push({tip:arc[0],tail:arc[headStep]},{tip:arc.at(-1)!,tail:arc[n-headStep]});return{center,label,textHeight,value,lines,extensions,arrows};
   }return null;
 }

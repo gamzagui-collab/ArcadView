@@ -49,7 +49,7 @@ export function rotateObject(o:Annotation,center:P,degrees:number):Annotation{
  if(o.kind==="mask")throw Error("Erasures cannot rotate independently");
  if(!Number.isFinite(degrees)||!Number.isInteger(degrees))throw Error("Rotation requires integer degrees");
  if(degrees%360===0)return o;
- const points=(rectangular(o)?rectangleCorners(o):o.points).map(p=>rotatePoint(p,center,degrees)),next={...o,points,...(o.labelPoint?{labelPoint:rotatePoint(o.labelPoint,center,degrees)}:{})};
+ const points=(rectangular(o)?rectangleCorners(o):o.points).map(p=>rotatePoint(p,center,degrees)),next={...o,points,...(o.labelPoint?{labelPoint:rotatePoint(o.labelPoint,center,degrees)}:{}),...(o.textPoint?{textPoint:rotatePoint(o.textPoint,center,degrees)}:{})};
  if(o.kind==="arc")next.start=normAngle((o.start??0)+degrees*Math.PI/180);
  if(o.kind==="text"||o.kind==="dimension-linear")next.rotation=(((o.rotation??0)+degrees)%360+360)%360;
  return next;

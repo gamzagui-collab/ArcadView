@@ -30,6 +30,11 @@ it("charges a new angular or radius dimension once, while label placement does n
   expect(annotationUsage(d,before,kind)).toBe("draw.dimension");
   expect(annotationUsage(before,{...before,objects:[{...o,labelPoint:{x:1000,y:1000}}]},kind)).toBeNull();
   expect(annotationUsage(before,{...before,objects:[{...o,labelPoint:{x:1000,y:1000}}]},"select")).toBeNull();
+  expect(annotationUsage(before,{...before,objects:[{...o,textPoint:{x:1000,y:1000}}]},"select")).toBeNull();
   expect(annotationUsage(before,{...before,objects:[{...o,points:o.points.map(p=>({x:p.x*2,y:p.y*2}))}]},kind)).toBe("draw.dimension");
  }
+});
+it("uses the existing circular drawing operation for a newly completed arc",()=>{
+ const d=newAnnotationDocument(),o:Annotation={id:"arc",layerId:d.activeLayer,kind:"arc",points:[{x:0,y:0},{x:50,y:0}],start:0,sweep:Math.PI};
+ expect(annotationUsage(d,{...d,objects:[o]},"arc")).toBe("draw.circle");
 });
