@@ -1,14 +1,16 @@
-import{annotationPoints,isPointAnnotation,textBounds,translateAnnotation,type Annotation}from"./annotations";
+import{annotationPoints,isDimensionTool,isPointAnnotation,textBounds,translateAnnotation,type Annotation}from"./annotations";
 import{normAngle,pointDistance,rectangleCorners,rotatePoint,TAU}from"./curveGeometry";
 import type{DrawingPoint as P}from"./savedView";
-import{dimensionLabelPoint,isRadialDimension,radialDimensionGeometry}from"./radialDimensions";
+import{isRadialDimension,radialDimensionGeometry}from"./radialDimensions";
+import{dimensionPosition,positionDimension}from"./dimensionPlacement";
 export type Grip={id:string;point:P};
 /** Moving an existing dimension label changes no measured value. */
-export const canPositionObject=(o:Annotation,hasAccess:(tool:string)=>boolean):boolean=>isRadialDimension(o)||hasAccess("edit.reshape");
+export const canPositionObject=(o:Annotation,hasAccess:(tool:string)=>boolean,positionOnly=true):boolean=>positionOnly&&isDimensionTool(o.kind)||hasAccess("edit.reshape");
 const rectangular=(o:Annotation)=>["rectangle","point-rectangle","point-cloud"].includes(o.kind);
 export function objectGrips(o:Annotation):Grip[]{
  if(o.kind==="mask")return[];
  if(isRadialDimension(o))return[];
+ if(isDimensionTool(o.kind)){const point=dimensionPosition(o);return[...o.points.slice(0,2).map((point,i)=>({id:`vertex:${i}`,point})),...(point?[{id:"dimension-position",point}]:[])];}
  if(rectangular(o))return rectangleCorners(o).map((point,i)=>({id:`corner:${i}`,point}));
  if(o.kind==="circle"||o.kind==="point-circle"){
   const c=o.points[0],r=pointDistance(c,o.points[1]);return[{id:"center",point:c},...[0,1,2,3].map(i=>({id:`radius:${i}`,point:{x:c.x+r*Math.cos(i*Math.PI/2),y:c.y+r*Math.sin(i*Math.PI/2)}}))];
@@ -22,6 +24,7 @@ export function objectGrips(o:Annotation):Grip[]{
 }
 export function reshapeObject(o:Annotation,grip:string,target:P):Annotation|null{
  if(!Number.isFinite(target.x)||!Number.isFinite(target.y)||o.kind==="mask")return null;
+ if(grip==="dimension-position")return positionDimension(o,target);
  if(grip==="center")return translateAnnotation(o,o.points[0],target);
  if(rectangular(o)&&grip.startsWith("corner:")){
   const p=rectangleCorners(o),i=+grip.split(":")[1],opposite=(i+2)%4,a=p[opposite],b=p[(opposite+1)%4],c=p[(opposite+3)%4],l=pointDistance(a,b),m=pointDistance(a,c);if(!l||!m)return null;
@@ -64,7 +67,7 @@ export function selectionPoints(o:Annotation):P[]{
  return isPointAnnotation(o)?o.points:annotationPoints(o);
 }
 export function moveHandlePosition(o:Annotation,project:(p:readonly P[])=>P[],width:number,height:number):P|null{
- if(isRadialDimension(o)){const label=dimensionLabelPoint(o);if(!label)return null;const p=project([label])[0];return{x:Math.max(22,Math.min(width-22,p.x)),y:Math.max(22,Math.min(height-112,p.y+30))};}
+ if(isDimensionTool(o.kind)){const label=dimensionPosition(o);if(!label)return null;const p=project([label])[0];return{x:Math.max(22,Math.min(width-22,p.x)),y:Math.max(22,Math.min(height-112,p.y+30))};}
  const p=project(selectionPoints(o)),x=p.map(p=>p.x),y=p.map(p=>p.y),minX=Math.min(...x),maxX=Math.max(...x),minY=Math.min(...y),maxY=Math.max(...y);
  if(maxX<0||minX>width||maxY<0||minY>height)return null;
  return{x:Math.max(22,Math.min(width-22,(Math.max(0,minX)+Math.min(width,maxX))/2)),y:Math.max(22,Math.min(height-112,maxY+30))};

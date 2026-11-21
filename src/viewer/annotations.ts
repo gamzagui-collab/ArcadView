@@ -134,16 +134,16 @@ export function visibleEntityFragment(entity:MeasurableEntity,masks:Annotation[]
 }
 export function dimensionGeometry(o:Annotation,sourceUnit:MeasurementUnit){
   if(isRadialDimension(o))return null;
-  let[a,b,p]=o.points;if(!a||!b||!p)return null;const pivot=a,rotation=o.kind==="dimension-linear"?o.rotation??0:0;if(rotation)[a,b,p]=[a,b,p].map(p=>rotatePoint(p,pivot,-rotation));
+  let[a,b,p]=o.points;if(!a||!b||!p)return null;let placement=o.labelPoint??p;const pivot=a,rotation=o.kind==="dimension-linear"?o.rotation??0:0;if(rotation)[a,b,p,placement]=[a,b,p,placement].map(p=>rotatePoint(p,pivot,-rotation));
   const length=distance(a,b);if(length<1e-12)return null;
   let first:P,second:P,value:number;
   if(o.kind==="dimension-linear"){
-    // The third pick chooses the horizontal or vertical dimension's placement.
+    // The original third pick fixes the axis; later placement changes only its offset.
     const cx=(a.x+b.x)/2,cy=(a.y+b.y)/2;
-    if(Math.abs(p.y-cy)>=Math.abs(p.x-cx)){first={x:a.x,y:p.y};second={x:b.x,y:p.y};value=Math.abs(b.x-a.x);}
-    else{first={x:p.x,y:a.y};second={x:p.x,y:b.y};value=Math.abs(b.y-a.y);}
+    if(Math.abs(p.y-cy)>=Math.abs(p.x-cx)){first={x:a.x,y:placement.y};second={x:b.x,y:placement.y};value=Math.abs(b.x-a.x);}
+    else{first={x:placement.x,y:a.y};second={x:placement.x,y:b.y};value=Math.abs(b.y-a.y);}
   }else{
-    const nx=-(b.y-a.y)/length,ny=(b.x-a.x)/length,h=(p.x-a.x)*nx+(p.y-a.y)*ny;
+    const nx=-(b.y-a.y)/length,ny=(b.x-a.x)/length,h=(placement.x-a.x)*nx+(placement.y-a.y)*ny;
     first={x:a.x+nx*h,y:a.y+ny*h};second={x:b.x+nx*h,y:b.y+ny*h};value=length;
   }
   const textHeight=2.5*(o.scale??20)*(sourceUnit==="drawing"?1:.001/UNIT_METERS[sourceUnit]);
@@ -230,7 +230,7 @@ function validateDocument(d:AnnotationDocument):void{
   for(const o of d.objects){
     if(!ids.has(o.layerId)||typeof o.id!=="string"||!["text","polyline","circle","arc","rectangle","dimension-aligned","dimension-linear","dimension-angle","dimension-radius","mask",...POINT_TOOLS].includes(o.kind)||!Array.isArray(o.points)||o.points.length<(o.kind==="text"?1:2)||o.points.length>30000||o.points.some(p=>!Number.isFinite(p.x)||!Number.isFinite(p.y))||(o.kind==="rectangle"&&![2,4].includes(o.points.length))||((o.kind==="circle"||o.kind==="arc")&&o.points.length!==2)||(o.kind.startsWith("dimension")&&(o.points.length!==(o.kind==="dimension-radius"?2:3)||!Number.isFinite(o.scale)||o.scale!<1||o.scale!>10000))||(o.kind==="arc"&&(!Number.isFinite(o.start)||!Number.isFinite(o.sweep)||o.sweep!<=0||o.sweep!>TAU))||(o.kind==="text"&&(o.points.length!==1||typeof o.text!=="string"||!o.text.trim()||o.text.length>500||!Number.isFinite(o.textHeight)||o.textHeight!<=0||o.textHeight!>1e6)))throw Error();
     if(o.rotation!==undefined&&(!Number.isFinite(o.rotation)||o.rotation<0||o.rotation>=360)||o.curved!==undefined&&typeof o.curved!=="boolean")throw Error();
-    if(o.labelPoint!==undefined&&(!isRadialDimension(o)||!Number.isFinite(o.labelPoint.x)||!Number.isFinite(o.labelPoint.y)))throw Error();
+    if(o.labelPoint!==undefined&&(!isDimensionTool(o.kind)||!Number.isFinite(o.labelPoint.x)||!Number.isFinite(o.labelPoint.y)))throw Error();
     if(isRadialDimension(o)&&!radialDimensionGeometry(o))throw Error();
     if(o.color!==undefined&&!/^#[a-f0-9]{6}$/i.test(o.color))throw Error();
     if(o.screenWidth!==undefined&&(!Number.isFinite(o.screenWidth)||o.screenWidth<1||o.screenWidth>12))throw Error();

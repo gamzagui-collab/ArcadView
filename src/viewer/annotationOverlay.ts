@@ -1,6 +1,6 @@
 import { convertMeasurement, type MeasurementUnit } from "./measurementGeometry";
 import type { DrawingPoint } from "./savedView";
-import { annotationPoints, dimensionGeometry, isPointAnnotation, textBounds, visibleAnnotations, type Annotation, type AnnotationDocument } from "./annotations";
+import { annotationPoints, dimensionGeometry, isDimensionTool, isPointAnnotation, textBounds, visibleAnnotations, type Annotation, type AnnotationDocument } from "./annotations";
 import { drawPointAnnotation } from "./pointMarkup";
 import { formatCadNumber } from "./displayPrecision";
 import {moveHandlePosition,objectGrips} from "./objectEditing";
@@ -48,7 +48,7 @@ export function drawAnnotations(svg:SVGSVGElement,doc:AnnotationDocument,selecte
       for(const [tip,sign]of [[a,1],[b,-1]]as const){const x=tip.x+ux*head*sign,y=tip.y+uy*head*sign;el("polygon",{points:`${tip.x},${tip.y} ${x-uy*head*.27},${y+ux*head*.27} ${x+uy*head*.27},${y-ux*head*.27}`,fill:color,class:"annotation-arrow"});}
       let degrees=Math.atan2(dy,dx)*180/Math.PI;if(degrees>90)degrees-=180;if(degrees< -90)degrees+=180;
       const x=(a.x+b.x)/2,y=(a.y+b.y)/2;
-      const text=el("text",{x,y,transform:`rotate(${degrees} ${x} ${y})`,"text-anchor":"middle",dy:-height*.35,"font-size":height,fill:color,class:"annotation-dimension-text","data-object":o.id});
+      const text=el("text",{x,y,transform:`rotate(${degrees} ${x} ${y})`,"text-anchor":"middle",dy:-height*.35,"font-size":height,fill:color,class:"annotation-dimension-text","data-object":o.id,"data-dimension":o.kind});
       text.textContent=formatCadNumber(convertMeasurement(dim.value,source,display),precision,locale)+(display==="drawing"?"":` ${display}`);
     }else{
       const points=annotationPoints(o);line(points,"#03101d","annotation-halo",o.id);line(points,color,active?"annotation-line selected":"annotation-line",o.id);
@@ -61,7 +61,7 @@ export function drawAnnotations(svg:SVGSVGElement,doc:AnnotationDocument,selecte
         el("rect",{x:p.x-4,y:p.y-4,width:8,height:8,fill:"#fff",stroke:color,"stroke-width":1.5,"data-grip":g.id,"data-grip-index":i,"data-object":o.id});
       }
       const p=moveHandlePosition(o,project,svg.clientWidth,svg.clientHeight);
-      if(p){el("circle",{cx:p.x,cy:p.y,r:17,fill:"#0a263ce8",stroke:"#9fe5ff","stroke-width":1.5,"data-free-move":o.id,...(isRadialDimension(o)?{"data-dimension-handle":o.id}:{})});el("path",{d:`M${p.x-10},${p.y}h20 M${p.x},${p.y-10}v20 M${p.x-6},${p.y-4}l-4,4 4,4 M${p.x+6},${p.y-4}l4,4 -4,4 M${p.x-4},${p.y-6}l4,-4 4,4 M${p.x-4},${p.y+6}l4,4 4,-4`,fill:"none",stroke:"#b8f0ff","stroke-width":1.6});}
+      if(p){el("circle",{cx:p.x,cy:p.y,r:17,fill:"#0a263ce8",stroke:"#9fe5ff","stroke-width":1.5,"data-free-move":o.id,...(isDimensionTool(o.kind)?{"data-dimension-handle":o.id}:{})});el("path",{d:`M${p.x-10},${p.y}h20 M${p.x},${p.y-10}v20 M${p.x-6},${p.y-4}l-4,4 4,4 M${p.x+6},${p.y-4}l4,4 -4,4 M${p.x-4},${p.y-6}l4,-4 4,4 M${p.x-4},${p.y+6}l4,4 4,-4`,fill:"none",stroke:"#b8f0ff","stroke-width":1.6});}
     }
     if(o===draft&&draftPointWindow){const group=document.createElementNS(NS,"g");group.setAttribute("mask",`url(#${draftPointWindow})`);group.append(...children.splice(first));children.push(group);}
   }

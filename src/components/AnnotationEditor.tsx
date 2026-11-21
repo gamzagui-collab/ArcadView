@@ -27,7 +27,8 @@ import {rotatePoint} from "../viewer/curveGeometry";
 import {extendToBoundary} from "../viewer/extendGeometry";
 import {objectColor,objectStyleValue,styleAnnotation,type ObjectStyle} from "../viewer/annotationStyle";
 import {ObjectStyleControls} from "./ObjectStyleControls";
-import {dimensionLabelPoint,isRadialDimension,positionRadialDimension,radialDimensionGeometry} from "../viewer/radialDimensions";
+import {isRadialDimension,radialDimensionGeometry} from "../viewer/radialDimensions";
+import {dimensionPosition,positionDimension} from "../viewer/dimensionPlacement";
 const words={
   ko:{title:"레이어 · 그리기",add:"레이어 추가",remove:"레이어 삭제",layer:"레이어",select:"선택",polyline:"폴리라인",circle:"원",rectangle:"사각형","dimension-aligned":"정렬 치수","dimension-linear":"선형 치수",trim:"라인 삭제 (트림)",erase:"객체 삭제",finish:"완료",cancel:"취소",undo:"실행 취소",snap:"스냅",scale:"치수 배율",saved:"자동 저장됨",unsaved:"저장 실패 — 공간을 확인하세요",close:"그리기 창 닫기",pause:"그리기 중지",pick:"원본 선 또는 추가 객체를 선택하세요",polyHelp:"점을 차례로 찍고 완료를 누르세요. 시작점 스냅으로 닫을 수 있습니다.",twoHelp:"두 점을 선택하세요. 길게 누르면 위쪽 조준점으로 정밀하게 찍습니다.",dimHelp:"기준점 2개 → 치수선 위치를 선택하세요.",trimHelp:"제거할 구간을 누르세요. 보이는 선·원과의 교차점이 절단 경계입니다.",noBoundary:"절단할 교차 경계가 없습니다.",hidden:"숨긴 레이어입니다. 표시를 켜세요.",noHit:"선택할 객체가 없습니다.",masked:"원본 가림 추가",deleted:"객체 삭제됨",trimmed:"선 구간 제거됨",source:"원본 객체",need:"점을 더 선택하세요",limit:"객체 또는 경계 수 한도를 초과했습니다.",scaleHelp:"새 치수와 선택한 치수에 적용",restore:"레이어를 숨기거나 삭제하면 가린 원본이 다시 보입니다."},
   en:{title:"Layers · Draw",add:"Add layer",remove:"Delete layer",layer:"Layer",select:"Select",polyline:"Polyline",circle:"Circle",rectangle:"Rectangle","dimension-aligned":"Aligned dim","dimension-linear":"Linear dim",trim:"Trim line",erase:"Delete object",finish:"Finish",cancel:"Cancel",undo:"Undo",snap:"Snap",scale:"Dim scale",saved:"Auto saved",unsaved:"Save failed — check storage",close:"Close drawing tools",pause:"Stop editing",pick:"Select original geometry or a user object",polyHelp:"Pick vertices, then Finish. Snap back to the start to close.",twoHelp:"Pick two points. Hold for the precision target above your finger.",dimHelp:"Pick two references, then the dimension position.",trimHelp:"Tap the segment to remove. Visible intersections are cutting boundaries.",noBoundary:"No cutting intersection found.",hidden:"Show the active layer first.",noHit:"No selectable object here.",masked:"Original masked",deleted:"Object deleted",trimmed:"Segment trimmed",source:"Original object",need:"Pick more points",limit:"Too many objects or cutting edges.",scaleHelp:"Applies to new and selected dimensions",restore:"Hide or delete a layer to reveal masked originals."},
@@ -92,7 +93,7 @@ export const AnnotationEditor=forwardRef<AnnotationEditorHandle,Props>(function 
   const current=dimensionLocked?dimensions:isPointTool(tool)&&active?{...reserved,color:doc.layers.some(l=>l.id===POINT_LAYER_ID)?reserved.color:pointStyle.color}:doc.layers.find(l=>l.id===doc.activeLayer)!;
   const currentNumber=current.id===POINT_LAYER_ID?4:current.id===DIMENSION_LAYER_ID?5:normal.findIndex(l=>l.id===current.id)+1;
   const layerText={ko:{open:"레이어 열기",close:"레이어 닫기",dimension:"치수 전용 · 자동 선택",locked:"치수 그리기 중에는 5번 레이어만 사용합니다. 다른 도구를 선택하면 직전 일반 레이어로 돌아갑니다."},en:{open:"Open layers",close:"Close layers",dimension:"Dimensions only · automatic",locked:"Dimensions use layer 5. Choose another tool to return to the previous drawing layer."},tr:{open:"Katmanları aç",close:"Katmanları kapat",dimension:"Yalnız ölçülendirme · otomatik",locked:"Ölçülendirme 5. katmanı kullanır. Önceki katmana dönmek için başka araç seçin."}}[locale];
-  const applyDocument=(next:AnnotationDocument)=>{const last=next.objects.at(-1),newRadial=last&&isRadialDimension(last)&&!docRef.current.objects.some(o=>o.id===last.id);history.current.record(docRef.current);redoDraft.current=[];docRef.current=next;setDoc(next);setSelected(newRadial?last.id:null);setOriginal(null);setPending(null);setOffsetChoice(null);setNotice("");return true;};
+  const applyDocument=(next:AnnotationDocument)=>{const last=next.objects.at(-1),newDimension=last&&isDimensionTool(last.kind)&&!docRef.current.objects.some(o=>o.id===last.id);history.current.record(docRef.current);redoDraft.current=[];docRef.current=next;setDoc(next);setSelected(newDimension?last.id:null);setOriginal(null);setPending(null);setOffsetChoice(null);setNotice("");return true;};
   const commercial=useOperation<AnnotationDocument>(key,"annotations",async next=>{if(!saveAnnotations(key,next))throw Error("LOCAL_STORAGE_FAILED");applyDocument(next);setDraft([]);textSessionRef.current=null;setTextSession(null);pointSessionRef.current=null;setPointSession(null);});
   const commit=(next:AnnotationDocument)=>{if(next.objects.length>3000||next.objects.some(o=>o.points.length>30000)){setNotice(w.limit);return false;}if(next===docRef.current)return true;if(commerceSnapshot().managed){if(commercial.blocked())return false;const usage=annotationUsage(docRef.current,next,tool);if(usage){if(!canStart(usage))return false;return commercial.begin(next,usage);}}return applyDocument(next);};
   const make=(points:DrawingPoint[],kind:Annotation["kind"]):Annotation=>({id:uid(),layerId:isPointTool(kind)?POINT_LAYER_ID:isDimensionTool(kind)?DIMENSION_LAYER_ID:doc.activeLayer,kind,points,scale:doc.dimensionScale,...(isPointTool(kind)?{color:pointStyle.color,screenWidth:pointStyle.width,screenFontSize:pointStyle.fontSize}:{})});
@@ -121,15 +122,17 @@ export const AnnotationEditor=forwardRef<AnnotationEditorHandle,Props>(function 
     replaceObject(styleAnnotation(editedModel,style),original);
   };
   const beginHandle=(client:DrawingPoint):AnnotationHandleDrag|null=>{
-    if(!active||!editedModel||(tool!=="select"&&!(isRadialDimension(editedModel)&&tool===editedModel.kind&&!draft.length))||editedModel.kind==="mask"||pending||textSession||pointSession||original&&!current.visible)return null;
-    if(commerceSnapshot().managed&&(commercial.blocked()||!canPositionObject(editedModel,canStart)))return null;
+    if(!active||!editedModel||(tool!=="select"&&!(isDimensionTool(editedModel.kind)&&tool===editedModel.kind&&!draft.length))||editedModel.kind==="mask"||pending||textSession||pointSession||original&&!current.visible)return null;
+    if(commerceSnapshot().managed&&commercial.blocked())return null;
     const canvas=viewer.getCanvasElement(),rect=canvas.getBoundingClientRect(),p={x:client.x-rect.left,y:client.y-rect.top},move=moveHandlePosition(editedModel,q=>viewer.projectPoints(q),canvas.clientWidth,canvas.clientHeight),grips=objectGrips(editedModel),step=Math.max(1,Math.ceil(grips.length/512));
     let grip:typeof grips[number]|undefined,best=14;const free=!!move&&Math.hypot(p.x-move.x,p.y-move.y)<=17;
     if(!free)for(const[g,i]of grips.map((g,i)=>[g,i]as const)){if(i%step&&i!==grips.length-1)continue;const q=viewer.projectPoints([g.point])[0],d=Math.hypot(p.x-q.x,p.y-q.y);if(d<=best){best=d;grip=g;}}
     if(!free&&!grip)return null;
-    cancelTextHold.current();const object=editedModel,source=original,radial=isRadialDimension(object),base=free?(radial?dimensionLabelPoint(object)!:object.points[0]):grip!.point,projected=viewer.projectPoints([base])[0];let moved=false;
+    const positioning=isDimensionTool(editedModel.kind)&&(free||grip?.id==="dimension-position");
+    if(commerceSnapshot().managed&&!canPositionObject(editedModel,canStart,positioning))return null;
+    cancelTextHold.current();const object=editedModel,source=original,radial=isRadialDimension(object),dimension=isDimensionTool(object.kind),base=free?(dimension?dimensionPosition(object)!:object.points[0]):grip!.point,projected=viewer.projectPoints([base])[0];let moved=false;
     directPreview.current=object;setHandleActive(true);preview.current=null;renderRef.current();
-    const candidate=(pick:MeasurementPick)=>free?(radial?positionRadialDimension(object,pick.point):translateAnnotation(object,base,pick.point)):reshapeObject(object,grip!.id,pick.point);
+    const candidate=(pick:MeasurementPick)=>free?(dimension?positionDimension(object,pick.point):translateAnnotation(object,base,pick.point)):reshapeObject(object,grip!.id,pick.point);
     const clear=()=>{directPreview.current=null;setHandleActive(false);preview.current=null;renderRef.current();};
     return{offset:{x:projected.x+rect.left-client.x,y:projected.y+rect.top-client.y},anchor:radial?object.points[object.kind==="dimension-angle"?1:0]:free?base:object.points.find(q=>distance(q,base)>1e-8),move:pick=>{moved||=distance(base,pick.point)>viewer.worldTolerance(2);const next=candidate(pick);if(next)directPreview.current=next;renderRef.current();},end:pick=>{const next=candidate(pick);clear();if(moved){if(next&&replaceObject(next,source))setNotice(free?w.moved:w.reshaped);else if(!next)setNotice(w.invalidGrip);}},cancel:clear};
   };
@@ -251,12 +254,12 @@ export const AnnotationEditor=forwardRef<AnnotationEditorHandle,Props>(function 
       }catch{setNotice(w.limit);}return;
     }
     redoDraft.current=[];const points=[...draft,pick.point];
+    if(isDimensionTool(tool)&&!draft.length)setSelected(null);
     if(isPointTool(tool)){
       if(points.length===2){if(["point-cloud","point-rectangle"].includes(tool)&&(Math.abs(points[1].x-points[0].x)<1e-10||Math.abs(points[1].y-points[0].y)<1e-10)){setNotice(w.need);return;}const object=make(points,tool);if(tool==="point-leader")beginPointText(object);else add(object);}else setDraft(points);
     }else if(tool==="polyline"){
       if(points.length>=4&&pick.snapped==="start")add(make(points,"polyline"));else setDraft(points);
     }else if(tool==="dimension-radius"||tool==="dimension-angle"){
-      if(!draft.length)setSelected(null);
       if(points.length===(tool==="dimension-radius"?2:3))add(make(points,tool));else setDraft(points);
     }else if(tool==="circle"||tool==="rectangle"){
       if(points.length===2)add(make(points,tool));else setDraft(points);
