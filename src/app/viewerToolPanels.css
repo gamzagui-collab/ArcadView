@@ -99,3 +99,44 @@
 .viewer-shell .text-style-sidebar{top:auto;bottom:calc(var(--history-bottom,10px) + var(--history-height,86px) + 6px);max-height:calc(var(--history-top,300px) - 62px);overflow:auto}
 @keyframes viewer-tool-panel-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 @media(prefers-reduced-motion:reduce){.viewer-shell .tool-panel{animation:none}}
+
+/* The drawing inspectors share the takeoff navy/sky palette. */
+.viewer-shell .measurement-panel,.viewer-shell .annotation-panel,.viewer-shell .annotation-panel:focus-within{
+ --text:#dcefff;--muted:#9ebdd6;--surface-2:#173e5b;--line:#46718e;
+ color-scheme:dark;background:#10283ef5;color:#dcefff;border-color:#427392;
+}
+.viewer-shell .tool-panel button,.viewer-shell .tool-panel .tool-panel-header>button,.viewer-shell .layer-panel button{background:#173e5b;color:#dcefff;border-color:#46718e}
+.viewer-shell .tool-panel button[aria-pressed=true],.viewer-shell .tool-panel .annotation-tabs button[aria-selected=true],.viewer-shell .tool-panel .measurement-finish,.viewer-shell .tool-panel .annotation-finish{background:#087cb6;color:#fff;border-color:#88dcff}
+.viewer-shell .tool-panel .annotation-tabs{background:#0a1e30}
+.viewer-shell .tool-panel .tool-help>summary{background:#173e5b;color:#c8e8ff;border-color:#46718e}
+.viewer-shell .tool-panel label,.viewer-shell .tool-panel .measurement-options label,.viewer-shell .tool-panel .annotation-options label,.viewer-shell .tool-panel .tool-help p,.viewer-shell .tool-panel .measurement-instruction{color:#bad7eb}
+.viewer-shell .tool-panel input[type=number],.viewer-shell .tool-panel select,.viewer-shell .tool-panel .measurement-options select{background:#173b56;color:#e1f3ff;border-color:#52758d}
+.viewer-shell .tool-panel .measurement-actions,.viewer-shell .tool-panel .annotation-options,.viewer-shell .tool-panel .utility-tool-grid,.viewer-shell .tool-panel .takeoff-selection{border-color:#395b75}
+.viewer-shell .tool-panel .measurement-result,.viewer-shell .tool-panel .measurement-result strong{color:#a7e5ff}
+.viewer-shell .tool-panel .measurement-hint,.viewer-shell .tool-panel .annotation-save{color:#ffd58a}
+.viewer-shell .layer-panel header,.viewer-shell .layer-panel .layer-section-heading{color:#c7e6fb;border-color:#395b75}
+.viewer-shell .layer-panel :is(.layer-tabs,.reserved-point-layer){background:#173b56;color:#b9d8ec;border-color:#46718e}
+.viewer-shell .layer-panel .layer-tabs button[aria-selected=true]{background:#087cb6;color:#fff}
+.viewer-shell .layer-panel :is(.user-layers>div,.takeoff-layer-row){background:#0b2033;color:#c7e6fb;border-color:#395b75}
+.viewer-shell .layer-panel :is(.user-layers>div.active,.takeoff-layer-row.active){background:#164260;border-color:#70cfff}
+.viewer-shell .layer-panel :is(.layer-name,.takeoff-layer-name){color:#e1f3ff;border-color:#52758d}
+.viewer-shell .layer-panel :is(.add-user-layer,.add-takeoff-layer){background:#173e5b;color:#b6e5ff;border-color:#46718e}
+
+/* Pointer-only, upper-right precision lens. Existing pan/pinch gestures remain intact. */
+.pointer-magnifier{position:absolute;z-index:24;right:10px;top:var(--precision-top,calc(54px + env(safe-area-inset-top)));width:clamp(132px,25vw,172px);border:1.5px solid #79d9ff;border-radius:12px;background:#0b1118;box-shadow:0 4px 18px #0008;pointer-events:none;overflow:hidden}
+.pointer-magnifier[hidden]{display:none}
+.pointer-magnifier-view{position:relative;width:100%;aspect-ratio:4/3;overflow:hidden}
+.drawing-canvas .pointer-magnifier-raster,.drawing-canvas .pointer-magnifier-vectors{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.pointer-magnifier-reticle{position:absolute;left:50%;top:50%;width:14px;height:14px;transform:translate(-50%,-50%);border:1px solid #8de2ff;border-radius:50%;box-shadow:0 0 0 1px #041421}
+.pointer-magnifier-reticle:before{content:'';position:absolute;inset:5px;border-radius:50%;background:white;box-shadow:0 0 1px #000}
+.pointer-magnifier-zoom{position:absolute;right:4px;top:3px;padding:1px 4px;border-radius:4px;background:#10283ee6;color:#b9e9ff;font-size:10px;line-height:16px}
+.precision-lens-active .takeoff-summary{visibility:hidden;pointer-events:none}
+
+.geometry-edit-dialog,.text-color-palette{color-scheme:dark;background:#10283ef5;color:#dcefff;border-color:#427392}
+.geometry-edit-dialog :is(h2,p,label),.text-color-palette header{color:#c7e6fb}
+.geometry-edit-dialog button,.text-color-palette header button{background:#173e5b;color:#dcefff;border-color:#46718e}
+.geometry-edit-dialog .geometry-distance-fields span{background:#173b56;border-color:#52758d}
+.geometry-edit-dialog .geometry-distance-fields input{color:#e1f3ff}
+.geometry-edit-dialog .geometry-distance-fields b{color:#b7d4e7}
+.geometry-edit-dialog .geometry-edit-apply{background:#087cb6;border-color:#88dcff;color:#fff}
+.geometry-edit-dialog .geometry-edit-error{color:#ff9fae}

@@ -43,6 +43,7 @@ import { masked, visibleEntityFragment, type Annotation } from "./annotations";
 import {CadFocusFilter,type CadFocus} from "../takeoff/cadFocus";
 import {pickCadColor} from "../takeoff/cadColorPick";
 import {createMoveSnap,type MoveContact} from "./moveSnapping";
+import {PointerMagnifier} from "./pointerMagnifier";
 
 export type MeasurementPick = { point: DrawingPoint; snapped: SnapPoint["kind"] | "start" | "perpendicular" | "intersection" | "curve" | "edge" | null; entity: MeasurableEntity | null; replaceIndex?: number;contact?:MoveContact;cadColor?:string|null };
 export type AnnotationHandleDrag={offset?:DrawingPoint;anchor?:DrawingPoint;translation?:{snap:ReturnType<typeof createMoveSnap>;geometry:MeasurementGeometry;masks:Annotation[]};move(pick:MeasurementPick):void;end(pick:MeasurementPick):void;cancel():void};
@@ -95,12 +96,19 @@ export class DrawingViewer {
   private controlsBeforeHold: { enablePan: boolean; enableZoom: boolean } | null = null;
   private handleDrag:{id:number;input:AnnotationInput;drag:AnnotationHandleDrag}|null=null;
   private handlePointers=new Set<number>();
+  private magnifier:PointerMagnifier|null=null;
+  private showMagnifier(pick:MeasurementPick|null):void{
+    if(!pick){this.magnifier?.hide();return;}
+    if(!this.magnifier){const canvas=this.viewer.GetCanvas(),parent=canvas.parentElement?.closest<HTMLElement>('.drawing-canvas');if(!parent)return;this.magnifier=new PointerMagnifier(parent,canvas,()=>this.viewer.Render(),()=>this.baseDrawingVisible);}
+    const point=pick.contact?.contact??pick.point;
+    this.magnifier.show(this.projectPoints([point])[0],point,pick.snapped);
+  }
   private lockInteraction(locked:boolean):void{
     const controls=(this.viewer as any)?.controls;if(!controls)return;
     if(locked&&!this.controlsBeforeHold){this.controlsBeforeHold={enablePan:controls.enablePan,enableZoom:controls.enableZoom};controls.enablePan=false;controls.enableZoom=false;}
     else if(!locked&&this.controlsBeforeHold){Object.assign(controls,this.controlsBeforeHold);this.controlsBeforeHold=null;}
   }
-  private cancelHandle():void{const h=this.handleDrag;this.handleDrag=null;if(h){this.lockInteraction(false);h.drag.cancel();}}
+  private cancelHandle():void{const h=this.handleDrag;this.handleDrag=null;if(h){this.showMagnifier(null);this.lockInteraction(false);h.drag.cancel();}}
   private handlePick(event:PointerEvent):MeasurementPick{
     const h=this.handleDrag!,d=h.drag.offset,client={x:event.clientX+(d?.x??0),y:event.clientY+(d?.y??0)},moving=h.drag.translation;
     if(!moving)return this.pickAt(client,false);
@@ -110,14 +118,14 @@ export class DrawingViewer {
   }
   private readonly gesture = new MeasurementGesture({
     lock: locked => this.lockInteraction(locked),
-    preview: position => {const pick=position?this.pickAt(position,true):null;if(this.annotationInput)this.annotationInput.onPreview(pick);else this.onPreview?.(pick);},
+    preview: position => {const pick=position?this.pickAt(position,true):null;if(this.annotationInput)this.annotationInput.onPreview(pick);else this.onPreview?.(pick);this.showMagnifier(pick);},
     commit: (position, precision) => {const pick=this.pickAt(position,precision);if(this.annotationInput?.tool==="cad-color")pick.cadColor=this.getCadColorAt(position);if(this.annotationInput)this.annotationInput.onPick(pick);else this.onPick?.(pick);},
   });
   private readonly pointerDown = (event: PointerEvent): void => {
     if ((!this.measurement?.enabled && !this.annotationInput) || !this.ready || (event.button !== 0 && event.pointerType !== "touch")) return;
     if(this.handlePointers.size){this.handlePointers.add(event.pointerId);this.cancelHandle();this.gesture.cancel();if(event.cancelable)event.preventDefault();event.stopImmediatePropagation();return;}
     const direct=this.annotationInput?.onHandleDown?.({x:event.clientX,y:event.clientY});
-    if(direct&&this.annotationInput){this.gesture.cancel();this.handleDrag={id:event.pointerId,input:this.annotationInput,drag:direct};this.handlePointers.add(event.pointerId);this.lockInteraction(true);try{this.viewer.GetCanvas().setPointerCapture(event.pointerId);}catch{}if(event.cancelable)event.preventDefault();event.stopImmediatePropagation();return;}
+    if(direct&&this.annotationInput){this.gesture.cancel();this.handleDrag={id:event.pointerId,input:this.annotationInput,drag:direct};this.handlePointers.add(event.pointerId);this.lockInteraction(true);this.showMagnifier(this.handlePick(event));try{this.viewer.GetCanvas().setPointerCapture(event.pointerId);}catch{}if(event.cancelable)event.preventDefault();event.stopImmediatePropagation();return;}
     this.precisionIndex = undefined;
     if(this.annotationInput?.editableDraftPoints){
       const rect=this.viewer.GetCanvas().getBoundingClientRect();let best=16;
@@ -133,7 +141,7 @@ export class DrawingViewer {
     try { this.viewer.GetCanvas().setPointerCapture(event.pointerId); } catch { /* Synthetic events or a detached canvas. */ }
   };
   private readonly pointerMove = (event: PointerEvent): void => {
-    if(this.handlePointers.has(event.pointerId)){if(this.handleDrag?.id===event.pointerId)this.handleDrag.drag.move(this.handlePick(event));if(event.cancelable)event.preventDefault();event.stopImmediatePropagation();return;}
+    if(this.handlePointers.has(event.pointerId)){if(this.handleDrag?.id===event.pointerId){const pick=this.handlePick(event);this.handleDrag.drag.move(pick);this.showMagnifier(pick);}if(event.cancelable)event.preventDefault();event.stopImmediatePropagation();return;}
     this.gesture.move(event.pointerId, { x: event.clientX, y: event.clientY });
   };
   private readonly pointerCancel = (event: PointerEvent): void => {
@@ -141,7 +149,7 @@ export class DrawingViewer {
     this.gesture.cancel(event.pointerId);
   };
   private readonly pointerUp = (event: PointerEvent): void => {
-    if(this.handlePointers.has(event.pointerId)){this.handlePointers.delete(event.pointerId);const h=this.handleDrag;if(h?.id===event.pointerId){const pick=this.handlePick(event);this.handleDrag=null;this.lockInteraction(false);h.drag.end(pick);}if(event.cancelable)event.preventDefault();event.stopImmediatePropagation();return;}
+    if(this.handlePointers.has(event.pointerId)){this.handlePointers.delete(event.pointerId);const h=this.handleDrag;if(h?.id===event.pointerId){const pick=this.handlePick(event);this.handleDrag=null;this.showMagnifier(null);this.lockInteraction(false);h.drag.end(pick);}if(event.cancelable)event.preventDefault();event.stopImmediatePropagation();return;}
     this.gesture.up(event.pointerId, { x: event.clientX, y: event.clientY });
   };
   private pickAt(position: { x: number; y: number }, precision: boolean): MeasurementPick {
@@ -203,6 +211,7 @@ export class DrawingViewer {
     return { point, snapped: start ? "start" : intersection ? "intersection" : perpendicular ? "perpendicular" : snapped?.kind ?? (curve?"curve":null), entity, ...(replaceIndex !== undefined ? { replaceIndex } : {}) };
   }
   private readonly onContextLost = (event: Event): void => {
+    this.showMagnifier(null);
     event.preventDefault();
     if (this.destroyed) {
       return;
@@ -263,6 +272,7 @@ export class DrawingViewer {
       if (!this.destroyed) this.onViewChanged?.();
       if (!this.destroyed) for(const listener of this.viewListeners)listener();
       if(this.baseDrawingVisible)render();
+      this.magnifier?.invalidate();
     };
   }
 
@@ -494,6 +504,7 @@ export class DrawingViewer {
     canvas.removeEventListener("pointercancel", this.pointerCancel,true);
     canvas.removeEventListener("lostpointercapture",this.pointerCancel);
     this.cancelInteraction();
+    this.magnifier?.destroy();this.magnifier=null;
     // The parent React state may retain the old geometry for one more commit.
     // The viewer owns these chunks; after destruction they must not keep
     // hundreds of MiB alive while the next cached scene is being restored.

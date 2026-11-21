@@ -22,6 +22,7 @@ export type ViewerHandle = {
   edit?(command: "undo"|"redo"|"cancel"): void;
   objectAction?(command: "select"|"delete"): void;
   cancelGesture?(): void;
+  showTakeoffTools?():void;
   finishText?(): boolean;
 };
 

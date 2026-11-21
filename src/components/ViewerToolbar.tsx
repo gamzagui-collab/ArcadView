@@ -38,7 +38,7 @@ export function ViewerToolbar({ onCommand,takeoffActive,onTakeoff, canMeasure, m
     const nav=toolbar.current,shell=nav?.closest<HTMLElement>(".viewer-shell"),dock=history.current;if(!nav||!shell)return;
     let frame=0;
     const update=()=>{const s=shell.getBoundingClientRect(),n=nav.getBoundingClientRect(),h=dock?.getBoundingClientRect(),header=shell.querySelector('.viewer-header')?.getBoundingClientRect(),bottom=s.bottom-n.top+6;
-      const values:Record<string,number>={"--tool-panel-left":n.left-s.left,"--tool-panel-width":n.width,"--tool-panel-bottom":bottom,"--tool-panel-space":Math.max(70,n.top-(header?.bottom??s.top)-12),"--history-left":h?h.left-s.left:10,"--history-width":h?.width??46,"--history-top":h?h.top-s.top:s.height-96,"--history-bottom":h?s.bottom-h.bottom:10,"--history-height":h?.height??86};
+      const values:Record<string,number>={"--tool-panel-left":n.left-s.left,"--tool-panel-width":n.width,"--tool-panel-bottom":bottom,"--tool-panel-space":Math.max(70,n.top-(header?.bottom??s.top)-12),"--precision-top":(header?.bottom??s.top+44)-s.top+8,"--history-left":h?h.left-s.left:10,"--history-width":h?.width??46,"--history-top":h?h.top-s.top:s.height-96,"--history-bottom":h?s.bottom-h.bottom:10,"--history-height":h?.height??86};
       for(const[k,v]of Object.entries(values)){const value=`${Math.round(v*100)/100}px`;if(shell.style.getPropertyValue(k)!==value)shell.style.setProperty(k,value);}
     };
     const schedule=()=>{cancelAnimationFrame(frame);frame=requestAnimationFrame(update);};update();const observer=new ResizeObserver(schedule);for(const e of [shell,nav,...dock?[dock]:[]])observer.observe(e);window.addEventListener('resize',schedule);window.visualViewport?.addEventListener('resize',schedule);

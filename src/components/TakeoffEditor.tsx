@@ -20,7 +20,7 @@ import {VisibilityIcon} from "./Icons";
 import {ToolStrip} from "./ToolStrip";
 import {TakeoffLayerRow} from "./TakeoffLayerRow";
 import "../takeoff/takeoff.css";
-export type TakeoffHandle={execute(command:EditCommand):void;objectAction(command:"select"|"delete"):void};
+export type TakeoffHandle={execute(command:EditCommand):void;objectAction(command:"select"|"delete"):void;showTools():void};
 type Props={viewer:DrawingViewer;identity:{name:string;size:number;lastModified:number};active:boolean;sourceUnit:MeasurementUnit;onHistory(state:EditHistoryState):void;layersOpen:boolean;layerTabs:ReactNode;onLayersToggle():void;onLayersHide():void};
 type Form={object:TakeoffObject;existing:boolean};
 export const TakeoffEditor=forwardRef<TakeoffHandle,Props>(function TakeoffEditor({viewer,identity,active,sourceUnit,onHistory,layersOpen,layerTabs,onLayersToggle,onLayersHide},ref){
@@ -37,6 +37,7 @@ export const TakeoffEditor=forwardRef<TakeoffHandle,Props>(function TakeoffEdito
  const svg=useRef<SVGSVGElement>(null),target=useRef<SVGSVGElement>(null),preview=useRef<MeasurementPick|null>(null),dragPreview=useRef<TakeoffObject|null>(null),[dragging,setDragging]=useState(false),renderRef=useRef<()=>void>(()=>{}),firstInput=useRef<HTMLInputElement>(null);
  const selectedObject=doc.objects.find(o=>o.id===selected),visible=doc.objects.filter(o=>takeoffVisible(doc,o)),[cadOptions]=useState(()=>viewer.getCadFocusOptions()),currentLayer=doc.layers.find(l=>l.id===doc.activeLayerId)!;
  const blocked=()=>!loaded||!!loadError||!!revisions.length||lock.current||!!failed.current;
+ useLayoutEffect(()=>{setOpen(active);},[active]);
  useEffect(()=>{if(layersOpen)setOpen(false);},[layersOpen]);
  useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;};},[]);
  useEffect(()=>{let live=true;setLoaded(false);setLoadError("");if(!key){setLoadError("도면 내용 식별자를 준비하지 못했습니다. 다시 열어 주세요.");return;}
@@ -54,7 +55,7 @@ export const TakeoffEditor=forwardRef<TakeoffHandle,Props>(function TakeoffEdito
  const resetTool=(value:typeof tool)=>{viewer.cancelInteraction();cancelDraft();setTool(value);setNotice("");};
  const deleteObject=()=>{if(blocked()||!selected)return;commit({...docRef.current,objects:docRef.current.objects.filter(o=>o.id!==selected)},()=>{setSelected(null);setVertex(null);});};
  const execute=(command:EditCommand)=>{if(blocked())return;if(command==="cancel"){cancelDraft();setSelected(null);setTool("select");return;}cancelDraft();const current=docRef.current,next=history.current[command](current);if(next)void persist(next,false,()=>setSelected(null),()=>{history.current[command==="undo"?"redo":"undo"](next);});};
- useImperativeHandle(ref,()=>({execute,objectAction:command=>{if(command==="delete")deleteObject();else{resetTool("select");setOpen(true);}}}));
+ useImperativeHandle(ref,()=>({execute,showTools:()=>{onLayersHide();setOpen(true);},objectAction:command=>{if(command==="delete")deleteObject();else{resetTool("select");setOpen(true);}}}));
  useLayoutEffect(()=>{if(active)onHistory({canUndo:history.current.canUndo&&!busy&&!saveError,canRedo:history.current.canRedo&&!busy&&!saveError,selecting:tool==="select"||tool==="insert",canDelete:!!selectedObject&&!busy&&!saveError});},[active,doc,selected,busy,saveError,tool]);
  useLayoutEffect(()=>{if(form){firstInput.current?.focus();firstInput.current?.select();}},[form]);
  const startForm=(object:TakeoffObject,existing:boolean)=>{
@@ -154,7 +155,7 @@ export const TakeoffEditor=forwardRef<TakeoffHandle,Props>(function TakeoffEdito
    </aside>
    <ToolbarStatus>{compact}</ToolbarStatus>
    {open?<section className="takeoff-panel tool-panel" aria-label="독립 적산 도구"><header className="tool-panel-header"><strong className="sr-only">적산 도구</strong><span className="sr-only">{busy?"저장 중…":saved?"저장 완료":"원본 보존"}</span><button onClick={()=>setOpen(false)} aria-label="적산 도구 접기">×</button></header>
-    <ToolStrip className="takeoff-tool-row" tabIndex={0}>{KINDS.map(k=><button key={k} data-takeoff-tool={k} aria-pressed={tool===k} disabled={blocked()} onClick={()=>resetTool(k)}><ToolIcon name={isAreaKind(k)?"area":"polyline"}/>{NAMES[k]}</button>)}<button data-takeoff-tool="select" aria-pressed={tool==="select"} onClick={()=>resetTool("select")} disabled={blocked()}><ToolIcon name="select"/>선택</button></ToolStrip>
+    <ToolStrip className="takeoff-tool-row" tabIndex={0}>{KINDS.map(k=><button key={k} data-takeoff-tool={k} aria-pressed={tool===k} disabled={blocked()} onClick={()=>resetTool(k)}><ToolIcon name={isAreaKind(k)?"area":"polyline"}/>{NAMES[k]}</button>)}</ToolStrip>
     <div className="takeoff-display-controls">{exportButton}<div className="takeoff-display-row"><label><input aria-label="원본 도면 표시" type="checkbox" checked={doc.options.cadVisible} disabled={blocked()} onChange={e=>toggleOption({cadVisible:e.target.checked})}/> 원본 도면</label><label><input aria-label="적산 집중 보기" type="checkbox" checked={doc.options.focus} disabled={blocked()} onChange={e=>toggleOption({focus:e.target.checked})}/> 집중 보기</label></div></div>
     {doc.options.focus?<details className="takeoff-focus-settings"><summary>유지할 색상 · {doc.options.keepColors.length}</summary><div className="takeoff-focus-options"><button type="button" className="takeoff-color-pick" disabled={blocked()||!doc.options.cadVisible} onClick={()=>{viewer.cancelInteraction();cancelDraft();setSelected(null);setPickingColor(true);setOpen(false);setNotice("원래 색상을 유지할 도면 객체를 누르세요. 빈 곳은 다시 선택하세요.");}}>도면 객체에서 색상 선택</button><small>아래에서 고른 색만 원래 색상 유지 · 나머지는 회색</small><div className="takeoff-focus-colors">{cadOptions.colors.map(color=><button type="button" key={color} aria-label={`원본색 유지 ${color}`} title={color} aria-pressed={doc.options.keepColors.includes(color)} disabled={blocked()} style={{background:color}} onClick={()=>toggleOption({keepColors:doc.options.keepColors.includes(color)?doc.options.keepColors.filter(v=>v!==color):[...doc.options.keepColors,color]})}>{doc.options.keepColors.includes(color)?"✓":""}</button>)}</div></div></details>:null}
     <details className="takeoff-settings" open={!knownUnit(doc.unit)}><summary>단위·스냅·부재 표시</summary>

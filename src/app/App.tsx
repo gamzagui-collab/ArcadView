@@ -655,7 +655,7 @@ export function App() {
         </div>
       </header>
 
-      <ViewerToolbar takeoffActive={takeoffActive} onTakeoff={()=>{viewerRef.current?.cancelGesture?.();setTakeoffActive(v=>!v);setAnnotationActive(false);setAnnotationOpen(false);setLayersOpen(false);setMeasurementPanelOpen(false);setMeasurement(m=>({...m,enabled:false}));}} onCommand={sendCommand}
+      <ViewerToolbar takeoffActive={takeoffActive} onTakeoff={()=>{viewerRef.current?.cancelGesture?.();setTakeoffActive(true);viewerRef.current?.showTakeoffTools?.();setAnnotationActive(false);setAnnotationOpen(false);setLayersOpen(false);setMeasurementPanelOpen(false);setMeasurement(m=>({...m,enabled:false}));}} onCommand={sendCommand}
         selecting={(annotationActive||takeoffActive)&&editHistory.selecting} canDelete={(annotationActive||takeoffActive)&&editHistory.canDelete}
         onSelect={()=>{setLayersOpen(false);viewerRef.current?.objectAction?.("select");setAnnotationOpen(false);}}
         onDelete={()=>viewerRef.current?.objectAction?.("delete")}

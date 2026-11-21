@@ -313,4 +313,21 @@ describe("drawing viewer lifecycle", () => {
     state.current.Render();
     expect(changed).toHaveBeenCalledOnce();
   });
+
+  it("magnifies the snapped commit point rather than the finger and hides on release/cancel/pinch",async()=>{
+    const picked=vi.fn(),preview=vi.fn(),viewer=new DrawingViewer({}as HTMLElement,undefined,picked,undefined,preview);
+    await viewer.load(new File(["0\nEOF\n"],"lens.dxf"),vi.fn());vi.useFakeTimers();
+    const lens={show:vi.fn(),hide:vi.fn(),invalidate:vi.fn(),destroy:vi.fn()};(viewer as any).magnifier=lens;
+    const canvas=state.current.canvas;canvas.clientWidth=100;canvas.clientHeight=200;canvas.getBoundingClientRect=()=>({left:20,top:10,width:100,height:200});state.current.camera.updateProjectionMatrix();
+    (viewer as any).geometry.snaps=[{x:0,y:0,kind:"endpoint"}];
+    const emit=(type:string,id:number,x=72,y=174)=>canvas.dispatchEvent(Object.assign(new Event(type),{pointerId:id,clientX:x,clientY:y,pointerType:"touch",button:0}));
+    viewer.configureMeasurement({enabled:true,mode:"distance",points:[],snapping:true,entity:null});
+    emit('pointerdown',1);vi.advanceTimersByTime(350);
+    expect(lens.show).toHaveBeenLastCalledWith({x:50,y:100},{x:0,y:0},'endpoint');expect(picked).not.toHaveBeenCalled();
+    emit('pointerup',1);expect(picked.mock.calls[0][0].point).toEqual(lens.show.mock.calls[0][1]);expect(lens.hide).toHaveBeenCalled();
+    picked.mockClear();emit('pointerdown',1);vi.advanceTimersByTime(350);emit('pointercancel',1);expect(picked).not.toHaveBeenCalled();
+    emit('pointerdown',1);vi.advanceTimersByTime(350);emit('pointerdown',2,90,174);emit('pointerup',2);emit('pointerup',1);expect(picked).not.toHaveBeenCalled();
+    const calls=lens.show.mock.calls.length;emit('pointerdown',1);emit('pointermove',1,95,174);vi.advanceTimersByTime(350);emit('pointerup',1,95,174);expect(lens.show).toHaveBeenCalledTimes(calls);
+    viewer.destroy();expect(lens.destroy).toHaveBeenCalledOnce();
+  });
 });

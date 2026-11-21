@@ -93,6 +93,7 @@ export const DrawingCanvas = forwardRef<ViewerHandle, Props>(
         edit(command) { viewerRef.current?.cancelInteraction();if(takeoffActiveRef.current)takeoffRef.current?.execute(command);else annotationRef.current?.execute(command); },
         objectAction(command) { viewerRef.current?.cancelInteraction();if(takeoffActiveRef.current)takeoffRef.current?.objectAction(command);else annotationRef.current?.objectAction(command); },
         cancelGesture() { viewerRef.current?.cancelInteraction(); },
+        showTakeoffTools() { takeoffRef.current?.showTools(); },
         finishText() { return annotationRef.current?.finishText()??false; },
         execute(command: ViewerCommand) {
           try {
