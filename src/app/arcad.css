@@ -291,3 +291,23 @@ button:disabled{opacity:.45}
 .object-dimensions-panel button{min-height:32px;padding:5px 8px;font:inherit;font-size:11px;border:1px solid #3d709a;border-radius:7px;background:#153c5d;color:#cdeeff;white-space:nowrap}.object-dimensions-panel button:disabled{opacity:.35}.object-segment-nav{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:10px;margin-bottom:5px}.object-segment-nav button{font-size:20px;line-height:1;padding:2px 9px}
 .geometry-direct-option{display:flex;align-items:center;gap:8px;margin-top:14px;font-size:12px;color:#305c83}.geometry-direct-option input{width:18px;height:18px;accent-color:#087de8}
 .annotation-direct-option{display:flex;align-items:center;gap:7px;margin-top:6px;color:#416a90;font-size:11px}.annotation-direct-option input{width:18px;height:18px;accent-color:#087de8}
+
+/* Keep the drawing header and takeoff workspace small on phones and tablets. */
+.viewer-shell .viewer-header{min-height:calc(44px + env(safe-area-inset-top));padding:calc(4px + env(safe-area-inset-top)) 10px 4px}
+.viewer-shell .viewer-brand-mark{width:28px;height:28px}
+.viewer-shell .file-heading{gap:7px}
+.viewer-shell .file-heading strong{font-size:12px}
+.viewer-shell .file-heading>div>span{margin-top:3px;font-size:9px}
+.viewer-shell .viewer-header-actions .open-button{min-height:32px;height:32px;padding:4px 9px}
+.viewer-shell .viewer-header-actions .icon-button{width:32px;height:32px;min-height:32px}
+.viewer-shell .active-layer-badge{top:calc(54px + env(safe-area-inset-top))}
+.viewer-shell .layer-panel,.viewer-shell .layer-panel:focus-within{top:calc(92px + env(safe-area-inset-top));max-height:calc(100dvh - 169px - env(safe-area-inset-top) - env(safe-area-inset-bottom))}
+.takeoff-history{bottom:calc(121px + env(safe-area-inset-bottom))}
+.viewer-shell .viewer-toolbar.with-takeoff{left:10px;right:10px;width:min(920px,calc(100% - 20px));max-width:calc(100% - 20px)}
+#takeoff-toolbar-slot{display:none}
+@media(min-width:620px) and (orientation:landscape){
+ .viewer-shell .viewer-toolbar.with-takeoff{left:10px;right:10px;width:min(920px,calc(100% - 20px));max-width:calc(100% - 20px)}
+ .viewer-shell .with-takeoff .viewer-tools-scroll{min-width:108px}
+ .takeoff-history{bottom:calc(73px + env(safe-area-inset-bottom))}
+ #takeoff-toolbar-slot{display:flex;flex-shrink:0;min-width:0}
+}

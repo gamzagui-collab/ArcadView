@@ -11,7 +11,7 @@ afterEach(()=>vi.unstubAllGlobals());
 
 it("pans between separated objects without leaving empty label hit targets, and restores labels on return",()=>{
  vi.stubGlobal("document",{createElementNS:()=>new Element()});
- const path=(id:string,x:number,y:number):TakeoffObject=>({id,groupId:"wall",kind:"wall",geometry:{type:"path",points:[{x,y},{x:x+120,y}]},dimensions:{heightMm:3000,thicknessMm:200},label:{visible:true}});
+ const path=(id:string,x:number,y:number):TakeoffObject=>({id,layerId:"takeoff-default",groupId:"wall",kind:"wall",geometry:{type:"path",points:[{x,y},{x:x+120,y}]},dimensions:{heightMm:3000,thicknessMm:200},label:{visible:true}});
  const doc={...newTakeoff({key:"v1-"+"a".repeat(64),name:"site.dwg",size:1,lastModified:0},"mm"),objects:[path("near",100,300),path("far",10000,10000)]};
  let nodes:Element[]=[];
  const svg={clientWidth:360,clientHeight:616,replaceChildren:(...children:Element[])=>{nodes=children;}}as unknown as SVGSVGElement;

@@ -1,11 +1,11 @@
 import {expect,it} from "vitest";
-import {asAnnotation,cleanPoints,fromAnnotation,geometryError,insidePolygon,labelPosition,newTakeoff,quantity,totals,validateDocument,type TakeoffKind,type TakeoffObject} from "./model";
+import {asAnnotation,cleanPoints,fromAnnotation,geometryError,insidePolygon,labelPosition,migrateTakeoff,newTakeoff,quantity,takeoffVisible,totals,validateDocument,type TakeoffKind,type TakeoffObject} from "./model";
 import {takeoffMovePoint} from "./overlay";
 import {UndoHistory} from "../viewer/undoHistory";
 import {translateAnnotation} from "../viewer/annotations";
 import {UNIT_METERS,type MeasurementUnit} from "../viewer/measurementGeometry";
 const drawing={key:"v1-"+"a".repeat(64),name:"site.dwg",size:123,lastModified:1};
-const obj=(id:string,kind:TakeoffKind,points:Array<{x:number;y:number}>,dimensions:TakeoffObject["dimensions"]):TakeoffObject=>({id,kind,groupId:kind,geometry:{type:kind==="slab"?"polygon":"path",points},dimensions,label:{visible:true}});
+const obj=(id:string,kind:TakeoffKind,points:Array<{x:number;y:number}>,dimensions:TakeoffObject["dimensions"]):TakeoffObject=>({id,layerId:"takeoff-default",kind,groupId:kind,geometry:{type:kind==="slab"?"polygon":"path",points},dimensions,label:{visible:true}});
 const w1=obj("W01","wall",[{x:0,y:0},{x:12000,y:0},{x:12000,y:8000}],{heightMm:3000,thicknessMm:200});
 const w2=obj("W02","wall",[{x:0,y:0},{x:10000,y:0}],{heightMm:3200,thicknessMm:250});
 const b1=obj("B01","beam",[{x:0,y:0},{x:12000,y:0}],{widthMm:300,depthMm:600});
@@ -37,7 +37,20 @@ it("derives totals after spec/vertex edits, deletion, Undo/Redo and hidden group
  const translated=fromAnnotation(w1,translateAnnotation(asAnnotation(w1),{x:0,y:0},{x:1e9,y:1e9}));expect(quantity(translated,"mm")).toEqual(quantity(w1,"mm"));
 });
 it("refuses unsupported schemas and foreign drawing identities instead of overwriting data",()=>{
- const d=newTakeoff(drawing,"drawing");validateDocument(d);expect(()=>validateDocument({...d,schemaVersion:2})).toThrow();expect(()=>validateDocument(d,"v1-"+"b".repeat(64))).toThrow();expect(()=>validateDocument({...d,objects:[w1]})).toThrow();
+ const d=newTakeoff(drawing,"drawing");validateDocument(d);expect(()=>validateDocument({...d,schemaVersion:3})).toThrow();expect(()=>validateDocument(d,"v1-"+"b".repeat(64))).toThrow();expect(()=>validateDocument({...d,objects:[w1]})).toThrow();
 });
 
 it("keeps a movement handle away from editable points when the lower toolbar forces clamping",()=>{const points=[{x:84,y:488},{x:156,y:488},{x:228,y:488},{x:228,y:392}],handle=takeoffMovePoint(points,360,616);expect(points.every(p=>Math.hypot(p.x-handle.x,p.y-handle.y)>=30)).toBe(true);expect(handle.y).toBeLessThan(392);});
+
+it("separates regional layers from member types and keeps hidden quantities in the full total",()=>{
+ const d={...newTakeoff(drawing,"mm"),layers:[{id:"one-two",name:"2동 1·2호",visible:true},{id:"three-five",name:"2동 3·4·5호",visible:true}],activeLayerId:"one-two",objects:[{...w1,layerId:"one-two"},{...w2,layerId:"three-five"},{...s1,layerId:"three-five"}]};validateDocument(d);
+ expect(totals(d).layers["one-two"].volumeM3).toBe(12);expect(totals(d).layers["three-five"].volumeM3).toBeCloseTo(15.2);expect(totals(d).groups.wall.volumeM3).toBe(20);
+ const hidden={...d,layers:d.layers.map(l=>({...l,visible:l.id!=="one-two"}))};expect(totals(hidden).volumeM3).toBeCloseTo(27.2);expect(totals(hidden).visibleVolumeM3).toBeCloseTo(15.2);expect(takeoffVisible(hidden,d.objects[0])).toBe(false);
+ const history=new UndoHistory<typeof d>();history.record(d);expect(totals(history.undo(hidden)!).visibleVolumeM3).toBeCloseTo(27.2);expect(totals(history.redo(d)!).visibleVolumeM3).toBeCloseTo(15.2);
+ expect(()=>validateDocument({...d,objects:[{...w1,layerId:"missing"}]})).toThrow();
+});
+it("upgrades v1 into a default region without changing original quantities, identities or labels",()=>{
+ const original={...newTakeoff(drawing,"mm"),schemaVersion:1,objects:[w1,s1]};
+ const upgraded=migrateTakeoff(original);expect(upgraded.schemaVersion).toBe(2);expect(upgraded.layers).toEqual([{id:"takeoff-default",name:"적산 1",visible:true}]);expect(upgraded.objects).toEqual(original.objects);expect(upgraded.drawing).toEqual(drawing);expect(totals(upgraded).volumeM3).toBeCloseTo(19.2);expect(upgraded.options.cadVisible).toBe(true);expect(original.schemaVersion).toBe(1);
+ expect(migrateTakeoff(upgraded)).toBe(upgraded);expect(()=>migrateTakeoff({...original,objects:[{...w1,dimensions:{heightMm:0}}]})).toThrow();
+});

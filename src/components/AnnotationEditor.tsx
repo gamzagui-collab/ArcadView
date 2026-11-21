@@ -1,4 +1,5 @@
 import { forwardRef, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from "react";
+import type {ReactNode} from "react";
 import { commerceSnapshot,canStart } from "../commerce/client";
 import { annotationUsage } from "../commerce/annotationUsage";
 import { useOperation } from "../commerce/useOperation";
@@ -70,8 +71,8 @@ const pointWords={
  en:{points:"Points","point-arrow":"Arrow","point-cloud":"Cloud","point-circle":"Circle mark","point-rectangle":"Rectangle mark","point-leader":"Text leader",pointHelp:"Pick two anchors. Arrowheads use the second point; cloud/rectangle use opposite corners.",leaderHelp:"Pick the detail, then label position and type. Tap outside to finish; hold the label to edit.",reserved:"Point tools only · automatic",currentLayer:"Current layer",pointInvalid:"Enter a label of 1–500 characters."},
  tr:{points:"İşaret","point-arrow":"Ok","point-cloud":"Bulut","point-circle":"Daire işareti","point-rectangle":"Dikdörtgen işareti","point-leader":"Yazılı ok",pointHelp:"İki nokta seçin. İkinci nokta ok ucudur; bulut/dikdörtgende karşı köşeleri seçin.",leaderHelp:"Ayrıntı ve yazı konumunu seçip yazın. Dışarıya dokunarak bitirin; yazıya basılı tutarak düzenleyin.",reserved:"Yalnızca işaret araçları · otomatik",currentLayer:"Etkin katman",pointInvalid:"1–500 karakter girin."},
 };
-type Props={viewer:DrawingViewer;active:boolean;open:boolean;layersOpen:boolean;onLayersToggle():void;onLayersHide():void;sourceUnit:MeasurementUnit;displayUnit:MeasurementUnit;precision:number;onPrecision(value:number):void;onHide():void;onActivate():void;onPause():void;onHistoryState(state:EditHistoryState):void};
-export const AnnotationEditor=forwardRef<AnnotationEditorHandle,Props>(function AnnotationEditor({viewer,active,open,layersOpen,onLayersToggle,onLayersHide,sourceUnit,displayUnit,precision,onPrecision,onHide,onActivate,onPause,onHistoryState},ref){
+type Props={viewer:DrawingViewer;active:boolean;open:boolean;layersOpen:boolean;layerTabs?:ReactNode;hideLayerBadge?:boolean;onLayersToggle():void;onLayersHide():void;sourceUnit:MeasurementUnit;displayUnit:MeasurementUnit;precision:number;onPrecision(value:number):void;onHide():void;onActivate():void;onPause():void;onHistoryState(state:EditHistoryState):void};
+export const AnnotationEditor=forwardRef<AnnotationEditorHandle,Props>(function AnnotationEditor({viewer,active,open,layersOpen,layerTabs,hideLayerBadge,onLayersToggle,onLayersHide,sourceUnit,displayUnit,precision,onPrecision,onHide,onActivate,onPause,onHistoryState},ref){
   const {locale,t}=useI18n(),w={...words[locale],...additions[locale],...geometryWords[locale],...pointWords[locale],...editWords[locale],"dimension-angle":t("measureAngle"),"dimension-radius":t("measureRadius")},u=useUx(),cw=constructionWords[locale],sw=sizeWords[locale];
   const [tab,setTab]=useState<typeof editorTabs[number]>("draw");
   const key=viewer.getMeasurementGeometry().unitPreferenceKey;
@@ -419,7 +420,7 @@ export const AnnotationEditor=forwardRef<AnnotationEditorHandle,Props>(function 
   return <>
     {commercial.controls}
     <svg ref={overlay} className="annotation-overlay" aria-hidden="true"/><svg ref={target} className="measurement-overlay annotation-target-overlay" aria-hidden="true"/>
-    <button type="button" className={`active-layer-badge ${current.visible?"":"layer-hidden"}`} aria-label={`${layerText.open} · ${w.currentLayer} ${currentNumber} ${current.name}`} aria-expanded={layersOpen} aria-controls="arcad-layer-panel" title={`${layerText.open} · ${currentNumber} ${current.name}`} onClick={onLayersToggle} style={{background:current.color,color:badgeForeground(current.color)}} data-layer={currentNumber}>{currentNumber}</button>
+    {!hideLayerBadge?<button type="button" className={`active-layer-badge ${current.visible?"":"layer-hidden"}`} aria-label={`${layerText.open} · ${w.currentLayer} ${currentNumber} ${current.name}`} aria-expanded={layersOpen} aria-controls="arcad-layer-panel" title={`${layerText.open} · ${currentNumber} ${current.name}`} onClick={onLayersToggle} style={{background:current.color,color:badgeForeground(current.color)}} data-layer={currentNumber}>{currentNumber}</button>:null}
     {active&&pointSession?<PointLeaderEditor viewer={viewer} session={pointSession} onText={updatePointText} onFinish={finishPointText}/>:null}
     {active&&offsetChoice&&!pending?<OffsetDirections viewer={viewer} guide={offsetChoice.guide} onChoose={side=>{setEditValues([editNumber(readOffsetDistance(sourceUnit))]);setEditError("");setPending({kind:"offset",object:offsetChoice.object,side});}}/>:null}
     {active&&pending?<GeometryDistanceDialog kind={pending.kind} values={editValues} unit={pending.kind==="rotate"?"°":sourceUnit==="drawing"?w.drawingUnit:sourceUnit} error={editError} onChange={values=>{setEditValues(values);setEditError("");}} onApply={applyEdit} onCancel={cancelEdit}/>:null}
@@ -433,6 +434,7 @@ export const AnnotationEditor=forwardRef<AnnotationEditorHandle,Props>(function 
     {active?<div className="annotation-status" role="status"><button type="button" onClick={onHide}><span>{current.name} · {tool==="arc"?cw.arc:w[tool]} {draft.length?`· ${draft.length}`:""}</span><small>{notice||(!saved?w.unsaved:w.saved)}</small></button>{tool==="polyline"?<button type="button" className="annotation-finish" disabled={draft.length<2||commercial.blocked()||!!construction} onClick={()=>add(make(draft,"polyline"))}>{w.finish} ✓</button>:null}<button type="button" onClick={onPause} aria-label={w.pause}>Ⅱ</button></div>:null}
     {layersOpen?<section id="arcad-layer-panel" className="annotation-panel layer-panel" role="dialog" aria-label={u.layers}>
       <header><strong>{u.layers}</strong><span><ToolIcon name="shield"/>{u.original}</span><button type="button" aria-label={layerText.close} onClick={onLayersHide}>×</button></header>
+      {layerTabs}
       <div className="layer-section-heading"><strong>{u.layers}</strong><span>{normal.length} / 3 ＋ 4 · 5</span></div>
       <div className="user-layers">{normal.map((l,i)=><div key={l.id} className={l.id===current.id?"active":""}>
         <input type="radio" name="user-layer" aria-label={`${w.layer} ${i+1}`} checked={l.id===current.id} disabled={dimensionLocked} onChange={()=>{if(dimensionLocked)return;commit({...doc,activeLayer:l.id});setTool("select");setDraft([]);}}/>

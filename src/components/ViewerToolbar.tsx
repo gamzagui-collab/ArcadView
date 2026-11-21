@@ -36,11 +36,11 @@ export function ViewerToolbar({ onCommand,takeoffActive,onTakeoff, canMeasure, m
 
   return (
     <>
-      {canMeasure?<aside className="viewer-history-dock" role="group" aria-label={words.history}>
+      {canMeasure?<aside className={`viewer-history-dock${takeoffActive?" takeoff-history":""}`} role="group" aria-label={words.history}>
         <button type="button" aria-label={words.undo} title={words.undo} disabled={!canUndo} onClick={onUndo}><UndoIcon/></button>
         <button type="button" aria-label={words.redo} title={words.redo} disabled={!canRedo} onClick={onRedo}><RedoIcon/></button>
       </aside>:null}
-    <nav className={`viewer-toolbar ${canMeasure ? "with-measure with-edit" : ""}`} aria-label={t("viewerControls")}>
+    <nav className={`viewer-toolbar ${canMeasure ? "with-measure with-edit" : ""}${takeoffActive?" with-takeoff":""}`} aria-label={t("viewerControls")}>
       <div className="viewer-tool-row">
         <div className="viewer-view-group" role="group" aria-label={words.view}>
           <button type="button" aria-label={t("reset")} title={t("reset")} onClick={()=>onCommand("reset")}><ResetIcon/></button>
@@ -53,6 +53,7 @@ export function ViewerToolbar({ onCommand,takeoffActive,onTakeoff, canMeasure, m
           <button type="button" data-tool="delete" aria-label={words.remove} title={words.remove} disabled={!canDelete} onClick={onDelete}><ToolIcon name="delete"/><span>{words.remove}</span></button>
         </ToolStrip>:null}
         {canMeasure?<button type="button" className="viewer-cancel-tool" aria-label={words.cancel} title={words.cancel} onClick={onCancel}><CancelToolIcon/></button>:null}
+        {takeoffActive?<div id="takeoff-toolbar-slot"/>:null}
       </div>
     </nav>
     </>

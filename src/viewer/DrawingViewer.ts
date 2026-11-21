@@ -85,6 +85,8 @@ export class DrawingViewer {
   private annotationOwner="annotations";
   private takeoffGeometry:MeasurementGeometry={units:"drawing",entities:[],snaps:[],limited:false,completeBounds:false,fitBounds:[],fitCompleteBounds:false};
   private takeoffFocus:CadFocusFilter|null=null;
+  private baseDrawingVisible=true;
+  private readonly emptyCad:MeasurementGeometry={units:"drawing",entities:[],snaps:[],limited:false,completeBounds:false,fitBounds:[],fitCompleteBounds:false};
   private userGeometry: MeasurementGeometry = {units:"drawing",entities:[],snaps:[],limited:false,completeBounds:false,fitBounds:[],fitCompleteBounds:false};
   private masks: Annotation[] = [];
   private viewListeners = new Set<()=>void>();
@@ -102,7 +104,7 @@ export class DrawingViewer {
     const h=this.handleDrag!,d=h.drag.offset,client={x:event.clientX+(d?.x??0),y:event.clientY+(d?.y??0)},moving=h.drag.translation;
     if(!moving)return this.pickAt(client,false);
     const point=this.clientToDrawing(client),rect=this.viewer.GetCanvas().getBoundingClientRect(),a=this.clientToDrawing({x:rect.left,y:rect.bottom}),b=this.clientToDrawing({x:rect.right,y:rect.top});
-    const contact=(h.input.handleSnapping??h.input.snapping)?moving.snap(point,[this.geometry,moving.geometry],this.worldTolerance(12),p=>!masked(p,moving.masks,this.worldTolerance(3)),{minX:a.x,minY:a.y,maxX:b.x,maxY:b.y}):null;
+    const contact=(h.input.handleSnapping??h.input.snapping)?moving.snap(point,[this.baseDrawingVisible?this.geometry:this.emptyCad,moving.geometry],this.worldTolerance(12),p=>!masked(p,moving.masks,this.worldTolerance(3)),{minX:a.x,minY:a.y,maxX:b.x,maxY:b.y}):null;
     return{point:contact?.point??point,snapped:contact?.kind??null,entity:null,...(contact?{contact}:{})};
   }
   private readonly gesture = new MeasurementGesture({
@@ -139,6 +141,7 @@ export class DrawingViewer {
     this.gesture.up(event.pointerId, { x: event.clientX, y: event.clientY });
   };
   private pickAt(position: { x: number; y: number }, precision: boolean): MeasurementPick {
+    const cad=this.baseDrawingVisible?this.geometry:this.emptyCad;
     const editor=this.annotationInput??this.handleDrag?.input;
     const measurement:MeasurementSettings=editor?{enabled:true,mode:editor.tool==="polyline"?"path":!this.handleDrag&&editor.tool==="dimension-radius"?"radius":editor.tool==="dimension-angle"?"angle":"distance",points:editor.points,snapping:this.handleDrag?editor.handleSnapping??editor.snapping:editor.snapping,entity:null}:this.measurement!;
     const canvas = this.viewer.GetCanvas();
@@ -151,7 +154,7 @@ export class DrawingViewer {
     const replaceIndex = precision ? this.precisionIndex : undefined;
     const radiusSlot=replaceIndex??(measurement.points.length>=2?0:measurement.points.length),centerKind=measurement.mode==="radius"&&radiusSlot===0?"center":undefined;
     let snapped:SnapPoint|null = measurement.snapping && measurement.mode !== "object" ?
-      this.geometry.packed ? nearestPackedSnap(this.geometry.packed, point, tolerance,centerKind) : nearestSnap(this.geometry.snaps, point, tolerance,centerKind) : null;
+      cad.packed ? nearestPackedSnap(cad.packed, point, tolerance,centerKind) : nearestSnap(cad.snaps, point, tolerance,centerKind) : null;
     if(snapped&&masked(snapped,this.masks,this.worldTolerance(3)))snapped=null;
     const supplemental=editor&&this.annotationOwner==="takeoff"?this.takeoffGeometry:null;
     let own=measurement.snapping?nearestSnap(this.userGeometry.snaps,point,tolerance,centerKind):null;
@@ -164,18 +167,18 @@ export class DrawingViewer {
     if(reference&&(!snapped||Math.hypot(reference.x-point.x,reference.y-point.y)<Math.hypot(snapped.x-point.x,snapped.y-point.y)))snapped=reference;
     let curve:DrawingPoint|null=null;
     if(measurement.mode==="radius"&&radiusSlot===1&&measurement.snapping){
-      curve=snapToCircularEdge(this.geometry,measurement.points[0],point,tolerance,p=>!masked(p,this.masks,this.worldTolerance(3)));
+      curve=snapToCircularEdge(cad,measurement.points[0],point,tolerance,p=>!masked(p,this.masks,this.worldTolerance(3)));
       const q=snapToCircularEdge(this.userGeometry,measurement.points[0],point,tolerance);
       if(q&&(!curve||Math.hypot(q.x-point.x,q.y-point.y)<Math.hypot(curve.x-point.x,curve.y-point.y)))curve=q;
       if(curve&&snapped&&Math.abs(Math.hypot(snapped.x-measurement.points[0].x,snapped.y-measurement.points[0].y)-Math.hypot(curve.x-measurement.points[0].x,curve.y-measurement.points[0].y))>Math.max(tolerance*1e-6,1e-7))snapped=null;
     }
-    const intersection=(editor?.tool==="move"||editor?.tool==="rotate"||!!this.handleDrag)&&measurement.snapping?intersectionSnap([this.geometry,this.userGeometry,...supplemental?[supplemental]:[]],point,this.worldTolerance(10),p=>!masked(p,this.masks,this.worldTolerance(3))):null;
+    const intersection=(editor?.tool==="move"||editor?.tool==="rotate"||!!this.handleDrag)&&measurement.snapping?intersectionSnap([cad,this.userGeometry,...supplemental?[supplemental]:[]],point,this.worldTolerance(10),p=>!masked(p,this.masks,this.worldTolerance(3))):null;
     const start = snapToPathStart(measurement, point, tolerance, replaceIndex);
     const anchor=this.handleDrag?.drag.anchor??editor?.anchor??(isDistanceMode(measurement.mode)?measurement.points[replaceIndex===0?1:0]:undefined);
     let perpendicular:DrawingPoint|null=null;
     if(measurement.snapping&&anchor&&measurement.mode!=="radius"){
       const tol=this.worldTolerance(9),accept=(p:DrawingPoint)=>!masked(p,this.masks,this.worldTolerance(3));
-      perpendicular=perpendicularSnap(this.geometry,anchor,point,tol,accept);
+      perpendicular=perpendicularSnap(cad,anchor,point,tol,accept);
       let ownFoot=perpendicularSnap(this.userGeometry,anchor,point,tol);
       const takeoffFoot=supplemental?perpendicularSnap(supplemental,anchor,point,tol):null;
       if(takeoffFoot&&(!ownFoot||Math.hypot(takeoffFoot.x-point.x,takeoffFoot.y-point.y)<Math.hypot(ownFoot.x-point.x,ownFoot.y-point.y)))ownFoot=takeoffFoot;
@@ -187,7 +190,7 @@ export class DrawingViewer {
     else if (snapped) point = { x: snapped.x, y: snapped.y };
     else if(curve)point=curve;
     let entity = !this.handleDrag&&(measurement.mode === "object" || editor?.tool==="select"||editor?.tool==="trim") ?
-      this.geometry.packed ? nearestPackedEntity(this.geometry.packed, point, tolerance, pointSegmentDistance) : nearestEntity(this.geometry.entities, point, tolerance) : null;
+      cad.packed ? nearestPackedEntity(cad.packed, point, tolerance, pointSegmentDistance) : nearestEntity(cad.entities, point, tolerance) : null;
     if(entity)entity=visibleEntityFragment(entity,this.masks,point,tolerance);
     if(entity){let nearest=Infinity,hit=point;for(let i=1;i<entity.points.length;i++){const q=segmentFoot(point,entity.points[i-1],entity.points[i]);if(q&&Math.hypot(q.x-point.x,q.y-point.y)<nearest){hit=q;nearest=Math.hypot(q.x-point.x,q.y-point.y);}}if(masked(hit,this.masks,this.worldTolerance(3)))entity=null;}
     if(measurement.mode==="object"){const candidate=nearestEntity(this.userGeometry.entities,point,tolerance);if(candidate)entity=candidate;}
@@ -254,7 +257,7 @@ export class DrawingViewer {
       else this.culler?.restore();
       if (!this.destroyed) this.onViewChanged?.();
       if (!this.destroyed) for(const listener of this.viewListeners)listener();
-      render();
+      if(this.baseDrawingVisible)render();
     };
   }
 
@@ -444,6 +447,7 @@ export class DrawingViewer {
   setTakeoffGeometry(geometry:MeasurementGeometry){this.takeoffGeometry=geometry;}
   getCadFocusOptions(){this.takeoffFocus??=new CadFocusFilter((this.viewer as any).scene);return this.takeoffFocus.options();}
   setTakeoffFocus(filter:CadFocus){if(this.destroyed)return;this.takeoffFocus??=new CadFocusFilter((this.viewer as any).scene);this.takeoffFocus.set(filter);this.viewer.Render();}
+  setBaseDrawingVisible(visible:boolean){if(this.destroyed||visible===this.baseDrawingVisible)return;this.baseDrawingVisible=visible;this.viewer.GetCanvas().style.opacity=visible?"":"0";this.viewer.Render();}
   subscribeView(listener:()=>void):()=>void{this.viewListeners.add(listener);return()=>{this.viewListeners.delete(listener);};}
 
   projectPoints(points: readonly DrawingPoint[]): DrawingPoint[] {

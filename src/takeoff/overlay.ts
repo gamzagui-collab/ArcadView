@@ -1,5 +1,5 @@
 import type {DrawingPoint as P} from "../viewer/savedView";
-import {labelPosition,quantity,type TakeoffDocument,type TakeoffObject} from "./model";
+import {labelPosition,quantity,takeoffVisible,type TakeoffDocument,type TakeoffObject} from "./model";
 /** Keep a clamped movement cross away from the object's editable vertices. */
 export function takeoffMovePoint(points:readonly P[],width:number,height:number):P{
  const xs=points.map(p=>p.x),ys=points.map(p=>p.y),minX=Math.min(...xs),maxX=Math.max(...xs),minY=Math.min(...ys),maxY=Math.max(...ys),clamp=(p:P)=>({x:Math.max(20,Math.min(width-20,p.x)),y:Math.max(100,Math.min(height-125,p.y))});
@@ -8,7 +8,7 @@ export function takeoffMovePoint(points:readonly P[],width:number,height:number)
 }
 export function drawTakeoff(svg:SVGSVGElement,doc:TakeoffDocument,selected:string|null,draft:TakeoffObject|null,project:(p:readonly P[])=>P[],active:boolean){
  const ns="http://www.w3.org/2000/svg",nodes:SVGElement[]=[],el=(tag:string,attrs:Record<string,string|number>,parent?:SVGElement)=>{const e=document.createElementNS(ns,tag);for(const[k,v]of Object.entries(attrs))e.setAttribute(k,String(v));if(parent)parent.append(e);else nodes.push(e);return e;};
- for(const o of [...doc.objects.filter(o=>doc.groups.find(g=>g.id===o.groupId)?.visible&&o.id!==draft?.id),...draft?[draft]:[]]){
+ for(const o of [...doc.objects.filter(o=>takeoffVisible(doc,o)&&o.id!==draft?.id),...draft?[draft]:[]]){
   const group=doc.groups.find(g=>g.id===o.groupId)!,color=group.color,chosen=active&&o.id===selected,world=o.geometry.points,points=project(world),closed=o.kind==="slab",coords=points.map(p=>`${p.x},${p.y}`).join(" "),tag=closed?"polygon":"polyline";
   if(closed)el("polygon",{points:coords,fill:color,"fill-opacity":.13,stroke:"none","data-takeoff":o.id});
   el(tag,{points:coords,fill:"none",stroke:"#04101e","stroke-width":chosen?9:7,"stroke-linejoin":"round","stroke-linecap":"round"});

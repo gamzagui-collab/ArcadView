@@ -14,6 +14,7 @@ import {
   type ViewerHandle,
 } from "../types/drawing";
 import { DrawingViewer, type MeasurementPick } from "../viewer/DrawingViewer";
+import {LayerTabs,type LayerTab} from "./LayerTabs";
 import { convertMeasurement, type MeasurementGeometry, type MeasurementSettings, type MeasurementUnit } from "../viewer/measurementGeometry";
 import { drawMeasurementOverlay } from "../viewer/measurementOverlay";
 import { AnnotationEditor, type AnnotationEditorHandle } from "./AnnotationEditor";
@@ -60,6 +61,9 @@ export const DrawingCanvas = forwardRef<ViewerHandle, Props>(
     const annotationRef=useRef<AnnotationEditorHandle>(null),takeoffRef=useRef<TakeoffHandle>(null),takeoffActiveRef=useRef(takeoffActive);takeoffActiveRef.current=takeoffActive;
     const annotationHistory=useCallback((state:EditHistoryState)=>{if(!takeoffActive)onEditHistory(state);},[takeoffActive,onEditHistory]);
     const [readyViewer,setReadyViewer]=useState<DrawingViewer|null>(null);
+    const [layerTab,setLayerTab]=useState<LayerTab>("draw");
+    useEffect(()=>{if(layersOpen)setLayerTab(takeoffActive?"takeoff":"draw");},[layersOpen]);
+    const layerTabs=<LayerTabs value={layerTab} onChange={setLayerTab}/>;
     const unitRef=useRef({sourceUnit,displayUnit,precision,locale});unitRef.current={sourceUnit,displayUnit,precision,locale};
     const callbacksRef = useRef({ onProgress, onReady, onError, onMeasurementPick, onMeasurementReady });
     callbacksRef.current = { onProgress, onReady, onError, onMeasurementPick, onMeasurementReady };
@@ -157,8 +161,8 @@ export const DrawingCanvas = forwardRef<ViewerHandle, Props>(
     return (
       <div className={`drawing-canvas ${measurement.enabled ? "measurement-active" : ""}`}>
         <div ref={containerRef} className="drawing-surface" />
-        {readyViewer?<AnnotationEditor ref={annotationRef} viewer={readyViewer} active={annotationActive} open={annotationOpen} layersOpen={layersOpen} onLayersToggle={onLayersToggle} onLayersHide={onLayersHide} sourceUnit={sourceUnit} displayUnit={displayUnit} precision={precision} onPrecision={onPrecision} onHide={onAnnotationHide} onActivate={onAnnotationActivate} onPause={onAnnotationPause} onHistoryState={annotationHistory}/>:null}
-        {readyViewer?<TakeoffEditor ref={takeoffRef} viewer={readyViewer} identity={drawingIdentity} active={takeoffActive} sourceUnit={sourceUnit} onHistory={onEditHistory}/>:null}
+        {readyViewer?<AnnotationEditor ref={annotationRef} viewer={readyViewer} active={annotationActive} open={annotationOpen} layersOpen={layersOpen&&layerTab==="draw"} hideLayerBadge={takeoffActive} layerTabs={layerTabs} onLayersToggle={onLayersToggle} onLayersHide={onLayersHide} sourceUnit={sourceUnit} displayUnit={displayUnit} precision={precision} onPrecision={onPrecision} onHide={onAnnotationHide} onActivate={onAnnotationActivate} onPause={onAnnotationPause} onHistoryState={annotationHistory}/>:null}
+        {readyViewer?<TakeoffEditor ref={takeoffRef} viewer={readyViewer} identity={drawingIdentity} active={takeoffActive} sourceUnit={sourceUnit} onHistory={onEditHistory} layersOpen={layersOpen&&layerTab==="takeoff"} layerTabs={layerTabs} onLayersToggle={onLayersToggle} onLayersHide={onLayersHide}/>:null}
         <svg ref={overlayRef} className="measurement-overlay" aria-hidden="true" />
       </div>
     );

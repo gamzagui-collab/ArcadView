@@ -580,7 +580,7 @@ export function App() {
           onEditHistory={setEditHistory}
           takeoffActive={takeoffActive} drawingIdentity={{name:state.drawing.name,size:state.drawing.size,lastModified:state.drawing.file.lastModified}}
           annotationActive={annotationActive} annotationOpen={annotationOpen} layersOpen={layersOpen}
-          onLayersToggle={()=>{setTakeoffActive(false);setLayersOpen(open=>!open);setAnnotationOpen(false);setMeasurementPanelOpen(false);}}
+          onLayersToggle={()=>{setLayersOpen(open=>!open);setAnnotationOpen(false);setMeasurementPanelOpen(false);}}
           onLayersHide={()=>setLayersOpen(false)} sourceUnit={sourceUnit} displayUnit={displayUnit}
           precision={precision} onPrecision={handlePrecision}
           onAnnotationHide={()=>setAnnotationOpen(open=>!open)} onAnnotationPause={()=>setAnnotationActive(false)}

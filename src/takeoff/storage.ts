@@ -1,12 +1,14 @@
-import {newTakeoff,validateDocument,type TakeoffDocument} from "./model";
+import {migrateTakeoff,newTakeoff,validateDocument,type TakeoffDocument} from "./model";
 import type {MeasurementUnit} from "../viewer/measurementGeometry";
-export const TAKEOFF_DB="arcad-concrete-takeoff",TAKEOFF_DB_VERSION=1;
+export const TAKEOFF_DB="arcad-concrete-takeoff",TAKEOFF_DB_VERSION=2;
 /** A separate versioned database: no migration or writes to drawings, ordinary
  * annotations, accounts or usage journals. Transaction completion is the ACK. */
 function open():Promise<IDBDatabase>{return new Promise((resolve,reject)=>{
  if(!globalThis.indexedDB){reject(Error("적산 저장소를 사용할 수 없습니다."));return;}
  const r=indexedDB.open(TAKEOFF_DB,TAKEOFF_DB_VERSION);let blocked=false;
- r.onupgradeneeded=()=>{const db=r.result,s=db.createObjectStore("documents",{keyPath:"drawing.key"});s.createIndex("drawingName","drawing.name",{unique:false});};
+ r.onupgradeneeded=()=>{const db=r.result;if(!db.objectStoreNames.contains("documents")){const s=db.createObjectStore("documents",{keyPath:"drawing.key"});s.createIndex("drawingName","drawing.name",{unique:false});return;}
+  const cursor=r.transaction!.objectStore("documents").openCursor();cursor.onsuccess=()=>{const row=cursor.result;if(!row)return;try{row.update(migrateTakeoff(row.value));row.continue();}catch{r.transaction!.abort();}};
+ };
  r.onerror=()=>reject(r.error);r.onblocked=()=>{blocked=true;reject(Error("다른 창에서 적산 저장소를 사용 중입니다. 창을 닫고 다시 시도하세요."));};
  r.onsuccess=()=>{if(blocked){r.result.close();return;}r.result.onversionchange=()=>r.result.close();resolve(r.result);};
  });}
