@@ -22,7 +22,7 @@ import { GeometryDistanceDialog, OffsetDirections } from "./GeometryEditControls
 import { PrecisionSelect } from "./PrecisionSelect";
 import { addPointObject, badgeForeground, completePointText, pointHit, pointMoveSnaps, readPointStyle, savePointStyle, type PointStyle, type PointTextSession } from "../viewer/pointMarkup";
 import { PointLeaderEditor, PointStyleControls } from "./PointControls";
-import {moveHandlePosition,objectGrips,reshapeObject,rotateObject,rotationDegrees,rotationReference} from "../viewer/objectEditing";
+import {canPositionObject,moveHandlePosition,objectGrips,reshapeObject,rotateObject,rotationDegrees,rotationReference} from "../viewer/objectEditing";
 import {rotatePoint} from "../viewer/curveGeometry";
 import {extendToBoundary} from "../viewer/extendGeometry";
 import {objectColor,objectStyleValue,styleAnnotation,type ObjectStyle} from "../viewer/annotationStyle";
@@ -122,7 +122,7 @@ export const AnnotationEditor=forwardRef<AnnotationEditorHandle,Props>(function 
   };
   const beginHandle=(client:DrawingPoint):AnnotationHandleDrag|null=>{
     if(!active||!editedModel||(tool!=="select"&&!(isRadialDimension(editedModel)&&tool===editedModel.kind&&!draft.length))||editedModel.kind==="mask"||pending||textSession||pointSession||original&&!current.visible)return null;
-    if(commerceSnapshot().managed&&(commercial.blocked()||!canStart("edit.reshape")))return null;
+    if(commerceSnapshot().managed&&(commercial.blocked()||!canPositionObject(editedModel,canStart)))return null;
     const canvas=viewer.getCanvasElement(),rect=canvas.getBoundingClientRect(),p={x:client.x-rect.left,y:client.y-rect.top},move=moveHandlePosition(editedModel,q=>viewer.projectPoints(q),canvas.clientWidth,canvas.clientHeight),grips=objectGrips(editedModel),step=Math.max(1,Math.ceil(grips.length/512));
     let grip:typeof grips[number]|undefined,best=14;const free=!!move&&Math.hypot(p.x-move.x,p.y-move.y)<=17;
     if(!free)for(const[g,i]of grips.map((g,i)=>[g,i]as const)){if(i%step&&i!==grips.length-1)continue;const q=viewer.projectPoints([g.point])[0],d=Math.hypot(p.x-q.x,p.y-q.y);if(d<=best){best=d;grip=g;}}

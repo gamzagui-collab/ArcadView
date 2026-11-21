@@ -3,6 +3,8 @@ import{normAngle,pointDistance,rectangleCorners,rotatePoint,TAU}from"./curveGeom
 import type{DrawingPoint as P}from"./savedView";
 import{dimensionLabelPoint,isRadialDimension,radialDimensionGeometry}from"./radialDimensions";
 export type Grip={id:string;point:P};
+/** Moving an existing dimension label changes no measured value. */
+export const canPositionObject=(o:Annotation,hasAccess:(tool:string)=>boolean):boolean=>isRadialDimension(o)||hasAccess("edit.reshape");
 const rectangular=(o:Annotation)=>["rectangle","point-rectangle","point-cloud"].includes(o.kind);
 export function objectGrips(o:Annotation):Grip[]{
  if(o.kind==="mask")return[];

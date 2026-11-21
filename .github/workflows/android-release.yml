@@ -80,6 +80,8 @@ jobs:
           if-no-files-found: error
       - name: Verify matching public corresponding source
         if: steps.release.outputs.mode != 'published'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: node scripts/verify-public-source.mjs
       - name: Publish verified release
         if: steps.release.outputs.mode != 'published'
