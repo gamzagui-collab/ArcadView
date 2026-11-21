@@ -62,3 +62,5 @@
  .viewer-shell .takeoff-panel{left:58px;right:auto;width:min(360px,calc(100% - 246px));bottom:calc(75px + env(safe-area-inset-bottom));max-height:calc(100dvh - 135px - env(safe-area-inset-top))}
  .takeoff-groups{margin-top:4px}
 }
+
+.takeoff-color-pick{margin-bottom:6px;min-height:30px}.takeoff-object-layer{display:flex;align-items:center;gap:7px;font-size:11px;margin:6px 0}.takeoff-object-layer select{min-width:0;max-width:75%}

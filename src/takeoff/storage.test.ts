@@ -1,7 +1,7 @@
 import {IDBFactory,IDBObjectStore} from "fake-indexeddb";
 import {afterEach,expect,it,vi} from "vitest";
 import {loadTakeoff,saveTakeoff,TAKEOFF_DB,notifyTakeoffCompleted} from "./storage";
-import {newTakeoff,totals,type TakeoffObject} from "./model";
+import {moveTakeoffToLayer,newTakeoff,totals,type TakeoffObject} from "./model";
 const drawing={key:"v1-"+"1".repeat(64),name:"same-name.dwg",size:30,lastModified:1};
 afterEach(()=>{vi.unstubAllGlobals();vi.restoreAllMocks();});
 it("stores only source geometry/specs, survives reopen, separates drawings and flags same-name revisions",async()=>{
@@ -30,4 +30,10 @@ it("aborts the entire upgrade if any legacy document is corrupt instead of repla
  const db=await new Promise<IDBDatabase>(resolve=>{const r=factory.open(TAKEOFF_DB,1);r.onupgradeneeded=()=>{const s=r.result.createObjectStore("documents",{keyPath:"drawing.key"});s.createIndex("drawingName","drawing.name");s.put(original);};r.onsuccess=()=>resolve(r.result);});db.close();
  await expect(loadTakeoff(drawing,"mm")).rejects.toBeTruthy();expect((await factory.databases()).find(d=>d.name===TAKEOFF_DB)?.version).toBe(1);
  const old=await new Promise<IDBDatabase>(resolve=>{const r=factory.open(TAKEOFF_DB,1);r.onsuccess=()=>resolve(r.result);});const request=old.transaction("documents").objectStore("documents").get(drawing.key);expect(await new Promise(resolve=>{request.onsuccess=()=>resolve(request.result);})).toEqual(original);old.close();
+});
+
+it("reopens original CAD colors and object layer transfers with identical geometry/specs/manual labels",async()=>{
+ vi.stubGlobal("indexedDB",new IDBFactory());const before=newTakeoff(drawing,"m");before.layers.push({id:"second",name:"3·4·5호",visible:false});before.objects=[{id:"W01",layerId:before.activeLayerId,kind:"wall",groupId:"wall",geometry:{type:"path",points:[{x:0,y:0},{x:20,y:0}]},dimensions:{heightMm:3000,thicknessMm:200},label:{visible:true,position:{x:5,y:2}}}];
+ await saveTakeoff(before);const after=moveTakeoffToLayer(before,"W01","second");after.options={...after.options,focus:true,keepColors:["#34aadc"]};await saveTakeoff(after);
+ const restored=(await loadTakeoff(drawing,"mm")).document;expect(restored).toEqual(after);expect(totals(restored).volumeM3).toBe(12);expect(totals(restored).visibleVolumeM3).toBe(0);expect(before.objects[0].layerId).toBe(before.activeLayerId);
 });

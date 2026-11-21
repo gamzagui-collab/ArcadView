@@ -15,6 +15,14 @@ export const knownUnit=(unit:MeasurementUnit)=>unit!=="drawing"&&unit in UNIT_ME
 export const validPoint=(p:P)=>!!p&&Number.isFinite(p.x)&&Number.isFinite(p.y)&&Math.abs(p.x)<=1e12&&Math.abs(p.y)<=1e12;
 export function newTakeoff(drawing:TakeoffDocument["drawing"],unit:MeasurementUnit):TakeoffDocument{return{schemaVersion:2,drawing,unit,groups:[{id:"wall",visible:true,color:"#49cfff"},{id:"beam",visible:true,color:"#ffdc63"},{id:"slab",visible:true,color:"#b18bff"}],layers:[{id:DEFAULT_TAKEOFF_LAYER,name:"적산 1",visible:true}],activeLayerId:DEFAULT_TAKEOFF_LAYER,objects:[],defaults:{wall:{heightMm:3000,thicknessMm:200},beam:{widthMm:300,depthMm:600},slab:{thicknessMm:180}},options:{focus:false,keepLayers:[],keepColors:[],collapsed:true,heightUnit:"m",cadVisible:true,labelsVisible:true},revision:0};}
 export const takeoffVisible=(doc:TakeoffDocument,o:TakeoffObject)=>!!doc.groups.find(g=>g.id===o.groupId)?.visible&&!!doc.layers.find(l=>l.id===o.layerId)?.visible;
+/** Layer transfer only changes membership; geometry, specifications, manual
+ * labels, visibility preferences and the original CAD document remain intact. */
+export function moveTakeoffToLayer(doc:TakeoffDocument,id:string,layerId:string):TakeoffDocument{
+ if(!doc.layers.some(l=>l.id===layerId))throw Error("대상 적산 레이어가 없습니다.");
+ const object=doc.objects.find(o=>o.id===id);if(!object)throw Error("적산 객체가 없습니다.");
+ if(object.layerId===layerId)return doc;
+ return{...doc,objects:doc.objects.map(o=>o.id===id?{...o,layerId}:o)};
+}
 /** Upgrade the separate takeoff document only; keep every legacy coordinate,
  * specification, label, identity, quantity and visibility preference. */
 export function migrateTakeoff(value:unknown):TakeoffDocument{

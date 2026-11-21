@@ -1,5 +1,5 @@
 import {expect,it} from "vitest";
-import {asAnnotation,cleanPoints,fromAnnotation,geometryError,insidePolygon,labelPosition,migrateTakeoff,newTakeoff,quantity,takeoffVisible,totals,validateDocument,type TakeoffKind,type TakeoffObject} from "./model";
+import {asAnnotation,cleanPoints,fromAnnotation,geometryError,insidePolygon,labelPosition,migrateTakeoff,moveTakeoffToLayer,newTakeoff,quantity,takeoffVisible,totals,validateDocument,type TakeoffKind,type TakeoffObject} from "./model";
 import {takeoffMovePoint} from "./overlay";
 import {UndoHistory} from "../viewer/undoHistory";
 import {translateAnnotation} from "../viewer/annotations";
@@ -53,4 +53,12 @@ it("upgrades v1 into a default region without changing original quantities, iden
  const original={...newTakeoff(drawing,"mm"),schemaVersion:1,objects:[w1,s1]};
  const upgraded=migrateTakeoff(original);expect(upgraded.schemaVersion).toBe(2);expect(upgraded.layers).toEqual([{id:"takeoff-default",name:"적산 1",visible:true}]);expect(upgraded.objects).toEqual(original.objects);expect(upgraded.drawing).toEqual(drawing);expect(totals(upgraded).volumeM3).toBeCloseTo(19.2);expect(upgraded.options.cadVisible).toBe(true);expect(original.schemaVersion).toBe(1);
  expect(migrateTakeoff(upgraded)).toBe(upgraded);expect(()=>migrateTakeoff({...original,objects:[{...w1,dimensions:{heightMm:0}}]})).toThrow();
+});
+
+it("transfers membership without changing quantities or geometry; honors hidden targets and Undo/Redo",()=>{
+ const base={...newTakeoff(drawing,"mm"),objects:[{...w1,label:{visible:true,position:{x:111,y:222}}},s1]};base.layers.push({id:"second",name:"3·4·5호",visible:false});
+ const before=structuredClone(base),h=new UndoHistory<typeof base>();h.record(base);const next=moveTakeoffToLayer(base,"W01","second");validateDocument(next);
+ expect(base).toEqual(before);expect(next.objects[0]).toEqual({...base.objects[0],layerId:"second"});expect(next.objects[0].geometry).toBe(base.objects[0].geometry);expect(next.objects[1]).toBe(base.objects[1]);expect(next.activeLayerId).toBe(base.activeLayerId);
+ expect(totals(next).volumeM3).toBeCloseTo(19.2);expect(totals(next).layers.second.volumeM3).toBe(12);expect(totals(next).layers[base.activeLayerId].volumeM3).toBe(7.2);expect(totals(next).visibleVolumeM3).toBe(7.2);
+ expect(h.undo(next)).toEqual(base);expect(h.redo(base)).toEqual(next);expect(moveTakeoffToLayer(next,"W01","second")).toBe(next);expect(()=>moveTakeoffToLayer(base,"W01","missing")).toThrow();expect(()=>moveTakeoffToLayer(base,"missing","second")).toThrow();
 });

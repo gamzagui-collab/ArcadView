@@ -41,9 +41,10 @@ import { intersectionSnap } from "./intersectionSnapping";
 import { perpendicularSnap, segmentFoot } from "./cadPicking";
 import { masked, visibleEntityFragment, type Annotation } from "./annotations";
 import {CadFocusFilter,type CadFocus} from "../takeoff/cadFocus";
+import {pickCadColor} from "../takeoff/cadColorPick";
 import {createMoveSnap,type MoveContact} from "./moveSnapping";
 
-export type MeasurementPick = { point: DrawingPoint; snapped: SnapPoint["kind"] | "start" | "perpendicular" | "intersection" | "curve" | "edge" | null; entity: MeasurableEntity | null; replaceIndex?: number;contact?:MoveContact };
+export type MeasurementPick = { point: DrawingPoint; snapped: SnapPoint["kind"] | "start" | "perpendicular" | "intersection" | "curve" | "edge" | null; entity: MeasurableEntity | null; replaceIndex?: number;contact?:MoveContact;cadColor?:string|null };
 export type AnnotationHandleDrag={offset?:DrawingPoint;anchor?:DrawingPoint;translation?:{snap:ReturnType<typeof createMoveSnap>;geometry:MeasurementGeometry;masks:Annotation[]};move(pick:MeasurementPick):void;end(pick:MeasurementPick):void;cancel():void};
 export type AnnotationInput = {tool:string;snapping:boolean;handleSnapping?:boolean;anchor?:DrawingPoint;points:DrawingPoint[];referenceSnaps?:SnapPoint[];onHandleDown?(client:DrawingPoint):AnnotationHandleDrag|null;onPick(pick:MeasurementPick):void;onPreview(pick:MeasurementPick|null):void};
 
@@ -110,7 +111,7 @@ export class DrawingViewer {
   private readonly gesture = new MeasurementGesture({
     lock: locked => this.lockInteraction(locked),
     preview: position => {const pick=position?this.pickAt(position,true):null;if(this.annotationInput)this.annotationInput.onPreview(pick);else this.onPreview?.(pick);},
-    commit: (position, precision) => {const pick=this.pickAt(position,precision);if(this.annotationInput)this.annotationInput.onPick(pick);else this.onPick?.(pick);},
+    commit: (position, precision) => {const pick=this.pickAt(position,precision);if(this.annotationInput?.tool==="cad-color")pick.cadColor=this.getCadColorAt(position);if(this.annotationInput)this.annotationInput.onPick(pick);else this.onPick?.(pick);},
   });
   private readonly pointerDown = (event: PointerEvent): void => {
     if ((!this.measurement?.enabled && !this.annotationInput) || !this.ready || (event.button !== 0 && event.pointerType !== "touch")) return;
@@ -446,6 +447,12 @@ export class DrawingViewer {
   getAnnotationTargets(){return{geometry:this.userGeometry,masks:this.masks};}
   setTakeoffGeometry(geometry:MeasurementGeometry){this.takeoffGeometry=geometry;}
   getCadFocusOptions(){this.takeoffFocus??=new CadFocusFilter((this.viewer as any).scene);return this.takeoffFocus.options();}
+  getCadColorAt(client:DrawingPoint):string|null{
+    if(this.destroyed||!this.ready||!this.baseDrawingVisible)return null;
+    const renderer=this.viewer.GetRenderer();if(!renderer)return null;
+    this.takeoffFocus??=new CadFocusFilter((this.viewer as any).scene);
+    try{return pickCadColor(renderer,(this.viewer as any).scene,this.viewer.GetCamera(),this.takeoffFocus,this.viewer.GetCanvas(),client,(x,y)=>!masked(this.clientToDrawing({x,y}),this.masks,this.worldTolerance(3)));}catch{return null;}
+  }
   setTakeoffFocus(filter:CadFocus){if(this.destroyed)return;this.takeoffFocus??=new CadFocusFilter((this.viewer as any).scene);this.takeoffFocus.set(filter);this.viewer.Render();}
   setBaseDrawingVisible(visible:boolean){if(this.destroyed||visible===this.baseDrawingVisible)return;this.baseDrawingVisible=visible;this.viewer.GetCanvas().style.opacity=visible?"":"0";this.viewer.Render();}
   subscribeView(listener:()=>void):()=>void{this.viewListeners.add(listener);return()=>{this.viewListeners.delete(listener);};}

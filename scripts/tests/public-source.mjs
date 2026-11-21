@@ -1,4 +1,9 @@
 import{test}from'node:test';import assert from'node:assert/strict';import{verifyPublicSource}from'../verify-public-source.mjs';
+import{readFile}from'node:fs/promises';
+test('APK publication runs only in the distribution repository, never in the corresponding source mirror',async()=>{
+ const workflow=await readFile(new URL('../../.github/workflows/android-release.yml',import.meta.url),'utf8');
+ assert.match(workflow,/if: github\.repository == 'gamzagui-collab\/ArcadView' && startsWith\(github\.ref, 'refs\/tags\/v'\)/);
+});
 const config={owner:'owner',repository:'App-Source',tag:'v1.2.3',commit:'a'.repeat(40)};
 const server=(repo,object,tagObject)=>async url=>({ok:true,status:200,json:async()=>url.endsWith('/App-Source')?repo:url.includes('/git/ref/')?{object}:tagObject});
 test('accepts only the public source tag matching the distributed commit',async()=>{const r=await verifyPublicSource(config,server({full_name:'owner/App-Source',private:false},{type:'commit',sha:config.commit}));assert.equal(r.url,'https://github.com/owner/App-Source/tree/v1.2.3');});
