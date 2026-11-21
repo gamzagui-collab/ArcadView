@@ -104,7 +104,7 @@ export const TakeoffEditor=forwardRef<TakeoffHandle,Props>(function TakeoffEdito
   if(!svg.current||!target.current)return;let temporary=dragPreview.current??draftObject;
   if(!dragPreview.current&&draftObject)temporary={...draftObject,geometry:{...draftObject.geometry,points:preview.current?[...draft,preview.current.point]:draft}};
   drawTakeoff(svg.current,doc,selected,temporary,p=>viewer.projectPoints(p),active);
-  drawMeasurementOverlay(target.current,{enabled:active&&!!draft.length&&!dragging&&!form,mode:"path",points:draft,snapping:snap,entity:null},p=>viewer.projectPoints(p),preview.current);
+  drawMeasurementOverlay(target.current,{enabled:active&&tool!=="select"&&tool!=="insert"&&!pickingColor&&!dragging&&!form,mode:"path",points:draft,snapping:snap,entity:null},p=>viewer.projectPoints(p),preview.current);
  };
  renderRef.current=render;
  useLayoutEffect(()=>{render();},[doc,selected,active,draft,dragging,form]);
