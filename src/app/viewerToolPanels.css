@@ -1,0 +1,101 @@
+/* Shared compact inspectors follow the measured main toolbar, including resize. */
+.sr-only{position:absolute!important;width:1px!important;height:1px!important;min-width:0!important;min-height:0!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;clip-path:inset(50%)!important;white-space:nowrap!important;border:0!important}
+.viewer-shell .tool-panel,.viewer-shell .takeoff-panel.tool-panel,.viewer-shell .annotation-panel.tool-panel:focus-within{
+ left:var(--tool-panel-left,68px);right:auto;bottom:var(--tool-panel-bottom,70px);
+ width:var(--tool-panel-width,calc(100% - 78px));max-width:calc(100% - 20px);
+ max-height:min(174px,var(--tool-panel-space,calc(100dvh - 140px)));
+ margin:0;padding:6px;box-sizing:border-box;transform:none;border-radius:10px;
+ overflow:auto;overscroll-behavior:contain;scrollbar-width:thin;
+ animation:viewer-tool-panel-in 160ms cubic-bezier(.2,.7,.2,1);
+}
+.viewer-shell .tool-panel-header{display:contents;margin:0;padding:0;border:0}
+.viewer-shell .tool-panel-header>button{position:absolute;z-index:2;right:5px;top:5px;display:grid;place-items:center;width:26px;min-width:26px;height:26px;min-height:26px;padding:4px;border-radius:6px;font-size:20px;line-height:1}
+.viewer-shell .tool-panel-header>button svg{width:16px;height:16px}
+.viewer-shell .viewer-tools-scroll>button{height:38px;min-height:38px}
+.viewer-shell .viewer-view-group button,.viewer-shell .viewer-toolbar .viewer-cancel-tool{height:34px;min-height:34px}
+.viewer-shell .layer-panel{z-index:15}
+.viewer-shell .tool-panel .tool-help{margin:0;padding:0;border:0;font-size:10px}
+.viewer-shell .tool-panel .tool-help>summary{position:absolute;top:6px;right:36px;z-index:2;display:grid;place-items:center;list-style:none;width:23px;height:24px;min-height:24px;padding:0;border:1px solid #9bb4ca;border-radius:6px;font-size:12px;cursor:pointer}
+.tool-help>summary::-webkit-details-marker{display:none}
+.viewer-shell .tool-panel .tool-help>summary::after{content:none}
+.viewer-shell .tool-panel .tool-help p{font-size:10px;line-height:1.4;margin:5px 0}
+.viewer-shell .tool-panel .measurement-modes,.viewer-shell .tool-panel .annotation-tabs,.viewer-shell .tool-panel .takeoff-tool-row{width:auto;max-width:calc(100% - 58px);margin:0 58px 4px 0;padding:0;min-height:30px}
+.viewer-shell .tool-panel .annotation-tabs{gap:2px}
+.viewer-shell .tool-panel .annotation-tabs button{min-height:28px;height:28px;padding:3px;font-size:10px;gap:3px}
+.viewer-shell .tool-panel .annotation-tabs svg{width:14px;height:14px}
+.viewer-shell .tool-panel .annotation-tools,.viewer-shell .tool-panel .measurement-modes,.viewer-shell .tool-panel .takeoff-tool-row{gap:4px;scrollbar-width:thin}
+.viewer-shell .tool-panel .annotation-tools{margin:4px 0 0}
+.viewer-shell .tool-panel .annotation-tools button,.viewer-shell .tool-panel .measurement-modes button,.viewer-shell .tool-panel .takeoff-tool-row button{
+ display:flex;flex-direction:row;align-items:center;justify-content:center;flex:0 0 58px;
+ min-width:44px;height:30px;min-height:30px;padding:3px 4px;gap:4px;font-size:10px;white-space:nowrap;
+}
+.viewer-shell .tool-panel .annotation-tools svg,.viewer-shell .tool-panel .measurement-modes svg,.viewer-shell .tool-panel .takeoff-tool-row svg{width:15px;height:15px;flex-shrink:0}
+.viewer-shell .tool-panel .annotation-tools span,.viewer-shell .tool-panel .measurement-modes span{font-size:10px;line-height:1;white-space:nowrap}
+.viewer-shell .tool-panel .tool-free-label{display:none}
+.viewer-shell .tool-panel .utility-tool-grid{padding-top:4px;margin-top:4px}
+.viewer-shell .tool-panel .utility-tool-grid button[data-tool=trim]{flex-basis:86px}
+
+/* Three compact measurement rows: tools, settings, then result/actions. */
+.viewer-shell .measurement-panel.tool-panel .measurement-options{display:flex;align-items:center;flex-wrap:nowrap;gap:7px;margin:2px 0;padding:0;overflow-x:auto;scrollbar-width:thin;min-height:26px}
+.viewer-shell .tool-panel .measurement-options label,.viewer-shell .tool-panel .annotation-options label{display:flex;align-items:center;gap:3px;flex:0 0 auto;margin:0;font-size:10px;white-space:nowrap;min-width:0}
+.viewer-shell .measurement-panel.tool-panel select{min-width:0;width:48px;height:26px;min-height:26px;padding:3px;border-radius:5px;font-size:10px}
+.viewer-shell .measurement-panel.tool-panel .measurement-linear-axis select{width:58px}
+.viewer-shell .measurement-panel.tool-panel .measurement-actions{display:flex;align-items:center;flex-wrap:nowrap;gap:5px;margin:2px 0 0;padding:3px 0 0;border-top:1px solid #d6e2ee;min-height:28px}
+.viewer-shell .measurement-panel.tool-panel .measurement-result{display:flex;flex:1 1 auto;min-width:0;align-items:flex-start;gap:1px;margin:0;overflow:hidden;font-size:10px}
+.viewer-shell .measurement-panel.tool-panel .measurement-result strong{max-width:100%;font-size:11px;line-height:15px;overflow-wrap:anywhere}
+.viewer-shell .measurement-panel.tool-panel .measurement-result span:not(.sr-only){font-size:9px;line-height:12px}
+.viewer-shell .measurement-panel.tool-panel .measurement-actions button{display:grid;place-items:center;flex:0 0 28px;min-width:28px;min-height:28px;height:28px;padding:4px;border-radius:6px;font-size:10px}
+.viewer-shell .measurement-panel.tool-panel .measurement-actions button svg{width:16px;height:16px}
+.viewer-shell .measurement-panel.tool-panel .measurement-actions .measurement-finish{display:block;flex:0 0 auto;width:auto;min-width:44px;padding:4px 6px;white-space:nowrap}
+.viewer-shell .measurement-panel.tool-panel .measurement-snap{display:flex;align-items:center;gap:2px;font-size:10px;white-space:nowrap;margin:0}
+.viewer-shell .tool-panel input[type=checkbox]{width:14px;height:14px;min-width:14px;margin:0;accent-color:#1588ef}
+.viewer-shell .measurement-panel.tool-panel .measurement-hint{font-size:10px;line-height:1.4;margin:5px 0}
+
+.viewer-shell .annotation-panel.tool-panel .annotation-options{display:flex;align-items:center;flex-wrap:nowrap;gap:7px;min-height:28px;padding:4px 0 0;margin:4px 0 0;overflow-x:auto;scrollbar-width:thin}
+.viewer-shell .annotation-panel.tool-panel .annotation-options [hidden]{display:none}
+.viewer-shell .annotation-panel.tool-panel .annotation-options input[type=number]{width:46px;min-width:46px;height:26px;min-height:26px;padding:3px;font-size:10px}
+.viewer-shell .annotation-panel.tool-panel .annotation-options select{width:40px;min-width:40px;height:26px;min-height:26px;font-size:10px;padding:3px}
+.viewer-shell .annotation-panel.tool-panel .annotation-direct-option{font-size:10px;gap:4px;margin:4px 0 0}
+.viewer-shell .annotation-panel.tool-panel>.annotation-help{display:none}
+.viewer-shell .annotation-panel.tool-panel .annotation-save[data-quiet=true]{display:none}
+.viewer-shell .annotation-panel.tool-panel .annotation-save{font-size:10px;margin:4px 0 0;line-height:13px}
+.viewer-shell .annotation-panel.tool-panel .annotation-actions{gap:4px;margin:4px 0 0}
+.viewer-shell .annotation-panel.tool-panel .annotation-actions button{height:28px;min-height:28px;font-size:10px;padding:3px 6px}
+.viewer-shell .takeoff-panel.tool-panel .takeoff-tool-row{display:flex;flex-wrap:nowrap;overflow-x:auto;overscroll-behavior-x:contain;touch-action:pan-y pinch-zoom}
+.viewer-shell .takeoff-panel.tool-panel .takeoff-tool-row button{flex:0 0 52px;gap:3px}
+.viewer-shell .takeoff-panel.tool-panel{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);column-gap:6px}
+.viewer-shell .takeoff-panel.tool-panel>.takeoff-tool-row,.viewer-shell .takeoff-panel.tool-panel>.takeoff-display-controls,.viewer-shell .takeoff-panel.tool-panel>.takeoff-selection,.viewer-shell .takeoff-panel.tool-panel>.takeoff-notice,.viewer-shell .takeoff-panel.tool-panel>details[open]{grid-column:1/-1}
+.viewer-shell .takeoff-display-controls{display:flex;align-items:center;justify-content:space-between;gap:5px}
+.viewer-shell .takeoff-display-controls label{white-space:nowrap}
+.viewer-shell .takeoff-panel.tool-panel .takeoff-export-row{gap:5px;margin:4px 0;flex-wrap:nowrap}
+.viewer-shell .takeoff-panel.tool-panel .takeoff-export-row small{display:none}
+.viewer-shell .takeoff-panel.tool-panel .takeoff-export{height:26px;min-height:26px;padding:3px 7px;font-size:10px}
+.viewer-shell .takeoff-panel.tool-panel .takeoff-display-row{gap:10px;margin:4px 0;min-height:22px;font-size:10px}
+.viewer-shell .takeoff-panel.tool-panel .takeoff-settings,.viewer-shell .takeoff-panel.tool-panel .takeoff-focus-settings{margin:2px 0 0;font-size:10px;color:#b7d4e7}
+.viewer-shell .takeoff-panel.tool-panel .takeoff-settings>summary,.viewer-shell .takeoff-panel.tool-panel .takeoff-focus-settings>summary{min-height:22px;padding:3px 0;cursor:pointer}
+.viewer-shell .takeoff-panel.tool-panel .takeoff-selection{font-size:10px;margin-top:4px;padding-top:4px}
+.viewer-shell .takeoff-panel.tool-panel .takeoff-selection button{min-height:26px;padding:3px 6px;font-size:10px}
+
+/* Uniform, icon-first status controls above the two fixed history buttons. */
+.viewer-shell .viewer-history-dock{left:10px;bottom:calc(10px + env(safe-area-inset-bottom));width:46px;padding:3px;box-sizing:border-box;gap:2px}
+.viewer-shell .viewer-history-dock>button{width:38px;height:36px;min-height:36px}
+.viewer-shell #viewer-status-slot{display:flex;flex-direction:column;flex:0 0 auto;width:38px;max-width:100%;gap:2px;margin:0 0 2px;padding:0 0 4px;border-bottom:1px solid #34506c}
+.viewer-shell #viewer-status-slot:empty{display:none}
+.viewer-shell #viewer-status-slot .measurement-status,.viewer-shell #viewer-status-slot .annotation-status,.viewer-shell #viewer-status-slot .takeoff-compact{
+ position:static;display:flex;flex-direction:column;flex-wrap:nowrap;align-items:center;gap:2px;flex:0 0 auto;
+ width:38px;min-width:0;max-width:38px;height:auto;margin:0;padding:0;border:0;border-radius:0;background:transparent;box-shadow:none;
+}
+.viewer-shell #viewer-status-slot button,.viewer-shell #viewer-status-slot .takeoff-compact.inline>button{
+ position:relative;display:grid;place-items:center;flex:0 0 34px;width:38px;min-width:0;max-width:38px;height:34px;min-height:34px;
+ margin:0;padding:4px;border:0;border-radius:6px;box-sizing:border-box;font-size:10px;line-height:1.1;text-align:center;white-space:nowrap;
+}
+.viewer-shell #viewer-status-slot svg{width:19px;height:19px}
+.viewer-shell #viewer-status-slot .takeoff-label-toggle{width:38px;min-width:38px;max-width:38px;font-size:10px}
+.viewer-shell #viewer-status-slot .measurement-finish,.viewer-shell #viewer-status-slot .annotation-finish,.viewer-shell #viewer-status-slot .takeoff-finish{color:white;background:#087de8}
+.viewer-shell #viewer-status-slot .measurement-toggle{color:#9cddff;border:0}
+.status-count{position:absolute;right:1px;top:1px;display:grid;place-items:center;min-width:11px;height:11px;padding:0 2px;border-radius:4px;background:#12618a;color:#eafaff;font-size:8px;line-height:1}
+.viewer-shell .object-style-sidebar{left:var(--history-left,10px);width:var(--history-width,46px);box-sizing:border-box;bottom:calc(var(--history-bottom,10px) + var(--history-height,86px) + 6px);max-height:calc(var(--history-top,250px) - 62px);overflow:auto}
+.viewer-shell .object-color-palette{bottom:calc(var(--history-bottom,10px) + var(--history-height,86px) + 6px)}
+.viewer-shell .text-style-sidebar{top:auto;bottom:calc(var(--history-bottom,10px) + var(--history-height,86px) + 6px);max-height:calc(var(--history-top,300px) - 62px);overflow:auto}
+@keyframes viewer-tool-panel-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+@media(prefers-reduced-motion:reduce){.viewer-shell .tool-panel{animation:none}}
