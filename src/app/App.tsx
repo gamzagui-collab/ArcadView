@@ -645,6 +645,9 @@ export function App() {
       </header>
 
       <ViewerToolbar onCommand={sendCommand}
+        selecting={annotationActive&&editHistory.selecting} canDelete={annotationActive&&editHistory.canDelete}
+        onSelect={()=>{viewerRef.current?.objectAction?.("select");setAnnotationOpen(false);}}
+        onDelete={()=>viewerRef.current?.objectAction?.("delete")}
         canUndo={measurement.enabled&&!annotationActive?measurementHistory.current.canUndo:editHistory.canUndo}
         canRedo={measurement.enabled&&!annotationActive?measurementHistory.current.canRedo:editHistory.canRedo}
         onUndo={()=>handleEditCommand("undo")} onRedo={()=>handleEditCommand("redo")} onCancel={()=>handleEditCommand("cancel")}

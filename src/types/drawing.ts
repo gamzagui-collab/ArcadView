@@ -20,6 +20,7 @@ export type ViewerCommand = "zoom-in" | "zoom-out" | "fit" | "reset";
 export type ViewerHandle = {
   execute(command: ViewerCommand): void;
   edit?(command: "undo"|"redo"|"cancel"): void;
+  objectAction?(command: "select"|"delete"): void;
   cancelGesture?(): void;
   finishText?(): boolean;
 };

@@ -22,5 +22,5 @@ export class UndoHistory<T> {
   }
   clear(): void { this.past = []; this.future = []; }
 }
-export type EditHistoryState = { canUndo: boolean; canRedo: boolean };
+export type EditHistoryState = { canUndo: boolean; canRedo: boolean; selecting?: boolean; canDelete?: boolean };
 export type EditCommand = "undo" | "redo" | "cancel";

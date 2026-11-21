@@ -150,3 +150,91 @@ button:disabled{opacity:.45}
 .measurement-status-copy,.annotation-status>button:first-child{flex:1 1 130px;min-width:0}
 .measurement-status .measurement-finish,.annotation-status .annotation-finish,.viewer-shell .measurement-actions .measurement-finish{flex:0 0 auto;min-height:44px;padding:8px 12px;border:1px solid #64cbff;border-radius:8px;background:#087de9;color:#fff;font-size:12px;font-weight:700}
 .measurement-status .measurement-finish:disabled,.annotation-status .annotation-finish:disabled,.viewer-shell .measurement-actions .measurement-finish:disabled{opacity:.4;cursor:default}
+
+/* Keep view controls fixed while tools grow horizontally, including on phones. */
+.viewer-shell .viewer-toolbar {
+  display:flex; flex-wrap:nowrap; align-items:center; gap:5px;
+  left:10px; right:10px; width:max-content; max-width:calc(100% - 20px);
+  bottom:calc(10px + env(safe-area-inset-bottom)); padding:4px;
+  border-radius:12px;
+}
+.viewer-shell .viewer-toolbar.with-edit {width:min(480px,calc(100% - 20px))}
+.viewer-shell .viewer-view-group {
+  display:flex; flex:0 0 auto; gap:1px; padding:2px;
+  border-radius:8px; background:#071b2d;
+}
+.viewer-shell .viewer-tools-scroll {
+  display:flex; flex:1 1 auto; min-width:0; align-items:center; gap:3px;
+  overflow-x:auto; overscroll-behavior-x:contain; touch-action:pan-x;
+  scrollbar-width:thin; scrollbar-color:#426784 transparent;
+}
+.viewer-tools-scroll::-webkit-scrollbar,.annotation-tools::-webkit-scrollbar {height:3px}
+.viewer-tools-scroll::-webkit-scrollbar-thumb,.annotation-tools::-webkit-scrollbar-thumb {background:#426784;border-radius:3px}
+.viewer-shell .viewer-tools-scroll>button {
+  flex:0 0 55px; min-height:44px; height:44px; padding:4px 3px; gap:3px;
+  border-radius:8px;
+}
+.viewer-shell .viewer-toolbar svg {width:19px;height:19px;flex-shrink:0}
+.viewer-shell .viewer-toolbar span {font-size:9px;line-height:1.2;white-space:nowrap}
+.viewer-shell .viewer-history-group {display:flex;flex:0 0 auto;gap:1px;padding-left:4px}
+.viewer-shell .viewer-view-group button,.viewer-shell .viewer-history-group button {
+  flex:0 0 36px; width:36px; min-height:40px; height:40px; padding:7px; border-radius:7px;
+}
+.viewer-tools-scroll button[data-tool=delete]:not(:disabled) {color:#ff98ab}
+.viewer-tools-scroll:focus-visible,.annotation-tools:focus-visible {outline:2px solid #58b6ff;outline-offset:-2px}
+
+/* A compact status card shares the toolbar's right edge and never grows into rows. */
+.viewer-shell .measurement-status,.viewer-shell .annotation-status {
+  left:auto; right:max(10px,calc((100% - 480px)/2)); bottom:calc(73px + env(safe-area-inset-bottom));
+  width:max-content; max-width:min(340px,calc(100% - 20px));
+  display:flex; flex-wrap:nowrap; align-items:center; gap:2px; padding:3px;
+  background:#0d2439; border:1px solid #2c4965; border-radius:10px;
+}
+.viewer-shell .annotation-status>button:first-child,.viewer-shell .measurement-status-copy {
+  display:flex; flex:1 1 auto; flex-direction:column; align-items:flex-start; justify-content:center;
+  min-width:0; min-height:32px; gap:2px; padding:3px 7px; text-align:left; font-size:10px;
+}
+.viewer-shell .annotation-status>button:first-child>span,.viewer-shell .annotation-status small,
+.viewer-shell .measurement-status-copy>span,.viewer-shell .measurement-status-copy small {
+  display:block; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+.viewer-shell .annotation-status small,.viewer-shell .measurement-status-copy small {font-size:9px;margin:0;color:#82b3d0}
+.viewer-shell .measurement-status-result {font-size:12px;line-height:1.25}
+.viewer-shell .annotation-status>button:last-child,.viewer-shell .measurement-status .measurement-toggle {
+  flex:0 0 32px; width:32px; min-width:32px; min-height:32px; padding:4px;
+  border:0; border-left:1px solid #2c4965; border-radius:0 6px 6px 0; color:#8cdbff;
+}
+.viewer-shell .annotation-status .annotation-finish,.viewer-shell .measurement-status .measurement-finish {
+  flex:0 0 auto; width:auto; min-height:32px; padding:5px 8px; border-radius:7px; font-size:10px;
+}
+
+/* Three tool rows at most: tabs, creation tools and editing tools. */
+.viewer-shell .annotation-panel,.viewer-shell .measurement-panel {
+  --inspector-bottom:122px; padding:10px; border-radius:12px;
+  max-height:calc(100dvh - 205px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+}
+.annotation-panel header {margin-bottom:8px;padding-bottom:7px}
+.viewer-shell .annotation-panel .annotation-tabs {grid-template-columns:repeat(4,minmax(0,1fr));gap:2px;margin-bottom:8px}
+.viewer-shell .annotation-tabs button {min-height:32px;padding:4px;gap:4px;font-size:11px}
+.viewer-shell .annotation-tabs svg {width:15px;height:15px}
+.viewer-shell .annotation-tools,.viewer-shell .measurement-modes {
+  display:flex; flex-wrap:nowrap; overflow-x:auto; gap:5px;
+  overscroll-behavior-x:contain; touch-action:pan-x; scrollbar-width:thin;
+}
+.viewer-shell .annotation-tools[hidden],.viewer-shell .annotation-options[hidden] {display:none}
+.viewer-shell .annotation-tools button,.viewer-shell .measurement-modes button {
+  flex:0 0 78px; min-height:44px; padding:5px 4px; gap:3px; font-size:10px;
+}
+.viewer-shell .annotation-tools svg,.viewer-shell .measurement-modes svg {width:18px;height:18px;flex-shrink:0}
+.viewer-shell .annotation-tools span {white-space:nowrap}
+.viewer-shell .utility-tool-grid {padding-top:8px;margin-top:8px}
+.viewer-shell .utility-tool-grid button[data-tool=trim] {flex-basis:98px}
+.viewer-shell .annotation-options {padding:7px 0;margin-top:7px;gap:6px}
+.viewer-shell .annotation-options input[type=number] {min-height:30px}
+.point-style-settings {margin-top:8px;color:#456c90;font-size:11px}
+.point-style-settings summary {cursor:pointer;padding:5px 0}
+.point-style-settings .point-color-palette {flex-wrap:nowrap;overflow-x:auto}
+.point-style-settings .point-color-palette button {flex:0 0 26px;min-height:26px;height:26px}
+@media(min-width:700px) {
+  .viewer-shell .measurement-status,.viewer-shell .annotation-status {right:12px}
+}
