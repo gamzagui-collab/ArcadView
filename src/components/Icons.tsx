@@ -16,6 +16,7 @@ export function PaletteIcon(props: IconProps) {
 }
 
 export function VisibilityIcon(props:IconProps){return <IconBase {...props}><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></IconBase>;}
+export function SettingsIcon(props:IconProps){return <IconBase {...props}><path d="M9.7 3h4.6l.5 2.4 2 .9 2.2-.8 2.3 4-1.7 1.6v2l1.7 1.6-2.3 4-2.2-.8-2 .9-.5 2.4H9.7l-.5-2.4-2-.9-2.2.8-2.3-4L4.4 13v-2L2.7 9.4l2.3-4 2.2.8 2-.9L9.7 3Z"/><circle cx="12" cy="12" r="3.2"/></IconBase>;}
 
 export function MeasureIcon(props: IconProps) {
   return <IconBase {...props}><path d="m3 16 13-13 5 5L8 21zM7 12l2 2M10 9l3 3M13 6l2 2M4 15l3 3" /></IconBase>;

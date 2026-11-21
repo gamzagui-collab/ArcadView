@@ -1,6 +1,7 @@
+import{MAGNIFIER_WIDTHS,readViewerPreferences,VIEWER_PREFERENCES_EVENT}from'./viewerPreferences';
 type Point={x:number;y:number};
 type Rect=Point&{width:number;height:number};
-export const MAGNIFIER_ZOOM=3;
+export const MAGNIFIER_ZOOM=5;
 /** Keep the snapped point at the exact centre, including near viewport edges. */
 export function magnifierRegion(point:Point,width:number,height:number):Rect{
  return{x:point.x-width/MAGNIFIER_ZOOM/2,y:point.y-height/MAGNIFIER_ZOOM/2,width:width/MAGNIFIER_ZOOM,height:height/MAGNIFIER_ZOOM};
@@ -25,6 +26,8 @@ export class PointerMagnifier{
  private point:Point|null=null;
  private shell:Element|null;
  private id='arcad-lens-'+(++nextId)+'-';
+ private prefs=readViewerPreferences();
+ private syncPreferences=()=>{this.prefs=readViewerPreferences();this.host.dataset.size=this.prefs.magnifierSize;this.host.style.setProperty('--magnifier-width',MAGNIFIER_WIDTHS[this.prefs.magnifierSize]+'px');if(!this.prefs.magnifierEnabled)this.hide();else if(this.point&&!this.frame)this.frame=requestAnimationFrame(()=>{this.frame=0;if(this.point)this.draw(this.point);});};
  constructor(private parent:HTMLElement,private source:HTMLCanvasElement,private render:()=>void,private cadVisible:()=>boolean){
   this.host=document.createElement('div');this.host.className='pointer-magnifier';this.host.hidden=true;this.host.setAttribute('aria-hidden','true');
   this.body=document.createElement('div');this.body.className='pointer-magnifier-view';
@@ -34,8 +37,10 @@ export class PointerMagnifier{
   const zoom=document.createElement('span');zoom.className='pointer-magnifier-zoom';zoom.textContent=MAGNIFIER_ZOOM+'×';
   this.body.append(this.canvas,this.vectors,reticle,zoom);this.host.append(this.body);this.parent.append(this.host);
   this.tileCanvas=document.createElement('canvas');this.tileCanvas.width=this.tileCanvas.height=1;this.shell=parent.closest('.viewer-shell');
+  this.syncPreferences();window.addEventListener(VIEWER_PREFERENCES_EVENT,this.syncPreferences);window.addEventListener('storage',this.syncPreferences);
  }
  show(point:Point,world:Point,snapped:string|null){
+  if(!this.prefs.magnifierEnabled){this.hide();return;}
   this.point=point;this.host.hidden=false;this.shell?.classList.add('precision-lens-active');
   this.host.dataset.worldX=String(world.x);this.host.dataset.worldY=String(world.y);this.host.dataset.snapped=snapped??'none';
   if(!this.frame)this.frame=requestAnimationFrame(()=>{this.frame=0;if(this.point)this.draw(this.point);});
@@ -45,7 +50,7 @@ export class PointerMagnifier{
   cancelAnimationFrame(this.frame);this.frame=0;this.point=null;this.host.hidden=true;this.shell?.classList.remove('precision-lens-active');
   this.vectors.replaceChildren();this.tile=null;this.tileCanvas.width=this.tileCanvas.height=1;
  }
- destroy(){this.hide();this.canvas.width=this.canvas.height=1;this.host.remove();}
+ destroy(){window.removeEventListener(VIEWER_PREFERENCES_EVENT,this.syncPreferences);window.removeEventListener('storage',this.syncPreferences);this.hide();this.canvas.width=this.canvas.height=1;this.host.remove();}
  private draw(point:Point){
   const r=this.source.getBoundingClientRect(),b=this.body.getBoundingClientRect(),width=b.width,height=b.height;
   if(!r.width||!r.height||!width||!height)return;

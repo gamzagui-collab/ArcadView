@@ -81,6 +81,8 @@ export function totals(doc:TakeoffDocument){
  let visibleVolumeM3=0;for(const o of doc.objects){const q=quantity(o,doc.unit);for(const g of [groups[o.kind],layers[o.layerId]]){g.count++;g.lengthM+=q.lengthM;g.areaM2+=q.areaM2;g.volumeM3+=q.volumeM3;}if(takeoffVisible(doc,o))visibleVolumeM3+=q.volumeM3;}
  return{groups,layers,volumeM3:KINDS.reduce((n,k)=>n+groups[k].volumeM3,0),visibleVolumeM3};
 }
+/** Scope the on-canvas summary while keeping the all-drawing/Excel totals intact. */
+export function selectedLayerTotals(doc:TakeoffDocument){return totals({...doc,objects:doc.objects.filter(o=>o.layerId===doc.activeLayerId)});}
 export function insidePolygon(p:P,points:readonly P[]):boolean{
  let inside=false;for(let i=0,j=points.length-1;i<points.length;j=i++){
   const a=points[i],b=points[j];if(pointSegmentDistance(p,a,b)<1e-8)return true;

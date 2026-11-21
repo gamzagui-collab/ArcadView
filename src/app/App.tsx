@@ -661,7 +661,7 @@ export function App() {
         onDelete={()=>viewerRef.current?.objectAction?.("delete")}
         canUndo={measurement.enabled&&!annotationActive&&!takeoffActive?measurementHistory.current.canUndo:editHistory.canUndo}
         canRedo={measurement.enabled&&!annotationActive&&!takeoffActive?measurementHistory.current.canRedo:editHistory.canRedo}
-        onUndo={()=>handleEditCommand("undo")} onRedo={()=>handleEditCommand("redo")} onCancel={()=>handleEditCommand("cancel")}
+        onUndo={()=>handleEditCommand("undo")} onRedo={()=>handleEditCommand("redo")} onCancel={()=>handleEditCommand("cancel")} onSettingsOpen={()=>viewerRef.current?.cancelGesture?.()}
         canMeasure={state.drawing.format !== "pdf"}
         measuring={measurement.enabled}
         panelOpen={measurementPanelOpen}

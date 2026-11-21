@@ -10,7 +10,7 @@ import {createMoveSnap} from "../viewer/moveSnapping";
 import {UndoHistory,type EditCommand,type EditHistoryState} from "../viewer/undoHistory";
 import {drawMeasurementOverlay} from "../viewer/measurementOverlay";
 import {parseEditNumber} from "../viewer/offsetGeometry";
-import {asAnnotation,cleanPoints,dimensionsError,fromAnnotation,geometryError,insidePolygon,isAreaKind,KINDS,knownUnit,labelPosition,moveTakeoffToLayer,NAMES,newTakeoff,quantity,takeoffVisible,totals,type Dimensions,type TakeoffDocument,type TakeoffKind,type TakeoffObject} from "../takeoff/model";
+import {asAnnotation,cleanPoints,dimensionsError,fromAnnotation,geometryError,insidePolygon,isAreaKind,KINDS,knownUnit,labelPosition,moveTakeoffToLayer,NAMES,newTakeoff,quantity,takeoffVisible,totals,selectedLayerTotals,type Dimensions,type TakeoffDocument,type TakeoffKind,type TakeoffObject} from "../takeoff/model";
 import {loadTakeoff,notifyTakeoffCompleted,saveTakeoff} from "../takeoff/storage";
 import {drawTakeoff} from "../takeoff/overlay";
 import {takeoffDraftPoints} from "../takeoff/draft";
@@ -120,7 +120,7 @@ export const TakeoffEditor=forwardRef<TakeoffHandle,Props>(function TakeoffEdito
  useLayoutEffect(()=>{viewer.setBaseDrawingVisible(!active||doc.options.cadVisible);return()=>viewer.setBaseDrawingVisible(true);},[active,doc.options.cadVisible]);
  useEffect(()=>{if(!active)setPickingColor(false);},[active]);
  useLayoutEffect(()=>{viewer.configureAnnotations(active&&!blocked()&&!form&&!unitChange&&!layerDelete?{tool:pickingColor?"cad-color":tool==="select"?"select":"polyline",editableDraftPoints:!pickingColor&&tool!=="select"&&tool!=="insert",snapping:!pickingColor&&snap&&tool!=="select",handleSnapping:snap,points:pickingColor?[]:draft,anchor:pickingColor?undefined:draft.at(-1),onHandleDown:pickingColor?undefined:beginHandle,onPick:pick,onPreview:p=>{preview.current=p;renderRef.current();}}:null,"takeoff");return()=>viewer.configureAnnotations(null,"takeoff");},[viewer,active,doc,draft,tool,snap,selected,form,busy,saveError,loaded,revisions,unitChange,layerDelete,pickingColor]);
- const sum=totals(doc);
+ const sum=totals(doc),layerSum=selectedLayerTotals(doc);
  const q=selectedObject?quantity(selectedObject,doc.unit):null;
  const toggleOption=(options:Partial<TakeoffDocument["options"]>)=>commit({...doc,options:{...doc.options,...options}});
  const exportExcel=async()=>{
@@ -150,8 +150,8 @@ export const TakeoffEditor=forwardRef<TakeoffHandle,Props>(function TakeoffEdito
    <div className="takeoff-layer-total">전체 {sum.volumeM3.toFixed(3)} m³ · 표시 {sum.visibleVolumeM3.toFixed(3)} m³</div><small>예: 2동 1·2호 / 2동 3·4·5호. 눈금을 끄면 해당 레이어의 적산만 숨깁니다. 그리기 탭의 표시 설정도 도면에 그대로 적용됩니다.</small>
   </section>:null}
   {active?<>
-   <aside className={`takeoff-summary ${doc.options.collapsed?"collapsed":""}`} aria-label="콘크리트 적산 합계"><button className="takeoff-summary-heading" aria-label={doc.options.collapsed?"적산 합계 펼치기":"적산 합계 접기"} aria-expanded={!doc.options.collapsed} onClick={()=>toggleOption({collapsed:!doc.options.collapsed})} disabled={blocked()}>{doc.options.collapsed?<>합계 <output data-takeoff-total>{sum.volumeM3.toFixed(3)} m³</output></>:"콘크리트 적산"}<span>{doc.options.collapsed?"⌄":"⌃"}</span></button>
-    {!doc.options.collapsed?<><div>{KINDS.map(k=><button key={k} data-takeoff-group={k} aria-pressed={tool===k||selectedObject?.kind===k} onClick={()=>{resetTool(k);onLayersHide();setOpen(true);}}><i style={{background:doc.groups.find(g=>g.id===k)?.color}}/>{NAMES[k]}<b data-volume={k}>{sum.groups[k].volumeM3.toFixed(3)} m³</b></button>)}</div><strong>전체 <output data-takeoff-total>{sum.volumeM3.toFixed(3)} m³</output></strong><small>표시 {sum.visibleVolumeM3.toFixed(3)} m³</small><button className="takeoff-current-total" onClick={layerButton}><span>{currentLayer.name}</span><b data-takeoff-layer-total>{sum.layers[doc.activeLayerId].volumeM3.toFixed(3)} m³</b></button><small>중첩·개구부 공제 전</small></>:null}
+   <aside className={`takeoff-summary ${doc.options.collapsed?"collapsed":""}`} aria-label="현재 레이어 콘크리트 적산 합계"><button className="takeoff-summary-heading" aria-label={doc.options.collapsed?"적산 합계 펼치기":"적산 합계 접기"} aria-expanded={!doc.options.collapsed} onClick={()=>toggleOption({collapsed:!doc.options.collapsed})} disabled={blocked()}>{doc.options.collapsed?<>합계 <small className="takeoff-summary-scope">[레이어]</small><output data-takeoff-total>{layerSum.volumeM3.toFixed(3)} m³</output></>:<>콘크리트 적산 <small className="takeoff-summary-scope">[레이어]</small></>}<span>{doc.options.collapsed?"⌄":"⌃"}</span></button>
+    {!doc.options.collapsed?<><div>{KINDS.map(k=><button key={k} data-takeoff-group={k} aria-pressed={tool===k||selectedObject?.kind===k} onClick={()=>{resetTool(k);onLayersHide();setOpen(true);}}><i style={{background:doc.groups.find(g=>g.id===k)?.color}}/>{NAMES[k]}<b data-volume={k}>{layerSum.groups[k].volumeM3.toFixed(3)} m³</b></button>)}</div><strong>합계 <output data-takeoff-total>{layerSum.volumeM3.toFixed(3)} m³</output></strong><small>표시 {layerSum.visibleVolumeM3.toFixed(3)} m³</small><button className="takeoff-current-total" onClick={layerButton}><span>레이어 보기</span><b>적{doc.layers.findIndex(l=>l.id===currentLayer.id)+1}</b></button><small>중첩·개구부 공제 전</small></>:null}
    </aside>
    <ToolbarStatus>{compact}</ToolbarStatus>
    {open?<section className="takeoff-panel tool-panel" aria-label="독립 적산 도구"><header className="tool-panel-header"><strong className="sr-only">적산 도구</strong><span className="sr-only">{busy?"저장 중…":saved?"저장 완료":"원본 보존"}</span><button onClick={()=>setOpen(false)} aria-label="적산 도구 접기">×</button></header>

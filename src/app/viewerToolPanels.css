@@ -6,7 +6,7 @@
  max-height:min(174px,var(--tool-panel-space,calc(100dvh - 140px)));
  margin:0;padding:6px;box-sizing:border-box;transform:none;border-radius:10px;
  overflow:auto;overscroll-behavior:contain;scrollbar-width:thin;
- animation:viewer-tool-panel-in 160ms cubic-bezier(.2,.7,.2,1);
+ animation:viewer-tool-panel-in 300ms cubic-bezier(.16,1,.3,1);
 }
 .viewer-shell .tool-panel-header{display:contents;margin:0;padding:0;border:0}
 .viewer-shell .tool-panel-header>button{position:absolute;z-index:2;right:5px;top:5px;display:grid;place-items:center;width:26px;min-width:26px;height:26px;min-height:26px;padding:4px;border-radius:6px;font-size:20px;line-height:1}
@@ -97,7 +97,7 @@
 .viewer-shell .object-style-sidebar{left:var(--history-left,10px);width:var(--history-width,46px);box-sizing:border-box;bottom:calc(var(--history-bottom,10px) + var(--history-height,86px) + 6px);max-height:calc(var(--history-top,250px) - 62px);overflow:auto}
 .viewer-shell .object-color-palette{bottom:calc(var(--history-bottom,10px) + var(--history-height,86px) + 6px)}
 .viewer-shell .text-style-sidebar{top:auto;bottom:calc(var(--history-bottom,10px) + var(--history-height,86px) + 6px);max-height:calc(var(--history-top,300px) - 62px);overflow:auto}
-@keyframes viewer-tool-panel-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+@keyframes viewer-tool-panel-in{from{opacity:0;transform:translateY(calc(100% + var(--tool-panel-bottom,70px)))}to{opacity:1;transform:translateY(0)}}
 @media(prefers-reduced-motion:reduce){.viewer-shell .tool-panel{animation:none}}
 
 /* The drawing inspectors share the takeoff navy/sky palette. */
@@ -123,7 +123,7 @@
 .viewer-shell .layer-panel :is(.add-user-layer,.add-takeoff-layer){background:#173e5b;color:#b6e5ff;border-color:#46718e}
 
 /* Pointer-only, upper-right precision lens. Existing pan/pinch gestures remain intact. */
-.pointer-magnifier{position:absolute;z-index:24;right:10px;top:var(--precision-top,calc(54px + env(safe-area-inset-top)));width:clamp(132px,25vw,172px);border:1.5px solid #79d9ff;border-radius:12px;background:#0b1118;box-shadow:0 4px 18px #0008;pointer-events:none;overflow:hidden}
+.pointer-magnifier{position:absolute;z-index:24;right:10px;top:var(--precision-top,calc(54px + env(safe-area-inset-top)));width:min(var(--magnifier-width,208px),calc(100% - 20px),calc((100dvh - var(--precision-top,54px) - 80px)*1.3333));border:1.5px solid #79d9ff;border-radius:12px;background:#0b1118;box-shadow:0 4px 18px #0008;pointer-events:none;overflow:hidden}
 .pointer-magnifier[hidden]{display:none}
 .pointer-magnifier-view{position:relative;width:100%;aspect-ratio:4/3;overflow:hidden}
 .drawing-canvas .pointer-magnifier-raster,.drawing-canvas .pointer-magnifier-vectors{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
@@ -140,3 +140,26 @@
 .geometry-edit-dialog .geometry-distance-fields b{color:#b7d4e7}
 .geometry-edit-dialog .geometry-edit-apply{background:#087cb6;border-color:#88dcff;color:#fff}
 .geometry-edit-dialog .geometry-edit-error{color:#ff9fae}
+
+.viewer-shell .viewer-toolbar{z-index:20}
+.viewer-shell .viewer-toolbar .viewer-settings-tool{display:grid;place-items:center;flex:0 0 34px;width:34px;height:34px;min-height:34px;padding:7px;border:0;border-radius:7px;color:#a7cce5;background:transparent}
+.viewer-shell .viewer-toolbar .viewer-settings-tool[aria-expanded=true]{background:#175473;color:#e1f7ff}
+.viewer-shell .viewer-settings-panel.tool-panel{position:fixed;top:auto;color-scheme:dark;background:#10283efc;color:#dcefff;border:1px solid #427392;max-height:min(220px,var(--tool-panel-space,300px));padding:10px 12px}
+.viewer-settings-panel::backdrop{background:#031425b3}
+.viewer-settings-heading{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:7px}
+.viewer-settings-heading h2{font-size:14px;line-height:22px;margin:0}
+.viewer-settings-heading button{width:28px;height:28px;min-height:28px;padding:0;border:1px solid #46718e;border-radius:6px;background:#173e5b;color:#dcefff;font-size:22px;line-height:1}
+.viewer-magnifier-enable{display:flex;align-items:center;gap:8px;min-height:30px;font-size:13px}
+.viewer-magnifier-enable span{margin-left:auto;color:#a7e5ff;font-size:12px}
+.viewer-settings-panel input{accent-color:#43c7ff}
+.viewer-shell .viewer-settings-panel.tool-panel input[type=checkbox]{width:18px;height:18px;min-width:18px}
+.viewer-magnifier-sizes{padding:0;border:0;margin:5px 0}
+.viewer-magnifier-sizes>div{display:flex;gap:6px}
+.viewer-magnifier-sizes legend{margin:0 0 5px;padding:0;font-size:11px;color:#a7cce5}
+.viewer-magnifier-sizes label{position:relative;display:flex;flex:1;align-items:center;justify-content:center;gap:6px;min-height:34px;padding:3px 8px;background:#173e5b;border:1px solid #46718e;border-radius:7px;font-size:13px}
+.viewer-magnifier-sizes input{width:15px;height:15px;margin:0}
+.viewer-magnifier-sizes label:has(input:checked){background:#087cb6;border-color:#88dcff;color:#fff}
+.viewer-settings-help,.viewer-settings-error{font-size:11px;margin:6px 0 0;color:#b7d4e7;line-height:1.4}
+.viewer-settings-error{color:#ff9fae}
+.takeoff-summary-scope{font-size:10px;color:#9ecae5;font-weight:500;white-space:nowrap}
+.takeoff-summary-heading .takeoff-summary-scope{margin-left:3px}

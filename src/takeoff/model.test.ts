@@ -1,5 +1,5 @@
 import {expect,it} from "vitest";
-import {asAnnotation,cleanPoints,fromAnnotation,geometryError,insidePolygon,isAreaKind,labelPosition,migrateTakeoff,moveTakeoffToLayer,newTakeoff,quantity,takeoffVisible,totals,validateDocument,type TakeoffKind,type TakeoffObject} from "./model";
+import {asAnnotation,cleanPoints,fromAnnotation,geometryError,insidePolygon,isAreaKind,labelPosition,migrateTakeoff,moveTakeoffToLayer,newTakeoff,quantity,takeoffVisible,totals,selectedLayerTotals,validateDocument,type TakeoffKind,type TakeoffObject} from "./model";
 import {takeoffMovePoint} from "./overlay";
 import {UndoHistory} from "../viewer/undoHistory";
 import {translateAnnotation} from "../viewer/annotations";
@@ -10,6 +10,16 @@ const w1=obj("W01","wall",[{x:0,y:0},{x:12000,y:0},{x:12000,y:8000}],{heightMm:3
 const w2=obj("W02","wall",[{x:0,y:0},{x:10000,y:0}],{heightMm:3200,thicknessMm:250});
 const b1=obj("B01","beam",[{x:0,y:0},{x:12000,y:0}],{widthMm:300,depthMm:600});
 const s1=obj("S01","slab",[{x:0,y:0},{x:8000,y:0},{x:8000,y:5000},{x:0,y:5000}],{thicknessMm:180});
+it('scopes each member and summary total to the selected layer while preserving drawing-wide totals',()=>{
+ const d={...newTakeoff(drawing,'mm'),layers:[{id:'A',name:'1·2호',visible:true},{id:'B',name:'3·4·5호',visible:true}],activeLayerId:'A',objects:[{...w1,layerId:'A'},{...s1,layerId:'B'}]},snapshot=structuredClone(d);
+ expect(selectedLayerTotals(d).volumeM3).toBe(12);expect(selectedLayerTotals(d).groups.slab.count).toBe(0);
+ const b=selectedLayerTotals({...d,activeLayerId:'B'});expect(b.volumeM3).toBe(7.2);expect(b.groups.slab.areaM2).toBe(40);expect(b.groups.wall.count).toBe(0);
+ expect(totals(d).volumeM3).toBeCloseTo(19.2,12);expect(d).toEqual(snapshot);
+});
+it('retains a hidden selected layer quantity and separates its visible subtotal',()=>{
+ const d={...newTakeoff(drawing,'mm'),layers:[{id:'takeoff-default',name:'A',visible:false}],objects:[w1]};
+ expect(selectedLayerTotals(d).volumeM3).toBe(12);expect(selectedLayerTotals(d).visibleVolumeM3).toBe(0);
+});
 it("W01=12.000, W02=8.000, B01=2.160, S01=7.200 and concrete total=29.360 m³",()=>{
  expect(quantity(w1,"mm")).toEqual({lengthM:20,areaM2:0,volumeM3:12});expect(quantity(w2,"mm").volumeM3).toBeCloseTo(8,12);expect(quantity(b1,"mm").volumeM3).toBeCloseTo(2.16,12);expect(quantity(s1,"mm")).toEqual({lengthM:0,areaM2:40,volumeM3:7.2});
  const d={...newTakeoff(drawing,"mm"),objects:[w1,w2,b1,s1]},t=totals(d);expect(t.groups.wall).toEqual({count:2,lengthM:30,areaM2:0,volumeM3:20});expect(t.volumeM3).toBeCloseTo(29.36,12);expect(t.groups.slab.areaM2).toBe(40);expect(t.groups.beam.lengthM).toBe(12);validateDocument(d);
