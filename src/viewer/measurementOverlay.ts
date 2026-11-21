@@ -4,35 +4,48 @@ import type { DrawingPoint } from "./savedView";
 import { rightAngleCorners } from "./rightAngles";
 import { isDistanceMode, linearMeasurement, measurementPointsAfterPick, pathIsClosed } from "./measurementTools";
 const NS = "http://www.w3.org/2000/svg";
+const pointWindows=new WeakMap<SVGSVGElement,string>();
+let nextPointWindow=0;
 /** Updated in the same Render call as WebGL, without a deferred React commit. */
-export function drawMeasurementOverlay(svg: SVGSVGElement, settings: MeasurementSettings, project: (points: readonly DrawingPoint[]) => DrawingPoint[], preview: MeasurementPick | null, references: readonly DrawingPoint[] = [],endReferences:readonly DrawingPoint[]=[],label?:string): void {
+export function drawMeasurementOverlay(svg: SVGSVGElement, settings: MeasurementSettings, project: (points: readonly DrawingPoint[]) => DrawingPoint[], preview: MeasurementPick | null, references: readonly DrawingPoint[] = [],endReferences:readonly DrawingPoint[]=[],label?:string): string|undefined {
   if (!settings.enabled) { svg.replaceChildren(); return; }
   let points = settings.mode === "object" ? settings.entity?.points ?? [] : settings.points;
   if (preview && settings.mode !== "object") points = measurementPointsAfterPick(settings, preview.point, preview.replaceIndex);
   const projected = project(points), elements: SVGElement[] = [];
+  const markers=settings.mode==="object"?[]:projected.filter((_,i)=>!(settings.mode==="path"&&pathIsClosed(points)&&i===projected.length-1));
   const make = (tag: string, attrs: Record<string, string | number>) => {
     const e = document.createElementNS(NS, tag);
     for (const [name, value] of Object.entries(attrs)) e.setAttribute(name, String(value));
     elements.push(e); return e;
   };
+  // Cut the broad line/fill out of the rings. A transparent circle alone still
+  // leaves the dark line halo covering the drawing underneath its centre.
+  let pointWindow:Record<string,string>={};
+  if(markers.length){
+    let id=pointWindows.get(svg);if(!id){id=`arcad-point-window-${++nextPointWindow}`;pointWindows.set(svg,id);}
+    const defs=make("defs",{}),mask=document.createElementNS(NS,"mask");
+    for(const[k,v]of Object.entries({id,maskUnits:"userSpaceOnUse",x:"0",y:"0",width:"100%",height:"100%"}))mask.setAttribute(k,v);
+    const background=document.createElementNS(NS,"rect");background.setAttribute("width","100%");background.setAttribute("height","100%");background.setAttribute("style","fill:#fff;stroke:none");mask.append(background);
+    for(const p of markers){const hole=document.createElementNS(NS,"circle");for(const[k,v]of Object.entries({cx:p.x,cy:p.y,r:5.5,style:"fill:#000;stroke:none"}))hole.setAttribute(k,String(v));mask.append(hole);}
+    defs.append(mask);pointWindow={mask:`url(#${id})`};
+  }
   const lines = (p: DrawingPoint[], closed = false) => {
     const tag = closed ? "polygon" : "polyline", coordinates = p.map(p => `${p.x},${p.y}`).join(" ");
-    if (closed) make(tag, { points: coordinates, class: "measurement-area-fill" });
-    for (const layer of ["halo", "rails", "core", "highlight"]) make(tag, { points: coordinates, class: `measurement-line-${layer}` });
+    if (closed) make(tag, { points: coordinates, class: "measurement-area-fill",...pointWindow });
+    for (const layer of ["halo", "rails", "core", "highlight"]) make(tag, { points: coordinates, class: `measurement-line-${layer}`,...(layer==="highlight"?{}:pointWindow) });
   };
   const linear = settings.mode === "linear" ? linearMeasurement(points, settings.linearAxis) : null;
   if (linear) {
     const [a, start] = project([points[0], linear.start]);
-    make("polyline", { points: `${a.x},${a.y} ${start.x},${start.y}`, class: "measurement-extension-halo" });
-    make("polyline", { points: `${a.x},${a.y} ${start.x},${start.y}`, class: "measurement-extension" });
+    make("polyline", { points: `${a.x},${a.y} ${start.x},${start.y}`, class: "measurement-extension-halo",...pointWindow });
+    make("polyline", { points: `${a.x},${a.y} ${start.x},${start.y}`, class: "measurement-extension",...pointWindow });
     lines(project([linear.start, linear.end]));
   } else if (projected.length) lines(projected, settings.mode === "area" && projected.length >= 3);
 
   if (settings.mode !== "object") projected.forEach((p, i) => {
     if (settings.mode === "path" && pathIsClosed(points) && i === projected.length - 1) return;
     // Hollow rings retain the drawing around a precise, small centre dot.
-    make("circle", { cx: p.x, cy: p.y, r: 8, class: "measurement-point-border", "data-point": i + 1 });
-    make("circle", { cx: p.x, cy: p.y, r: 6.5, class: "measurement-point-ring" });
+    make("circle", { cx: p.x, cy: p.y, r: 6.5, class: "measurement-point-ring", "data-point": i + 1 });
     make("circle", { cx: p.x, cy: p.y, r: 1.7, class: "measurement-point-dot" });
     make("text", { x: p.x + 12, y: p.y - 12 }).textContent = String(i + 1);
   });
@@ -48,8 +61,8 @@ export function drawMeasurementOverlay(svg: SVGSVGElement, settings: Measurement
     if (size < 3) continue;
     const ax = (a.x - v.x) / la * size, ay = (a.y - v.y) / la * size, bx = (b.x - v.x) / lb * size, by = (b.y - v.y) / lb * size;
     const d = `M${v.x + ax},${v.y + ay}L${v.x + ax + bx},${v.y + ay + by}L${v.x + bx},${v.y + by}`;
-    make("path", { d, class: "measurement-right-angle-halo" });
-    make("path", { d, class: "measurement-right-angle", "data-angle": "90", "data-vertex-x": v.x, "data-vertex-y": v.y });
+    make("path", { d, class: "measurement-right-angle-halo",...pointWindow });
+    make("path", { d, class: "measurement-right-angle", "data-angle": "90", "data-vertex-x": v.x, "data-vertex-y": v.y,...pointWindow });
   }
   if(label&&projected.length>=2){
     const p=linear?project([linear.start,linear.end]):projected;
@@ -58,4 +71,5 @@ export function drawMeasurementOverlay(svg: SVGSVGElement, settings: Measurement
     make("text",{x,y:y+5,"text-anchor":"middle",class:"measurement-value-label"}).textContent=label;
   }
   svg.replaceChildren(...elements);
+  return markers.length?pointWindows.get(svg):undefined;
 }

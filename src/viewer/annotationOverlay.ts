@@ -5,7 +5,7 @@ import { drawPointAnnotation } from "./pointMarkup";
 import { formatCadNumber } from "./displayPrecision";
 import {moveHandlePosition,objectGrips} from "./objectEditing";
 const NS="http://www.w3.org/2000/svg";
-export function drawAnnotations(svg:SVGSVGElement,doc:AnnotationDocument,selected:string|null,draft:Annotation|null,project:(p:readonly DrawingPoint[])=>DrawingPoint[],source:MeasurementUnit,display:MeasurementUnit,precision=3,locale="ko"):void{
+export function drawAnnotations(svg:SVGSVGElement,doc:AnnotationDocument,selected:string|null,draft:Annotation|null,project:(p:readonly DrawingPoint[])=>DrawingPoint[],source:MeasurementUnit,display:MeasurementUnit,precision=3,locale="ko",draftPointWindow?:string):void{
   const children:SVGElement[]=[];
   const el=(tag:string,attrs:Record<string,string|number>)=>{const e=document.createElementNS(NS,tag);for(const[k,v]of Object.entries(attrs))e.setAttribute(k,String(v));children.push(e);return e;};
   const line=(points:DrawingPoint[],color:string,css:string,id:string)=>el("polyline",{points:project(points).map(p=>`${p.x},${p.y}`).join(" "),stroke:color,class:css,"data-object":id});
@@ -16,6 +16,7 @@ export function drawAnnotations(svg:SVGSVGElement,doc:AnnotationDocument,selecte
     if(o.id===selected)line(o.points,"#ff8e9b","annotation-mask-selected",o.id);
   }
   for(const o of [...objects.filter(o=>o.kind!=="mask"&&!isPointAnnotation(o)),...objects.filter(isPointAnnotation),...(draft?[draft]:[])]){
+    const first=children.length;
     const color=o.color??doc.layers.find(l=>l.id===o.layerId)?.color??"#49cfff",active=o.id===selected;
     const dim=o.kind.startsWith("dimension")?dimensionGeometry(o,source):null;
     if(isPointAnnotation(o))drawPointAnnotation(o,project,el);
@@ -50,6 +51,7 @@ export function drawAnnotations(svg:SVGSVGElement,doc:AnnotationDocument,selecte
       const p=moveHandlePosition(o,project,svg.clientWidth,svg.clientHeight);
       if(p){el("circle",{cx:p.x,cy:p.y,r:17,fill:"#0a263ce8",stroke:"#9fe5ff","stroke-width":1.5,"data-free-move":o.id});el("path",{d:`M${p.x-10},${p.y}h20 M${p.x},${p.y-10}v20 M${p.x-6},${p.y-4}l-4,4 4,4 M${p.x+6},${p.y-4}l4,4 -4,4 M${p.x-4},${p.y-6}l4,-4 4,4 M${p.x-4},${p.y+6}l4,4 4,-4`,fill:"none",stroke:"#b8f0ff","stroke-width":1.6});}
     }
+    if(o===draft&&draftPointWindow){const group=document.createElementNS(NS,"g");group.setAttribute("mask",`url(#${draftPointWindow})`);group.append(...children.splice(first));children.push(group);}
   }
   svg.replaceChildren(...children);
 }

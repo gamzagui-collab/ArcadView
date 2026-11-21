@@ -1600,9 +1600,8 @@ a:focus-visible {
 .measurement-overlay .measurement-area-fill { stroke: none; fill: rgba(57,183,255,.1); }
 .measurement-overlay .measurement-extension-halo { stroke: #03101d; stroke-width: 4; fill: none; stroke-dasharray: 5 4; }
 .measurement-overlay .measurement-extension { stroke: #b3eaff; stroke-width: 1.5; fill: none; stroke-dasharray: 5 4; }
-.measurement-overlay .measurement-point-border { stroke: #03101d; stroke-width: 3; fill: none; }
 .measurement-overlay .measurement-point-ring { stroke: #86e2ff; stroke-width: 2; fill: none; }
-.measurement-overlay .measurement-point-dot { stroke: #03101d; stroke-width: 1; fill: #effcff; }
+.measurement-overlay .measurement-point-dot { stroke: none; fill: #fff; }
 .measurement-overlay .measurement-target, .measurement-overlay .measurement-target-cross { stroke: #86e2ff; stroke-width: 2; fill: none; }
 .measurement-overlay text { fill: #b6edff; }
 .measurement-overlay .measurement-right-angle-halo { fill: none; stroke: #03101d; stroke-width: 5; stroke-linejoin: miter; }
