@@ -40,9 +40,10 @@ import {snapToCircularEdge} from "./circularSnap";
 import { intersectionSnap } from "./intersectionSnapping";
 import { perpendicularSnap, segmentFoot } from "./cadPicking";
 import { masked, visibleEntityFragment, type Annotation } from "./annotations";
+import {createMoveSnap,type MoveContact} from "./moveSnapping";
 
-export type MeasurementPick = { point: DrawingPoint; snapped: SnapPoint["kind"] | "start" | "perpendicular" | "intersection" | "curve" | null; entity: MeasurableEntity | null; replaceIndex?: number };
-export type AnnotationHandleDrag={offset?:DrawingPoint;anchor?:DrawingPoint;move(pick:MeasurementPick):void;end(pick:MeasurementPick):void;cancel():void};
+export type MeasurementPick = { point: DrawingPoint; snapped: SnapPoint["kind"] | "start" | "perpendicular" | "intersection" | "curve" | "edge" | null; entity: MeasurableEntity | null; replaceIndex?: number;contact?:MoveContact };
+export type AnnotationHandleDrag={offset?:DrawingPoint;anchor?:DrawingPoint;translation?:{snap:ReturnType<typeof createMoveSnap>;geometry:MeasurementGeometry;masks:Annotation[]};move(pick:MeasurementPick):void;end(pick:MeasurementPick):void;cancel():void};
 export type AnnotationInput = {tool:string;snapping:boolean;handleSnapping?:boolean;anchor?:DrawingPoint;points:DrawingPoint[];referenceSnaps?:SnapPoint[];onHandleDown?(client:DrawingPoint):AnnotationHandleDrag|null;onPick(pick:MeasurementPick):void;onPreview(pick:MeasurementPick|null):void};
 
 installXclipRendering(DxfViewer);
@@ -93,7 +94,13 @@ export class DrawingViewer {
     else if(!locked&&this.controlsBeforeHold){Object.assign(controls,this.controlsBeforeHold);this.controlsBeforeHold=null;}
   }
   private cancelHandle():void{const h=this.handleDrag;this.handleDrag=null;if(h){this.lockInteraction(false);h.drag.cancel();}}
-  private handlePick(event:PointerEvent):MeasurementPick{const d=this.handleDrag?.drag.offset;return this.pickAt({x:event.clientX+(d?.x??0),y:event.clientY+(d?.y??0)},false);}
+  private handlePick(event:PointerEvent):MeasurementPick{
+    const h=this.handleDrag!,d=h.drag.offset,client={x:event.clientX+(d?.x??0),y:event.clientY+(d?.y??0)},moving=h.drag.translation;
+    if(!moving)return this.pickAt(client,false);
+    const point=this.clientToDrawing(client),rect=this.viewer.GetCanvas().getBoundingClientRect(),a=this.clientToDrawing({x:rect.left,y:rect.bottom}),b=this.clientToDrawing({x:rect.right,y:rect.top});
+    const contact=(h.input.handleSnapping??h.input.snapping)?moving.snap(point,[this.geometry,moving.geometry],this.worldTolerance(12),p=>!masked(p,moving.masks,this.worldTolerance(3)),{minX:a.x,minY:a.y,maxX:b.x,maxY:b.y}):null;
+    return{point:contact?.point??point,snapped:contact?.kind??null,entity:null,...(contact?{contact}:{})};
+  }
   private readonly gesture = new MeasurementGesture({
     lock: locked => this.lockInteraction(locked),
     preview: position => {const pick=position?this.pickAt(position,true):null;if(this.annotationInput)this.annotationInput.onPreview(pick);else this.onPreview?.(pick);},

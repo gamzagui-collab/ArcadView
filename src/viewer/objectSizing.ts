@@ -30,7 +30,10 @@ export function resizeObject(o:Annotation,values:readonly number[],segment=0):An
   return{...o,points:[a,{x:a.x+u.x,y:a.y+u.y},{x:a.x+u.x+v.x,y:a.y+u.y+v.y},{x:a.x+v.x,y:a.y+v.y}]};
  }
  const i=info.segment,a=o.points[i],b=o.points[i+1],ratio=values[0]/info.values[0],end={x:a.x+(b.x-a.x)*ratio,y:a.y+(b.y-a.y)*ratio},closed=o.points.length>2&&distance(o.points[0],o.points.at(-1)!)<1e-9;
- const points=o.points.map((p,j)=>j===i+1||closed&&i+1===o.points.length-1&&j===0?end:p);
+ // Translate the entire open tail, preserving every later edge vector. Closed
+ // loops retain vertex editing: their closing edge cannot remain fixed too.
+ const delta={x:end.x-b.x,y:end.y-b.y};
+ const points=o.points.map((p,j)=>!closed&&j>i?{x:p.x+delta.x,y:p.y+delta.y}:j===i+1||closed&&i+1===o.points.length-1&&j===0?end:p);
  // Avoid collapsing an adjacent edge after moving the common vertex.
  if(points.some((p,j)=>j>0&&distance(points[j-1],p)<1e-9))return null;
  return{...o,points};

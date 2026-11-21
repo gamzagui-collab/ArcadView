@@ -486,7 +486,7 @@ export function App() {
     measurementHistory.current.record(current);
     measurementRef.current=next;setMeasurement(next);
     if(isUnmeteredTool(tool)&&next.points.length===2&&unitPreferenceRef.current?.key)void saveMeasurement(unitPreferenceRef.current.key,next).catch(()=>setMeasurementFeedback(t("librarySaveFailed")));
-    setMeasurementFeedback(pick.entity ? null : measurement.mode === "object" ? t("measureNoObject") : pick.snapped ? t(({ endpoint: "measureEndpoint", midpoint: "measureMidpoint", center: "measureCenter", insertion:"measureInsertion", start: "measureStartPoint",perpendicular:"measurePerpendicular",intersection:"measureIntersection",curve:"measureCurve" } as const)[pick.snapped]) : null);
+    setMeasurementFeedback(pick.entity ? null : measurement.mode === "object" ? t("measureNoObject") : pick.snapped ? t(({ endpoint: "measureEndpoint", midpoint: "measureMidpoint", center: "measureCenter", insertion:"measureInsertion", start: "measureStartPoint",perpendicular:"measurePerpendicular",intersection:"measureIntersection",curve:"measureCurve",edge:"measureSnap" } as const)[pick.snapped]) : null);
   }, [measurement.mode, t,measurementOperation]);
 
   const finishMeasurement=()=>{

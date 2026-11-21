@@ -18,15 +18,17 @@ it("resizes a rotated rectangle in its original local directions without moving 
  expect(q[0]).toEqual(p[0]);expect(objectSize(next)!.values[0]).toBeCloseTo(600,5);expect(objectSize(next)!.values[1]).toBeCloseTo(900,5);
  expect((q[1].x-q[0].x)/600).toBeCloseTo((p[1].x-p[0].x)/300,7);expect((q[3].y-q[0].y)/900).toBeCloseTo((p[3].y-p[0].y)/400,7);
 });
-it("picks and resizes only the chosen polyline segment, keeping its start and unrelated vertices",()=>{
+it("resizes an open segment and translates its entire tail with unchanged later lengths and directions",()=>{
  const o:Annotation={id:"p",layerId:"base",kind:"polyline",points:[{x:0,y:0},{x:300,y:0},{x:300,y:400},{x:800,y:400}]};
  expect(nearestSizeSegment(o,{x:302,y:200})).toBe(1);expect(objectSize(o,1)!.values).toEqual([400]);const n=resizeObject(o,[700],1)!;
- expect(n.points).toEqual([o.points[0],o.points[1],{x:300,y:700},o.points[3]]);expect(o.points[2]).toEqual({x:300,y:400});expect(objectSize(n,1)!.values).toEqual([700]);
+ expect(n.points).toEqual([o.points[0],o.points[1],{x:300,y:700},{x:800,y:700}]);expect(o.points[2]).toEqual({x:300,y:400});expect(objectSize(n,1)!.values).toEqual([700]);
+ for(const index of [0,1,2]){const a=resizeObject(o,[150],index)!;expect(a.points.slice(0,index+1)).toEqual(o.points.slice(0,index+1));for(let j=index+2;j<a.points.length;j++)expect({x:a.points[j].x-a.points[j-1].x,y:a.points[j].y-a.points[j-1].y}).toEqual({x:o.points[j].x-o.points[j-1].x,y:o.points[j].y-o.points[j-1].y});}
 });
 it("keeps a closed polyline closed when editing its last segment and refuses collapsed neighbors",()=>{
  const o:Annotation={id:"p",layerId:"base",kind:"polyline",points:[{x:0,y:0},{x:300,y:0},{x:300,y:400},{x:0,y:0}]};
  const n=resizeObject(o,[250],2)!;expect(n.points[0]).toEqual(n.points.at(-1));expect(objectSize(n,2)!.values).toEqual([250]);expect(n.points[2]).toEqual(o.points[2]);
- const line={...o,points:[{x:0,y:0},{x:100,y:0},{x:200,y:0}]};expect(resizeObject(line,[200],0)).toBeNull();
+ const line={...o,points:[{x:0,y:0},{x:100,y:0},{x:200,y:0}]};expect(resizeObject(line,[200],0)!.points).toEqual([{x:0,y:0},{x:200,y:0},{x:300,y:0}]);
+ const closed={...line,points:[...line.points,{x:0,y:0}]};expect(resizeObject(closed,[200],0)).toBeNull();
 });
 it("preserves untouched saved values and masks an original only after a real edit",()=>{
  const store=new Map<string,string>();vi.stubGlobal("localStorage",{getItem:(k:string)=>store.get(k),setItem:(k:string,v:string)=>store.set(k,v)});
