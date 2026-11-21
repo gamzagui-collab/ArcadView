@@ -13,6 +13,7 @@ import {parseEditNumber} from "../viewer/offsetGeometry";
 import {asAnnotation,cleanPoints,dimensionsError,fromAnnotation,geometryError,insidePolygon,isAreaKind,KINDS,knownUnit,labelPosition,moveTakeoffToLayer,NAMES,newTakeoff,quantity,takeoffVisible,totals,type Dimensions,type TakeoffDocument,type TakeoffKind,type TakeoffObject} from "../takeoff/model";
 import {loadTakeoff,notifyTakeoffCompleted,saveTakeoff} from "../takeoff/storage";
 import {drawTakeoff} from "../takeoff/overlay";
+import {takeoffDraftPoints} from "../takeoff/draft";
 import {saveTakeoffWorkbook} from "../native/takeoffExport";
 import {ToolIcon} from "./ToolIcon";
 import {TakeoffLayerRow} from "./TakeoffLayerRow";
@@ -82,6 +83,7 @@ export const TakeoffEditor=forwardRef<TakeoffHandle,Props>(function TakeoffEdito
    const points=cleanPoints([...p.slice(0,index),pick.point,...p.slice(index)],isAreaKind(selectedObject.kind));if(points.length===p.length){setNotice("이미 있는 점입니다.");return;}const error=geometryError(points,isAreaKind(selectedObject.kind));if(error){setNotice(error);return;}commit({...doc,objects:doc.objects.map(o=>o.id===selected?{...o,geometry:{...o.geometry,points}}:o)},()=>{setTool("select");setNotice("점이 추가되었습니다.");});return;
   }
   if(!currentLayer.visible||!doc.groups.find(g=>g.id===tool)?.visible){setNotice("현재 레이어와 부재 표시를 켠 후 작성하세요.");return;}
+  if(pick.replaceIndex!==undefined){setDraft(takeoffDraftPoints(draft,pick));setNotice("");return;}
   if(draft.length>=4096){setNotice("한 객체에 최대 4096개 점을 사용할 수 있습니다.");return;}
   if(draft.length&&distance(draft.at(-1)!,pick.point)<=1e-8)return;
   const points=[...draft,pick.point];setDraft(points);setNotice("");if(pick.snapped==="start"&&points.length>=4)finishPoints(points);
@@ -99,12 +101,13 @@ export const TakeoffEditor=forwardRef<TakeoffHandle,Props>(function TakeoffEdito
   return{offset:{x:projected.x+rect.left-client.x,y:projected.y+rect.top-client.y},anchor:free?base:original.geometry.points.find(p=>distance(p,base)>1e-8),translation:free?{snap:createMoveSnap(annotation,base),geometry:{...own,entities:[...normal.geometry.entities,...own.entities],snaps:[...normal.geometry.snaps,...own.snaps].sort((a,b)=>a.x-b.x)},masks:normal.masks}:undefined,
    move:p=>{moved||=distance(base,p.point)>viewer.worldTolerance(2);dragPreview.current=candidate(p);renderRef.current();},end:p=>{const next=candidate(p);clear();if(!moved||!next)return;const error=geometryError(next.geometry.points,isAreaKind(next.kind));if(error){setNotice(error);return;}commit({...docRef.current,objects:docRef.current.objects.map(o=>o.id===objectId?next:o)});},cancel:clear};
  };
- const draftObject:TakeoffObject|null=tool!=="select"&&tool!=="insert"&&draft.length?{id:"takeoff-draft",layerId:doc.activeLayerId,groupId:tool,kind:tool,geometry:{type:isAreaKind(tool)?"polygon":"path",points:preview.current?[...draft,preview.current.point]:draft},dimensions:{},label:{visible:false}}:null;
+ const draftObject:TakeoffObject|null=tool!=="select"&&tool!=="insert"&&draft.length?{id:"takeoff-draft",layerId:doc.activeLayerId,groupId:tool,kind:tool,geometry:{type:isAreaKind(tool)?"polygon":"path",points:draft},dimensions:{},label:{visible:false}}:null;
  const render=()=>{
   if(!svg.current||!target.current)return;let temporary=dragPreview.current??draftObject;
-  if(!dragPreview.current&&draftObject)temporary={...draftObject,geometry:{...draftObject.geometry,points:preview.current?[...draft,preview.current.point]:draft}};
+  const points=takeoffDraftPoints(draft,preview.current);
+  if(!dragPreview.current&&draftObject)temporary={...draftObject,geometry:{...draftObject.geometry,points}};
   drawTakeoff(svg.current,doc,selected,temporary,p=>viewer.projectPoints(p),active);
-  drawMeasurementOverlay(target.current,{enabled:active&&tool!=="select"&&tool!=="insert"&&!pickingColor&&!dragging&&!form,mode:"path",points:draft,snapping:snap,entity:null},p=>viewer.projectPoints(p),preview.current);
+  drawMeasurementOverlay(target.current,{enabled:active&&tool!=="select"&&tool!=="insert"&&!pickingColor&&!dragging&&!form,mode:"path",points:draft,snapping:snap,entity:null},p=>viewer.projectPoints(p),preview.current,[],[],undefined,points);
  };
  renderRef.current=render;
  useLayoutEffect(()=>{render();},[doc,selected,active,draft,dragging,form]);
@@ -113,7 +116,7 @@ export const TakeoffEditor=forwardRef<TakeoffHandle,Props>(function TakeoffEdito
  useLayoutEffect(()=>{viewer.setTakeoffFocus({enabled:active&&doc.options.focus,layers:[],colors:doc.options.keepColors});return()=>viewer.setTakeoffFocus({enabled:false,layers:[],colors:[]});},[active,doc.options.focus,doc.options.keepColors]);
  useLayoutEffect(()=>{viewer.setBaseDrawingVisible(!active||doc.options.cadVisible);return()=>viewer.setBaseDrawingVisible(true);},[active,doc.options.cadVisible]);
  useEffect(()=>{if(!active)setPickingColor(false);},[active]);
- useLayoutEffect(()=>{viewer.configureAnnotations(active&&!blocked()&&!form&&!unitChange&&!layerDelete?{tool:pickingColor?"cad-color":tool==="select"?"select":"polyline",snapping:!pickingColor&&snap&&tool!=="select",handleSnapping:snap,points:pickingColor?[]:draft,anchor:pickingColor?undefined:draft.at(-1),onHandleDown:pickingColor?undefined:beginHandle,onPick:pick,onPreview:p=>{preview.current=p;renderRef.current();}}:null,"takeoff");return()=>viewer.configureAnnotations(null,"takeoff");},[viewer,active,doc,draft,tool,snap,selected,form,busy,saveError,loaded,revisions,unitChange,layerDelete,pickingColor]);
+ useLayoutEffect(()=>{viewer.configureAnnotations(active&&!blocked()&&!form&&!unitChange&&!layerDelete?{tool:pickingColor?"cad-color":tool==="select"?"select":"polyline",editableDraftPoints:!pickingColor&&tool!=="select"&&tool!=="insert",snapping:!pickingColor&&snap&&tool!=="select",handleSnapping:snap,points:pickingColor?[]:draft,anchor:pickingColor?undefined:draft.at(-1),onHandleDown:pickingColor?undefined:beginHandle,onPick:pick,onPreview:p=>{preview.current=p;renderRef.current();}}:null,"takeoff");return()=>viewer.configureAnnotations(null,"takeoff");},[viewer,active,doc,draft,tool,snap,selected,form,busy,saveError,loaded,revisions,unitChange,layerDelete,pickingColor]);
  const sum=totals(doc);
  const q=selectedObject?quantity(selectedObject,doc.unit):null;
  const toggleOption=(options:Partial<TakeoffDocument["options"]>)=>commit({...doc,options:{...doc.options,...options}});

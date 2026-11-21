@@ -276,6 +276,30 @@ describe("drawing viewer lifecycle", () => {
     viewer.destroy();
   });
 
+  it("edits an opted-in draft vertex on hold, while a quick tap on its first point still closes the path", async () => {
+    const viewer=new DrawingViewer({} as HTMLElement);await viewer.load(new File(["0\nEOF\n"],"draft.dxf"),vi.fn());vi.useFakeTimers();
+    const canvas=state.current.canvas;canvas.getBoundingClientRect=()=>({left:20,top:10,width:100,height:200});state.current.camera.updateProjectionMatrix();
+    const emit=(type:string,id:number,x:number,y:number)=>canvas.dispatchEvent(Object.assign(new Event(type),{pointerId:id,clientX:x,clientY:y,pointerType:"touch",button:0}));
+    const input={tool:"polyline",editableDraftPoints:true,snapping:true,points:[{x:-.5,y:-.5},{x:.5,y:-.5},{x:.5,y:.5}],onPick:vi.fn(),onPreview:vi.fn()};viewer.configureAnnotations(input,"takeoff");
+    emit("pointerdown",1,45,160);vi.advanceTimersByTime(350);
+    expect(input.onPick).not.toHaveBeenCalled();expect(input.onPreview).toHaveBeenLastCalledWith(expect.objectContaining({replaceIndex:0}));
+    emit("pointermove",1,70,160);emit("pointerup",1,70,160);expect(input.onPick).toHaveBeenLastCalledWith(expect.objectContaining({replaceIndex:0,point:expect.objectContaining({x:0})}));
+    input.onPick.mockClear();emit("pointerdown",1,45,160);emit("pointerup",1,45,160);expect(input.onPick).toHaveBeenCalledOnce();expect(input.onPick.mock.calls[0][0]).toMatchObject({snapped:"start"});expect(input.onPick.mock.calls[0][0]).not.toHaveProperty("replaceIndex");
+    viewer.destroy();
+  });
+
+  it("keeps draft editing opt-in and cancels holds for pan, pinch and pointer cancellation",async()=>{
+    const viewer=new DrawingViewer({} as HTMLElement);await viewer.load(new File(["0\nEOF\n"],"draft.dxf"),vi.fn());vi.useFakeTimers();
+    const canvas=state.current.canvas;canvas.getBoundingClientRect=()=>({left:20,top:10,width:100,height:200});state.current.camera.updateProjectionMatrix();
+    const emit=(type:string,id:number,x=45,y=160)=>canvas.dispatchEvent(Object.assign(new Event(type),{pointerId:id,clientX:x,clientY:y,pointerType:"touch",button:0}));
+    const input={tool:"polyline",snapping:true,points:[{x:-.5,y:-.5},{x:.5,y:-.5},{x:.5,y:.5}],onPick:vi.fn(),onPreview:vi.fn()};viewer.configureAnnotations(input);
+    emit("pointerdown",1);vi.advanceTimersByTime(350);emit("pointerup",1);expect(input.onPick.mock.calls[0][0]).not.toHaveProperty("replaceIndex");input.onPick.mockClear();
+    viewer.configureAnnotations({...input,editableDraftPoints:true},"takeoff");
+    emit("pointerdown",1);emit("pointermove",1,80,160);vi.advanceTimersByTime(350);emit("pointerup",1,80,160);
+    emit("pointerdown",1);vi.advanceTimersByTime(350);emit("pointerdown",2,90,160);emit("pointerup",2,90,160);emit("pointerup",1);
+    emit("pointerdown",1);vi.advanceTimersByTime(350);emit("pointercancel",1);emit("pointerup",1);expect(input.onPick).not.toHaveBeenCalled();viewer.destroy();
+  });
+
   it("updates measurement projections synchronously in the drawing Render call and stops on close", async () => {
     const changed = vi.fn();
     const viewer = new DrawingViewer({} as HTMLElement, undefined, undefined, changed);

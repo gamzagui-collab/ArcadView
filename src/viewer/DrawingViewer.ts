@@ -46,7 +46,7 @@ import {createMoveSnap,type MoveContact} from "./moveSnapping";
 
 export type MeasurementPick = { point: DrawingPoint; snapped: SnapPoint["kind"] | "start" | "perpendicular" | "intersection" | "curve" | "edge" | null; entity: MeasurableEntity | null; replaceIndex?: number;contact?:MoveContact;cadColor?:string|null };
 export type AnnotationHandleDrag={offset?:DrawingPoint;anchor?:DrawingPoint;translation?:{snap:ReturnType<typeof createMoveSnap>;geometry:MeasurementGeometry;masks:Annotation[]};move(pick:MeasurementPick):void;end(pick:MeasurementPick):void;cancel():void};
-export type AnnotationInput = {tool:string;snapping:boolean;handleSnapping?:boolean;anchor?:DrawingPoint;points:DrawingPoint[];referenceSnaps?:SnapPoint[];onHandleDown?(client:DrawingPoint):AnnotationHandleDrag|null;onPick(pick:MeasurementPick):void;onPreview(pick:MeasurementPick|null):void};
+export type AnnotationInput = {tool:string;snapping:boolean;handleSnapping?:boolean;editableDraftPoints?:boolean;anchor?:DrawingPoint;points:DrawingPoint[];referenceSnaps?:SnapPoint[];onHandleDown?(client:DrawingPoint):AnnotationHandleDrag|null;onPick(pick:MeasurementPick):void;onPreview(pick:MeasurementPick|null):void};
 
 installXclipRendering(DxfViewer);
 installTrianglePrecisionRendering(DxfViewer);
@@ -119,7 +119,10 @@ export class DrawingViewer {
     const direct=this.annotationInput?.onHandleDown?.({x:event.clientX,y:event.clientY});
     if(direct&&this.annotationInput){this.gesture.cancel();this.handleDrag={id:event.pointerId,input:this.annotationInput,drag:direct};this.handlePointers.add(event.pointerId);this.lockInteraction(true);try{this.viewer.GetCanvas().setPointerCapture(event.pointerId);}catch{}if(event.cancelable)event.preventDefault();event.stopImmediatePropagation();return;}
     this.precisionIndex = undefined;
-    if (!this.annotationInput && this.measurement && this.measurement.mode !== "object") {
+    if(this.annotationInput?.editableDraftPoints){
+      const rect=this.viewer.GetCanvas().getBoundingClientRect();let best=16;
+      this.projectPoints(this.annotationInput.points).forEach((p,index)=>{const d=Math.hypot(p.x+rect.left-event.clientX,p.y+rect.top-event.clientY);if(d<=best){best=d;this.precisionIndex=index;}});
+    } else if (!this.annotationInput && this.measurement && this.measurement.mode !== "object") {
       const rect = this.viewer.GetCanvas().getBoundingClientRect();
       const index = this.projectPoints(this.measurement.points).findIndex(p => Math.hypot(p.x + rect.left - event.clientX, p.y + rect.top - event.clientY) <= 16);
       // Returning to the first point finishes an open path, including a precision hold.
@@ -175,7 +178,8 @@ export class DrawingViewer {
     }
     const intersection=(editor?.tool==="move"||editor?.tool==="rotate"||!!this.handleDrag)&&measurement.snapping?intersectionSnap([cad,this.userGeometry,...supplemental?[supplemental]:[]],point,this.worldTolerance(10),p=>!masked(p,this.masks,this.worldTolerance(3))):null;
     const start = snapToPathStart(measurement, point, tolerance, replaceIndex);
-    const anchor=this.handleDrag?.drag.anchor??editor?.anchor??(isDistanceMode(measurement.mode)?measurement.points[replaceIndex===0?1:0]:undefined);
+    const draftAnchor=editor?.editableDraftPoints&&replaceIndex!==undefined?measurement.points[replaceIndex===0?1:replaceIndex-1]:undefined;
+    const anchor=this.handleDrag?.drag.anchor??draftAnchor??editor?.anchor??(isDistanceMode(measurement.mode)?measurement.points[replaceIndex===0?1:0]:undefined);
     let perpendicular:DrawingPoint|null=null;
     if(measurement.snapping&&anchor&&measurement.mode!=="radius"){
       const tol=this.worldTolerance(9),accept=(p:DrawingPoint)=>!masked(p,this.masks,this.worldTolerance(3));

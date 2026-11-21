@@ -7,10 +7,11 @@ const NS = "http://www.w3.org/2000/svg";
 const pointWindows=new WeakMap<SVGSVGElement,string>();
 let nextPointWindow=0;
 /** Updated in the same Render call as WebGL, without a deferred React commit. */
-export function drawMeasurementOverlay(svg: SVGSVGElement, settings: MeasurementSettings, project: (points: readonly DrawingPoint[]) => DrawingPoint[], preview: MeasurementPick | null, references: readonly DrawingPoint[] = [],endReferences:readonly DrawingPoint[]=[],label?:string): string|undefined {
+export function drawMeasurementOverlay(svg: SVGSVGElement, settings: MeasurementSettings, project: (points: readonly DrawingPoint[]) => DrawingPoint[], preview: MeasurementPick | null, references: readonly DrawingPoint[] = [],endReferences:readonly DrawingPoint[]=[],label?:string,draftPoints?:readonly DrawingPoint[]): string|undefined {
   if (!settings.enabled) { svg.replaceChildren(); return; }
   let points = settings.mode === "object" ? settings.entity?.points ?? [] : settings.points;
-  if (preview && settings.mode !== "object") points = measurementPointsAfterPick(settings, preview.point, preview.replaceIndex);
+  if(draftPoints)points=[...draftPoints];
+  else if (preview && settings.mode !== "object") points = measurementPointsAfterPick(settings, preview.point, preview.replaceIndex);
   const projected = project(points), elements: SVGElement[] = [];
   const markers=settings.mode==="object"?[]:projected.filter((_,i)=>!(settings.mode==="path"&&pathIsClosed(points)&&i===projected.length-1));
   const make = (tag: string, attrs: Record<string, string | number>) => {
