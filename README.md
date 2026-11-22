@@ -22,12 +22,13 @@
 - 측정·치수선 최대 소수 0~6자리 선택, 포인트 표시 전용 4번 레이어와 화면 고정 굵기
 - 남색·파랑·하늘색 UI, 접을 수 있는 측정창과 레이어/그리기/치수 탭
 - GitHub 새 릴리스 자동 확인, 사용자 승인 후 검증된 APK 업데이트
+- 메인 화면의 거리 측정·옹벽 적산·레이어 사용 GIF 안내, 오프라인 재생과 좌우 넘김·일시정지
 
 도면은 기기에서 처리하며 원본 CAD 파일을 수정하지 않습니다. 주석과 가림은 앱 내부의 오버레이로 저장합니다. 도면 열람은 오프라인으로 작동하고 GitHub 업데이트 확인·다운로드에만 인터넷을 사용합니다. 모든 DWG 객체나 실제 기기에 대한 호환성을 보장하지는 않습니다.
 
 ## 설치
 
-[직원용 APK 바로 다운로드 — 2.1.41](https://github.com/gamzagui-collab/ArcadView/releases/download/v2.1.41/Arcad-View-v2.1.41-69.apk)를 눌러 설치하세요. 기존 앱은 제거하지 말고 업데이트 설치합니다. 앱 정보의 **업데이트 확인** 버튼으로 새 버전을 확인할 수 있습니다. 자동 업데이트 확인은 앱 실행과 복귀 때 수행하며 다운로드·설치는 사용자의 승인이 필요합니다. [최신 릴리스의 변경 안내](https://github.com/gamzagui-collab/ArcadView/releases/latest)도 확인할 수 있습니다.
+[직원용 APK 바로 다운로드 — 2.1.44](https://github.com/gamzagui-collab/ArcadView/releases/download/v2.1.44/Arcad-View-v2.1.44-72.apk)를 눌러 설치하세요. 기존 앱은 제거하지 말고 업데이트 설치합니다. 앱 정보의 **업데이트 확인** 버튼으로 새 버전을 확인할 수 있습니다. 자동 업데이트 확인은 앱 실행과 복귀 때 수행하며 다운로드·설치는 사용자의 승인이 필요합니다. [최신 릴리스의 변경 안내](https://github.com/gamzagui-collab/ArcadView/releases/latest)와 [같은 버전의 전체 대응 소스](https://github.com/gamzagui-collab/ArcadView-Source/tree/v2.1.44)도 확인할 수 있습니다.
 
 ## 빌드
 
