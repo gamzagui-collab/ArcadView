@@ -15,6 +15,9 @@
 - 객체가 많은 도면의 이동·확대/축소 화면 캐시와 축소 배율에 맞춘 가는 선 표시
 - 원본을 변경하지 않는 일반 레이어 1~3, 포인트 전용 4번과 치수 전용 5번 레이어
 - 적산 체적(m³)·면적(m²) 체크 선택, 규격 입력 없는 면적 작성과 단위를 분리한 Excel 집계
+- 적산 산식에서 규격 수정·미리보기, m/mm 혼용·과도한 규격·이전 규격 변경 확인
+- 모든 규격과 산식·부재별/레이어별/전체 총계를 실제 수식으로 내보내는 Excel 집계
+- 한국어·영어·터키어 적산·레이어·집중 보기·규격 경고·Excel 언어팩
 - 폴리라인·원·호·사각형·한글 텍스트·치수선, 객체 선택·X/Y 이동·옵셋·삭제·트림
 - 원·호의 반지름, 사각형 가로·세로, 폴리라인 구간 길이 직접 입력
 - 선택 객체의 현재 치수 표시·수치 수정, 폴리라인 구간 선택과 수치 입력 생략 옵션 기억
@@ -31,7 +34,7 @@
 
 ## 설치
 
-[직원용 APK 바로 다운로드 — 2.1.50](https://github.com/gamzagui-collab/ArcadView/releases/download/v2.1.50/Arcad-View-v2.1.50-78.apk)를 눌러 설치하세요. 기존 앱은 제거하지 말고 업데이트 설치합니다. 앱 정보의 **업데이트 확인** 버튼으로 새 버전을 확인할 수 있습니다. 자동 업데이트 확인은 앱 실행과 복귀 때 수행하며 다운로드·설치는 사용자의 승인이 필요합니다. [최신 릴리스의 변경 안내](https://github.com/gamzagui-collab/ArcadView/releases/latest)와 [같은 버전의 전체 대응 소스](https://github.com/gamzagui-collab/ArcadView-Source/tree/v2.1.50)도 확인할 수 있습니다.
+[직원용 APK 바로 다운로드 — 2.1.52](https://github.com/gamzagui-collab/ArcadView/releases/download/v2.1.52/Arcad-View-v2.1.52-80.apk)를 눌러 설치하세요. 기존 앱은 제거하지 말고 업데이트 설치합니다. 앱 정보의 **업데이트 확인** 버튼으로 새 버전을 확인할 수 있습니다. 자동 업데이트 확인은 앱 실행과 복귀 때 수행하며 다운로드·설치는 사용자의 승인이 필요합니다. [최신 릴리스의 변경 안내](https://github.com/gamzagui-collab/ArcadView/releases/latest)와 [같은 버전의 전체 대응 소스](https://github.com/gamzagui-collab/ArcadView-Source/tree/v2.1.52)도 확인할 수 있습니다.
 
 ## 빌드
 

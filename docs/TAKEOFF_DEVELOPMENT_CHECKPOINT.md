@@ -1,6 +1,15 @@
 # Arcad View concrete takeoff development checkpoint
 
-## Current: 2.1.52 (80) — current tool and screen language packs (local development)
+## Current release target: 2.1.52 (80) — employee GitHub publication
+
+- User explicitly authorized official employee APK and corresponding-source publication, preserving existing drawing/annotation/takeoff data and automatic updates. Token/Play APKs remain PC-only. Baseline clean `feature/concrete-takeoff`, HEAD `1a18869eea9beec731ce78080fa7b1745cd545d0`. Previous public APK/source tag2.1.50/code78; target2.1.52/code80 includes the locally tested2.1.51 warnings/Excel changes and2.1.52 language packs.
+- Publish matching `main` and lightweight `v2.1.52` refs to `gamzagui-collab/ArcadView-Source` first (keep Actions disabled), then the existing `ArcadView` build repository. Existing pinned GitHub Actions workflow runs tests, signed `github` distribution build, exact corresponding-source verification and four-asset official publication. Do not upload local token/Play APKs or change updater/auth/storage/billing code.
+- Preserve metadata schema/identity: `com.izcad.viewer`, takeoff3/annotation1, code80 greater than public78, employee certificate `60e2731fb432e7ed0cde34f255ea42a9faea115131346cbf08ff0b8b5afaccd1`. New language/Excel feature evidence: `artifacts/izcad/language-pack2152/final-report.json`,545 Vitest+38 Node=583 and34 local Android JVM PASS, three native-language/Excel flows and original34 drawings/29 settings/3 takeoff documents/2 annotation files preserved.
+- Release audit/evidence: `artifacts/izcad/release2152/final-report.json`, CI/public asset digests, all source Git blobs, public LF-source asset rebuild, LDPlayer-8 actual public2.1.50→2.1.52 update and post-update data/latest-state checks. Read that final report for observed completion; this checkpoint is committed before publication. Physical phone/Microsoft Excel desktop testing remains outside the local emulator verification.
+- Helpers: `.diagnostics/izcad-release2152.py preflight|status|download`, `izcad-release2152-logs.py`, release2152 baseline/backups/update-prepare/real-update/postaudit/final-install/finalize scripts. Always recheck index8/serial before ADB. Never use ProCad/LDPlayer-9. Keep existing2.1.50 release/assets and all12 PC-only token/Play APK hashes unchanged.
+- Git archive on Windows can apply CRLF. Verify the public source ZIP against Git blobs, then use those exact LF source bytes for the public-APK web-asset comparison. The published APK may differ in binary hash from the local development build; verify its own GitHub digest and signer.
+
+## Historical: 2.1.52 (80) — current tool and screen language packs (local development)
 
 - Baseline clean `feature/concrete-takeoff`, HEAD `dcfc11555cfd6f75a181b3d864fc8f33f83b11d3`, local employee2.1.51/code79; public release remains2.1.50/code78. Package/lock/release-config now2.1.52/code80. Final local commit: `git rev-parse HEAD`. No GitHub/Play publication requested.
 - Added typed `src/i18n/takeoff.ts` ko/en/tr shared catalog for the previously Korean-only takeoff workbench, layers, focus controls, formula editing, dimensions/warnings, storage notices and Excel labels. Keep interpolation token parity in tests. New user-visible text must support all three existing locales.
