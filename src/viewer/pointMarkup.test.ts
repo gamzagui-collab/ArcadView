@@ -1,6 +1,7 @@
 import{afterEach,expect,it,vi}from"vitest";
-import{annotationGeometry,drawingLayers,ensurePointLayer,newAnnotationDocument,POINT_LAYER_ID,pointLayer,readAnnotations,removeDrawingLayer,saveAnnotations,translateAnnotation,trimAnnotation,visibleAnnotations,type Annotation}from"./annotations";
+import{annotationGeometry,drawingLayers,ensurePointLayer,newAnnotationDocument,POINT_LAYER_ID,pointLayer,readAnnotations,removeDrawingLayer,saveAnnotations,translateAnnotation,trimAnnotation,visibleAnnotations,validateAnnotationDocument,type Annotation}from"./annotations";
 import{addPointObject,badgeForeground,completePointText,drawPointAnnotation,pointHit,pointMoveSnaps,pointScreenGeometry,readPointStyle,savePointStyle}from"./pointMarkup";
+import{hasTextSize,styleAnnotation}from"./annotationStyle";
 import{offsetAnnotation}from"./offsetGeometry";
 import{UndoHistory}from"./undoHistory";
 const object=(kind:Annotation["kind"]="point-arrow"):Annotation=>({id:"mark",layerId:POINT_LAYER_ID,kind,points:[{x:1e9,y:1e9},{x:1e9+100,y:1e9+60}],screenWidth:4,color:"#ffd65c",screenFontSize:18});
@@ -51,4 +52,12 @@ it("completes each Korean label once, edits without duplicating, and supports un
 });
 it("remembers valid stroke/color settings and chooses contrasting badge text",()=>{
  const store=new Map<string,string>();vi.stubGlobal("localStorage",{getItem:(k:string)=>store.get(k),setItem:(k:string,v:string)=>store.set(k,v)});const style={width:7.5,color:"#49cfff",fontSize:24};expect(savePointStyle(style)).toBe(true);expect(readPointStyle()).toEqual(style);expect(savePointStyle({...style,width:99})).toBe(false);expect(badgeForeground("#ffffff")).toBe("#07182b");expect(badgeForeground("#000000")).toBe("#ffffff");
+});
+
+it("stores one-anchor markup text on layer4 and re-edits it once without changing drawing text or ordinary layers",()=>{
+ const legacy=newAnnotationDocument(),normal:Annotation={id:"normal",layerId:"base",kind:"text",points:[{x:0,y:0}],text:"기존 문자",textHeight:50};legacy.objects=[normal];const label={...object("point-text"),points:[object().points[0]]};const next=completePointText(legacy,{object:label},"마킹 텍스트\n두 번째 줄");validateAnnotationDocument(next);expect(next.activeLayer).toBe("base");expect(next.objects[0]).toEqual(normal);expect(next.objects[1].points).toHaveLength(1);expect(next.objects[1].kind).toBe("point-text");
+ const edited=completePointText(next,{object:next.objects[1],originalId:"mark"},"수정");validateAnnotationDocument(edited);expect(edited.objects).toHaveLength(2);expect(edited.objects[1].text).toBe("수정");expect(completePointText(next,{object:label}," ")).toBe(next);expect(()=>validateAnnotationDocument({...next,objects:[normal,{...label,text:"문자",points:[...label.points,...label.points]}]})).toThrow();
+});
+it("renders plain markup text without a leader, with fixed screen-size bounds, label hits and movement snaps",()=>{
+ const o={...object("point-text"),points:[object().points[0]],text:"한글 텍스트"};const a=pointScreenGeometry(o,project()),b=pointScreenGeometry(o,project(4));expect(a.paths).toEqual([]);expect(a.head).toBeUndefined();expect(a.label!.point).toEqual({x:100,y:300});expect(a.label!.fontSize).toBe(18);expect(a.label!.bounds.maxX-a.label!.bounds.minX).toBe(b.label!.bounds.maxX-b.label!.bounds.minX);expect(pointHit([o],{x:1e9+8,y:1e9+5},3,project(),true)?.id).toBe("mark");expect(pointMoveSnaps(o)).toEqual([{x:1e9,y:1e9,kind:"endpoint"}]);expect(hasTextSize(o)).toBe(true);expect(styleAnnotation(o,{screenFontSize:32,color:"#ffffff"})).toMatchObject({screenFontSize:32,color:"#ffffff",points:o.points,layerId:POINT_LAYER_ID});
 });

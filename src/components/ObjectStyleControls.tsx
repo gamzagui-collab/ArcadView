@@ -17,11 +17,11 @@ export function ObjectStyleControls({object,color,onPreview,onApply}:Props){
   const finish=()=>{const style=pending.current;if(style){pending.current=null;onApply(style);}};
   const cancel=()=>{pending.current=null;setSize(objectStyleValue(latest.current.object));onPreview(null);};
   const slider=object.kind==="text"?Math.max(0,Math.min(100,50+Math.log2(size/base)*12.5)):size;
-  const change=(range:number)=>{const next=object.kind==="text"?Math.max(.001,Math.min(1e6,base*2**((range-50)/12.5))):range;setSize(next);const style=object.kind==="text"?{textHeight:next}:object.kind==="point-leader"?{screenFontSize:next}:{screenWidth:next};pending.current=style;onPreview(style);};
+  const change=(range:number)=>{const next=object.kind==="text"?Math.max(.001,Math.min(1e6,base*2**((range-50)/12.5))):range;setSize(next);const style=object.kind==="text"?{textHeight:next}:["point-leader","point-text"].includes(object.kind)?{screenFontSize:next}:{screenWidth:next};pending.current=style;onPreview(style);};
   return <aside className="object-style-sidebar" aria-label={w.style} data-object={object.id}>
     <span className="object-size-symbol" aria-hidden="true">{text?"A":"≋"}</span>
     <output>{new Intl.NumberFormat(locale,{maximumFractionDigits:2}).format(size)}{object.kind==="text"?"":"px"}</output>
-    <div className="object-size-track"><input type="range" aria-label={label} min={object.kind==="text"?0:object.kind==="point-leader"?10:1} max={object.kind==="text"?100:object.kind==="point-leader"?48:12} step={text?1:.5} value={slider}
+    <div className="object-size-track"><input type="range" aria-label={label} min={object.kind==="text"?0:["point-leader","point-text"].includes(object.kind)?10:1} max={object.kind==="text"?100:["point-leader","point-text"].includes(object.kind)?48:12} step={text?1:.5} value={slider}
       onChange={e=>change(+e.currentTarget.value)} onPointerUp={finish} onPointerCancel={cancel} onKeyUp={e=>{if(e.key.startsWith("Arrow")||["Home","End","PageUp","PageDown"].includes(e.key))finish();}} onBlur={finish}/></div>
     <button type="button" className="text-palette-button object-palette-button" aria-label={w.color} title={w.color} aria-expanded={palette} style={{color}}
       onClick={()=>{finish();setChosen(color);setPalette(v=>!v);}}><PaletteIcon/></button>

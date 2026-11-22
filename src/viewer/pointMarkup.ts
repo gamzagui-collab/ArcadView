@@ -22,9 +22,9 @@ export function completePointText(doc:AnnotationDocument,session:PointTextSessio
  const normalized=text.replace(/\r\n?/g,"\n");if(normalized.length>500)throw Error("Point label too long");
  if(!normalized.trim())return doc;
  const object={...session.object,text:normalized};
- if(object.kind!=="point-leader"||object.layerId!==POINT_LAYER_ID)throw Error("Invalid point label");
+ if(!["point-leader","point-text"].includes(object.kind)||object.layerId!==POINT_LAYER_ID)throw Error("Invalid point label");
  if(!session.originalId)return addPointObject(doc,object);
- const original=doc.objects.find(o=>o.id===session.originalId&&o.kind==="point-leader");if(!original)return doc;
+ const original=doc.objects.find(o=>o.id===session.originalId&&o.kind===object.kind);if(!original)return doc;
  if(JSON.stringify(original)===JSON.stringify(object))return doc;
  return{...doc,objects:doc.objects.map(o=>o.id===session.originalId?object:o)};
 }
@@ -38,7 +38,10 @@ function labelWidth(text:string,size:number):number{
 /** Only projection changes with zoom. Widths, arrowheads, cloud lobes and text
  * remain in CSS screen pixels, while both anchors stay in exact drawing units. */
 export function pointScreenGeometry(o:Annotation,project:(p:readonly P[])=>P[]):PointScreenGeometry{
- const[a,b]=project(o.points),width=o.screenWidth??3,paths:P[][]=[];if(!a||!b)return{paths};
+ const[a,b]=project(o.points),width=o.screenWidth??3,paths:P[][]=[];if(!a)return{paths};
+ const label=(point:P,anchor:"start"|"end",fontSize:number):Label=>{const lines=(o.text??"").split("\n"),w=Math.max(fontSize*.5,...lines.map(t=>labelWidth(t,fontSize)));return{point,anchor,fontSize,lines,bounds:{minX:point.x-(anchor==="start"?0:w)-4,maxX:point.x+(anchor==="start"?w:0)+4,minY:point.y-fontSize,maxY:point.y+(lines.length-1)*fontSize*1.3+4}};};
+ if(o.kind==="point-text")return{paths,label:label(a,"start",o.screenFontSize??18)};
+ if(!b)return{paths};
  const head=(tip:P,tail:P):P[]|undefined=>{const dx=tip.x-tail.x,dy=tip.y-tail.y,l=Math.hypot(dx,dy);if(l<1)return;const n=Math.min(l*.7,Math.max(11,width*3+5)),x=dx/l,y=dy/l;return[tip,{x:tip.x-x*n-y*n*.4,y:tip.y-y*n+x*n*.4},{x:tip.x-x*n+y*n*.4,y:tip.y-y*n-x*n*.4},tip];};
  if(o.kind==="point-arrow")return{paths:[[a,b]],head:head(b,a)};
  if(o.kind==="point-circle"){
@@ -58,16 +61,15 @@ export function pointScreenGeometry(o:Annotation,project:(p:readonly P[])=>P[]):
   }return{paths:[points],path:commands.join(" ")+" Z"};
  }
  if(o.kind==="point-leader"){
-  const sign=b.x>=a.x?1:-1,elbow={x:b.x-sign*Math.min(18,Math.abs(b.x-a.x)/2),y:b.y},fontSize=o.screenFontSize??18,point={x:b.x+sign*7,y:b.y-5},lines=(o.text??"").split("\n"),w=Math.max(fontSize*.5,...lines.map(t=>labelWidth(t,fontSize))),anchor=sign===1?"start":"end";
-  const bounds={minX:point.x-(sign===1?0:w)-4,maxX:point.x+(sign===1?w:0)+4,minY:point.y-fontSize,maxY:point.y+(lines.length-1)*fontSize*1.3+4};
-  return{paths:[[a,elbow,b]],head:head(a,elbow),label:{point,anchor,fontSize,lines,bounds}};
+  const sign=b.x>=a.x?1:-1,elbow={x:b.x-sign*Math.min(18,Math.abs(b.x-a.x)/2),y:b.y},point={x:b.x+sign*7,y:b.y-5};
+  return{paths:[[a,elbow,b]],head:head(a,elbow),label:label(point,sign===1?"start":"end",o.screenFontSize??18)};
  }
  return{paths};
 }
 export function pointHit(objects:Annotation[],point:P,tolerance:number,project:(p:readonly P[])=>P[],labelOnly=false):Annotation|null{
  const p=project([point])[0];let best=tolerance,found:Annotation|null=null;
  for(const o of [...objects].reverse()){
-  if(!isPointAnnotation(o)||(labelOnly&&o.kind!=="point-leader"))continue;
+  if(!isPointAnnotation(o)||(labelOnly&&!["point-leader","point-text"].includes(o.kind)))continue;
   const g=pointScreenGeometry(o,project),b=g.label?.bounds;
   if(b){const d=Math.hypot(Math.max(b.minX-p.x,0,p.x-b.maxX),Math.max(b.minY-p.y,0,p.y-b.maxY));if(d<=best){best=d;found=o;}}
   if(labelOnly)continue;
