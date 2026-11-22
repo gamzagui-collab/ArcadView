@@ -40,3 +40,9 @@ it("reuses formula text while panning but invalidates it for a different unit or
  expect(takeoffFormula(object,"m").result).toBe("3278.881 m³");
  object.dimensions={heightMm:2640,thicknessMm:250};const edited=takeoffFormula(object,"mm");expect(edited).not.toBe(first);expect(edited.result).toBe("4.099 m³");expect(takeoffFormula(object,"mm")).toBe(edited);
 });
+it("makes only stored volume specifications editable and leaves derived geometric factors read-only",()=>{
+ const html=renderToStaticMarkup(<TakeoffFormula object={wall()} unit="mm" measurementUnit="mm" onEdit={()=>{}}/>);
+ expect(html).toContain('aria-label="높이 2.64 m 수정"');expect(html).toContain('aria-label="두께 0.2 m 수정"');expect(html).not.toContain('aria-label="길이 6.210002 m 수정"');expect(html).toContain('길이·면적은 도형 기준');
+ const area={...wall(),kind:"slab" as const,groupId:"slab" as const,calculation:"area" as const,geometry:{type:"polygon" as const,points:[{x:0,y:0},{x:8000,y:0},{x:8000,y:5000},{x:0,y:5000}]},dimensions:{}};
+ expect(renderToStaticMarkup(<TakeoffFormula object={area} unit="mm" measurementUnit="mm" onEdit={()=>{}}/>)).not.toContain('<button');
+});
