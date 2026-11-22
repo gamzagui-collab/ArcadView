@@ -44,6 +44,8 @@ import {CadFocusFilter,type CadFocus} from "../takeoff/cadFocus";
 import {pickCadColor} from "../takeoff/cadColorPick";
 import {createMoveSnap,type MoveContact} from "./moveSnapping";
 import {PointerMagnifier} from "./pointerMagnifier";
+import {CadStrokeStyle,installCadStrokeShaders} from "./cadStroke";
+import {PanCache} from "./panCache";
 
 export type MeasurementPick = { point: DrawingPoint; snapped: SnapPoint["kind"] | "start" | "perpendicular" | "intersection" | "curve" | "edge" | null; entity: MeasurableEntity | null; replaceIndex?: number;contact?:MoveContact;cadColor?:string|null };
 export type AnnotationHandleDrag={offset?:DrawingPoint;anchor?:DrawingPoint;translation?:{snap:ReturnType<typeof createMoveSnap>;geometry:MeasurementGeometry;masks:Annotation[]};move(pick:MeasurementPick):void;end(pick:MeasurementPick):void;cancel():void};
@@ -52,6 +54,7 @@ export type AnnotationInput = {tool:string;snapping:boolean;handleSnapping?:bool
 installXclipRendering(DxfViewer);
 installTrianglePrecisionRendering(DxfViewer);
 installCadColorRendering(DxfViewer);
+installCadStrokeShaders(DxfViewer);
 
 const LOAD_TIMEOUT_MS = 10 * 60 * 1000;
 const HEADER_BYTES = 64 * 1024;
@@ -97,9 +100,13 @@ export class DrawingViewer {
   private handleDrag:{id:number;input:AnnotationInput;drag:AnnotationHandleDrag}|null=null;
   private handlePointers=new Set<number>();
   private magnifier:PointerMagnifier|null=null;
+  private magnifying=false;
+  private panCache:PanCache|null=null;
+  private strokeStyle:CadStrokeStyle|null=null;
   private showMagnifier(pick:MeasurementPick|null):void{
-    if(!pick){this.magnifier?.hide();return;}
-    if(!this.magnifier){const canvas=this.viewer.GetCanvas(),parent=canvas.parentElement?.closest<HTMLElement>('.drawing-canvas');if(!parent)return;this.magnifier=new PointerMagnifier(parent,canvas,()=>this.viewer.Render(),()=>this.baseDrawingVisible);}
+    if(!pick){this.magnifier?.hide();if(this.magnifying){this.magnifying=false;if(this.ready&&!this.destroyed&&this.baseDrawingVisible)this.viewer.Render();}return;}
+    this.magnifying=true;
+    if(!this.magnifier){const canvas=this.viewer.GetCanvas(),parent=canvas.parentElement?.closest<HTMLElement>('.drawing-canvas');if(!parent)return;this.magnifier=new PointerMagnifier(parent,canvas,()=>{const draw=()=>this.panCache?this.panCache.detail():this.viewer.Render();if(this.strokeStyle)this.strokeStyle.withExact(draw);else draw();},()=>this.baseDrawingVisible);}
     const point=pick.contact?.contact??pick.point;
     this.magnifier.show(this.projectPoints([point])[0],point,pick.snapped);
   }
@@ -267,11 +274,12 @@ export class DrawingViewer {
       // Three normally refreshes this inside renderer.render(). Project the
       // overlay with the new camera, rather than the previous frame's inverse.
       this.viewer.GetCamera().updateMatrixWorld();
+      this.strokeStyle?.update(this.viewer.GetCamera());
       if ((this.viewer as any).options.izcadCulling !== false) this.culler?.update(this.viewer.GetCamera(),this.viewer.GetCanvas().clientWidth);
       else this.culler?.restore();
       if (!this.destroyed) this.onViewChanged?.();
       if (!this.destroyed) for(const listener of this.viewListeners)listener();
-      if(this.baseDrawingVisible)render();
+      if(this.baseDrawingVisible){if(this.panCache)this.panCache.render();else render();}
       this.magnifier?.invalidate();
     };
   }
@@ -285,6 +293,7 @@ export class DrawingViewer {
     this.cancelInitialFit();
     const loadId = ++this.loadId;
     this.ready = false;
+    this.panCache?.dispose();this.panCache=null;this.takeoffFocus?.clear();this.strokeStyle?.dispose();this.strokeStyle=null;
     this.releaseWorker();
     this.releaseObjectUrl();
     this.savedView = getSavedDrawingView(file);
@@ -364,6 +373,13 @@ export class DrawingViewer {
       this.geometry.displayUnits = resolveDrawingDisplayUnit(file, this.geometry.units);
       this.geometry.unitPreferenceKey = getDrawingUnitKey(file);
       this.culler = new ViewportCuller((this.viewer as any).scene);
+      const bounds=this.viewer.GetBounds(),canvas=this.viewer.GetCanvas();
+      this.strokeStyle=new CadStrokeStyle((this.viewer as any).scene,bounds?Math.max(bounds.maxX-bounds.minX,(bounds.maxY-bounds.minY)*Math.max(1,canvas.clientWidth)/Math.max(1,canvas.clientHeight)):0);
+      const renderer=this.viewer.GetRenderer();
+      if(renderer&&typeof renderer.render==='function'){
+        const rawRender=(DxfViewer as any).prototype.Render.bind(this.viewer);
+        this.panCache=new PanCache(this.viewer as any,rawRender,camera=>{if((this.viewer as any).options.izcadCulling!==false)this.culler?.update(camera,canvas.clientWidth);else this.culler?.restore();});
+      }
       (this.viewer as unknown as { parsedDxf: unknown }).parsedDxf = null;
       if (!this.applySavedView()) {
         this.fit(true);
@@ -465,10 +481,10 @@ export class DrawingViewer {
     if(this.destroyed||!this.ready||!this.baseDrawingVisible)return null;
     const renderer=this.viewer.GetRenderer();if(!renderer)return null;
     this.takeoffFocus??=new CadFocusFilter((this.viewer as any).scene);
-    try{return pickCadColor(renderer,(this.viewer as any).scene,this.viewer.GetCamera(),this.takeoffFocus,this.viewer.GetCanvas(),client,(x,y)=>!masked(this.clientToDrawing({x,y}),this.masks,this.worldTolerance(3)));}catch{return null;}
+    try{const read=()=>pickCadColor(renderer,(this.viewer as any).scene,this.viewer.GetCamera(),this.takeoffFocus!,this.viewer.GetCanvas(),client,(x,y)=>!masked(this.clientToDrawing({x,y}),this.masks,this.worldTolerance(3)));return this.strokeStyle?this.strokeStyle.withExact(read):read();}catch{return null;}
   }
-  setTakeoffFocus(filter:CadFocus){if(this.destroyed)return;this.takeoffFocus??=new CadFocusFilter((this.viewer as any).scene);this.takeoffFocus.set(filter);this.viewer.Render();}
-  setBaseDrawingVisible(visible:boolean){if(this.destroyed||visible===this.baseDrawingVisible)return;this.baseDrawingVisible=visible;this.viewer.GetCanvas().style.opacity=visible?"":"0";this.viewer.Render();}
+  setTakeoffFocus(filter:CadFocus){if(this.destroyed)return;this.takeoffFocus??=new CadFocusFilter((this.viewer as any).scene);this.takeoffFocus.set(filter);this.panCache?.invalidate();this.viewer.Render();}
+  setBaseDrawingVisible(visible:boolean){if(this.destroyed||visible===this.baseDrawingVisible)return;this.baseDrawingVisible=visible;this.panCache?.invalidate();this.viewer.GetCanvas().style.opacity=visible?"":"0";this.viewer.Render();}
   subscribeView(listener:()=>void):()=>void{this.viewListeners.add(listener);return()=>{this.viewListeners.delete(listener);};}
 
   projectPoints(points: readonly DrawingPoint[]): DrawingPoint[] {
@@ -486,6 +502,7 @@ export class DrawingViewer {
       return;
     }
     this.takeoffFocus?.clear();this.takeoffFocus=null;this.takeoffGeometry.entities=[];this.takeoffGeometry.snaps=[];
+    this.strokeStyle?.dispose();this.strokeStyle=null;this.panCache?.dispose();this.panCache=null;
     this.destroyed = true;
     this.viewListeners.clear();this.annotationInput=null;this.masks=[];this.userGeometry.entities=[];this.userGeometry.snaps=[];
     this.culler?.restore(); this.culler = null;
