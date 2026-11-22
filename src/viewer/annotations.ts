@@ -226,7 +226,7 @@ export function trimAnnotation(target:Annotation,cutters:Annotation[],cad:Segmen
   return{kept:remaining.map(p=>({...target,id:uid(),kind:"polyline",points:p})),removed:part(lo,hi)};
 }
 const PREFIX="arcad.annotations.v1.";
-function validateDocument(d:AnnotationDocument):void{
+export function validateAnnotationDocument(d:AnnotationDocument):void{
   if(d.version!==1||!Array.isArray(d.layers)||d.layers.length<1||d.layers.length>5||!Array.isArray(d.objects)||d.objects.length>3000||!d.layers.some(l=>l.id===d.activeLayer&&!isReservedLayer(l.id))||drawingLayers(d).length>3||!Number.isFinite(d.dimensionScale)||d.dimensionScale<1||d.dimensionScale>10000)throw Error();
   const ids=new Set(d.layers.map(l=>l.id));if(ids.size!==d.layers.length)throw Error();
   for(const l of d.layers)if(typeof l.id!=="string"||typeof l.name!=="string"||!/^#[a-f0-9]{6}$/i.test(l.color)||typeof l.visible!=="boolean"||(l.id===POINT_LAYER_ID&&(l.name!==POINT_LAYER_NAME||d.layers.indexOf(l)!==d.layers.length-(d.layers.some(l=>l.id===DIMENSION_LAYER_ID)?2:1)))||(l.id===DIMENSION_LAYER_ID&&(l.name!==DIMENSION_LAYER_NAME||l!==d.layers.at(-1))))throw Error();
@@ -246,10 +246,10 @@ function validateDocument(d:AnnotationDocument):void{
 }
 export function readAnnotations(key:string|undefined):AnnotationDocument{
   if(!key)return newAnnotationDocument();try{const raw=localStorage.getItem(PREFIX+key);if(!raw||raw.length>4_000_000)return newAnnotationDocument();const d=JSON.parse(raw)as AnnotationDocument;
-    validateDocument(d);
+    validateAnnotationDocument(d);
     return d;
   }catch{return newAnnotationDocument();}
 }
 export function saveAnnotations(key:string|undefined,doc:AnnotationDocument):boolean{
-  if(!key)return false;try{validateDocument(doc);const raw=JSON.stringify(doc);if(raw.length>4_000_000)throw Error("Annotation storage limit");localStorage.setItem(PREFIX+key,raw);return true;}catch{return false;}
+  if(!key)return false;try{validateAnnotationDocument(doc);const raw=JSON.stringify(doc);if(raw.length>4_000_000)throw Error("Annotation storage limit");localStorage.setItem(PREFIX+key,raw);return true;}catch{return false;}
 }
