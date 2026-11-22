@@ -10,7 +10,8 @@ import {createMoveSnap} from "../viewer/moveSnapping";
 import {UndoHistory,type EditCommand,type EditHistoryState} from "../viewer/undoHistory";
 import {drawMeasurementOverlay} from "../viewer/measurementOverlay";
 import {asAnnotation,calculationOf,cleanPoints,fromAnnotation,geometryError,insidePolygon,KINDS,knownUnit,labelPosition,moveTakeoffToLayer,NAMES,newTakeoff,quantity,takeoffPolygon,takeoffVisible,totalText,totals,selectedLayerTotals,type Dimensions,type TakeoffCalculation,type TakeoffDocument,type TakeoffKind,type TakeoffObject} from "../takeoff/model";
-import {convertDimensionInput,dimensionCandidate,dimensionFields,dimensionInputs,type SpecificationUnit} from "../takeoff/dimensionInputs";
+import {convertDimensionInput,dimensionFields,dimensionInputs,type SpecificationUnit} from "../takeoff/dimensionInputs";
+import {reviewDimensions,type DimensionWarning} from "../takeoff/dimensionWarnings";
 import {loadTakeoff,notifyTakeoffCompleted,saveTakeoff} from "../takeoff/storage";
 import {drawTakeoff} from "../takeoff/overlay";
 import {takeoffDraftPoints} from "../takeoff/draft";
@@ -23,7 +24,8 @@ import {TakeoffFormula} from "./TakeoffFormula";
 import "../takeoff/takeoff.css";
 export type TakeoffHandle={execute(command:EditCommand):void;objectAction(command:"select"|"delete"):void;showTools():void};
 type Props={viewer:DrawingViewer;identity:{name:string;size:number;lastModified:number};active:boolean;sourceUnit:MeasurementUnit;onHistory(state:EditHistoryState):void;layersOpen:boolean;layerTabs:ReactNode;onLayersToggle():void;onLayersHide():void};
-type Form={object:TakeoffObject;existing:boolean;focus:number};
+type Form={object:TakeoffObject;existing:boolean;focus:number;previous?:Dimensions};
+type DimensionConfirmation={object:TakeoffObject;existing:boolean;heightUnit?:SpecificationUnit;warnings:DimensionWarning[];revision:number};
 export const TakeoffEditor=forwardRef<TakeoffHandle,Props>(function TakeoffEditor({viewer,identity,active,sourceUnit,onHistory,layersOpen,layerTabs,onLayersToggle,onLayersHide},ref){
  const key=viewer.getMeasurementGeometry().unitPreferenceKey,drawing={key:key??"",...identity};
  const[doc,setDoc]=useState(()=>newTakeoff(drawing,sourceUnit)),docRef=useRef(doc);docRef.current=doc;
@@ -33,6 +35,7 @@ export const TakeoffEditor=forwardRef<TakeoffHandle,Props>(function TakeoffEdito
  const[pickingColor,setPickingColor]=useState(false);
  const[exporting,setExporting]=useState(false),exportLock=useRef(false);
  const[form,setForm]=useState<Form|null>(null),[values,setValues]=useState<string[]>([]),[specUnits,setSpecUnits]=useState<SpecificationUnit[]>([]),[formError,setFormError]=useState(""),[unitChange,setUnitChange]=useState<MeasurementUnit|null>(null);
+ const[dimensionConfirmation,setDimensionConfirmation]=useState<DimensionConfirmation|null>(null),confirmationElement=useRef<HTMLElement>(null);
  const[busy,setBusy]=useState(false),[saveError,setSaveError]=useState(""),[saved,setSaved]=useState(false),lock=useRef(false),mounted=useRef(true),history=useRef(new UndoHistory<TakeoffDocument>());
  const failed=useRef<{next:TakeoffDocument;record:boolean;done?:()=>void;rollback?:()=>void}|null>(null);
  const svg=useRef<SVGSVGElement>(null),target=useRef<SVGSVGElement>(null),preview=useRef<MeasurementPick|null>(null),dragPreview=useRef<TakeoffObject|null>(null),[dragging,setDragging]=useState(false),renderRef=useRef<()=>void>(()=>{}),firstInput=useRef<HTMLInputElement>(null);
@@ -54,13 +57,14 @@ export const TakeoffEditor=forwardRef<TakeoffHandle,Props>(function TakeoffEdito
   finally{lock.current=false;if(mounted.current)setBusy(false);}
  };
  const commit=(next:TakeoffDocument,done?:()=>void)=>{if(!blocked())void persist(next,true,done);};
- const cancelDraft=()=>{setPickingColor(false);setDraft([]);preview.current=null;setForm(null);setFormError("");setVertex(null);renderRef.current();};
+ const cancelDraft=()=>{setPickingColor(false);setDraft([]);preview.current=null;setForm(null);setDimensionConfirmation(null);setFormError("");setVertex(null);renderRef.current();};
  const resetTool=(value:typeof tool)=>{viewer.cancelInteraction();cancelDraft();setTool(value);setNotice("");};
  const deleteObject=()=>{if(blocked()||!selected)return;commit({...docRef.current,objects:docRef.current.objects.filter(o=>o.id!==selected)},()=>{setSelected(null);setVertex(null);});};
  const execute=(command:EditCommand)=>{if(blocked())return;if(command==="cancel"){cancelDraft();setSelected(null);setTool("select");return;}cancelDraft();const current=docRef.current,next=history.current[command](current);if(next)void persist(next,false,()=>setSelected(null),()=>{history.current[command==="undo"?"redo":"undo"](next);});};
  useImperativeHandle(ref,()=>({execute,showTools:()=>{onLayersHide();setOpen(true);},objectAction:command=>{if(command==="delete")deleteObject();else{resetTool("select");setOpen(true);}}}));
  useLayoutEffect(()=>{if(active)onHistory({canUndo:history.current.canUndo&&!busy&&!saveError,canRedo:history.current.canRedo&&!busy&&!saveError,selecting:tool==="select"||tool==="insert",canDelete:!!selectedObject&&!busy&&!saveError});},[active,doc,selected,busy,saveError,tool]);
  useLayoutEffect(()=>{if(form){firstInput.current?.focus();firstInput.current?.select();}},[form]);
+ useLayoutEffect(()=>{if(dimensionConfirmation)confirmationElement.current?.focus();},[dimensionConfirmation]);
  const saveObject=(object:TakeoffObject,existing:boolean,heightUnit?:SpecificationUnit)=>{
   const volume=calculationOf(object)==="volume",next={...doc,defaults:volume?{...doc.defaults,[object.kind]:object.dimensions}:doc.defaults,options:volume&&heightUnit?{...doc.options,heightUnit}:doc.options,objects:existing?doc.objects.map(o=>o.id===object.id?object:o):[...doc.objects,object]};
   commit(next,()=>{setSelected(object.id);setTool("select");cancelDraft();if(!existing)notifyTakeoffCompleted({drawingKey:doc.drawing.key,objectId:object.id,kind:object.kind});});
@@ -70,16 +74,17 @@ export const TakeoffEditor=forwardRef<TakeoffHandle,Props>(function TakeoffEdito
   if(!knownUnit(doc.unit)){setNotice("도면 1단위의 실제 단위를 선택한 후 확정하세요.");setOpen(true);return;}
   const error=geometryError(object.geometry.points,polygon(object));if(error){setNotice(error);return;}
   if(calculationOf(object)==="area"){if(!existing){try{quantity(object,doc.unit);saveObject(object,false);}catch(e){setNotice((e as Error).message);}}return;}
-  const input=dimensionInputs(object,doc.options.heightUnit,focus);setSpecUnits(input.units);setValues(input.values);setForm({object,existing,focus:input.focus});setFormError("");preview.current=null;
+  const input=dimensionInputs(object,doc.options.heightUnit,focus),previous=existing?object.dimensions:doc.objects.some(o=>o.kind===object.kind&&calculationOf(o)==="volume")?doc.defaults[object.kind]:undefined;setSpecUnits(input.units);setValues(input.values);setForm({object,existing,focus:input.focus,previous});setDimensionConfirmation(null);setFormError("");preview.current=null;
  };
  const finish=()=>{if(blocked()||tool==="select"||tool==="insert")return;finishPoints(draft);};
  const finishPoints=(points:P[])=>{if(blocked()||tool==="select"||tool==="insert")return;const closed=takeoffPolygon(tool,calculation);startForm({id:uid(),layerId:doc.activeLayerId,kind:tool,groupId:tool,calculation,geometry:{type:closed?"polygon":"path",points:cleanPoints(points,closed)},dimensions:calculation==="area"?{}:{...doc.defaults[tool]},label:{visible:true}},false);};
  const applyForm=()=>{if(!form||blocked())return;
-  try{const object=dimensionCandidate(form.object,values,specUnits);quantity(object,doc.unit);
-   const heightIndex=dimensionFields(object.kind).findIndex(f=>f.key==="heightMm");
-   saveObject(object,form.existing,heightIndex>=0?specUnits[heightIndex]:undefined);
-  }catch(e){setFormError(e instanceof Error?e.message:String(e));}
+  const review=reviewDimensions(form.object,values,specUnits,doc.unit,form.previous);if(!review.candidate){setFormError(review.error);return;}
+  const heightIndex=dimensionFields(form.object.kind).findIndex(f=>f.key==="heightMm"),heightUnit=heightIndex>=0?specUnits[heightIndex]:undefined;
+  if(review.warnings.length)setDimensionConfirmation({object:review.candidate,existing:form.existing,heightUnit,warnings:review.warnings,revision:docRef.current.revision});
+  else saveObject(review.candidate,form.existing,heightUnit);
  };
+ const confirmDimensions=()=>{if(!dimensionConfirmation||blocked())return;const pending=dimensionConfirmation;setDimensionConfirmation(null);if(pending.revision!==docRef.current.revision){setFormError("적산이 변경되었습니다. 규격을 다시 확인하세요.");return;}saveObject(pending.object,pending.existing,pending.heightUnit);};
  const hit=(point:P)=>{let found:TakeoffObject|null=null,best=viewer.worldTolerance(14);for(const o of [...visible].reverse()){const p=o.geometry.points;for(let i=1;i<p.length+(polygon(o)?1:0);i++){const d=pointSegmentDistance(point,p[i-1],p[i%p.length]);if(d<=best){found=o;best=d;}}if(!found&&polygon(o)&&insidePolygon(point,p))found=o;}return found;};
  const pick=(pick:MeasurementPick)=>{
   if(blocked()||form)return;
@@ -147,7 +152,7 @@ export const TakeoffEditor=forwardRef<TakeoffHandle,Props>(function TakeoffEdito
  const selectLayer=(id:string)=>{cancelDraft();setSelected(null);commit({...doc,activeLayerId:id,layers:doc.layers.map(l=>l.id===id?{...l,visible:true}:l)});};
  const layerButton=()=>{setOpen(false);onLayersToggle();};
  const compact=<div className="takeoff-compact"><button aria-label="적산 도구 펼치기" onClick={()=>{onLayersHide();setOpen(v=>!v);}} title={`${currentLayer.name} · ${pickingColor?"색상 선택":tool==="select"?"선택":tool==="insert"?"점 추가":NAMES[tool]}`}><ToolIcon name={tool==="select"?"select":tool==="insert"?"polyline":takeoffPolygon(tool,calculation)?"area":"polyline"}/>{draft.length?<b className="status-count" aria-hidden="true">{draft.length}</b>:null}<span className="sr-only">적산 · {pickingColor?"색상 선택":tool==="select"?"선택":tool==="insert"?"점 추가":NAMES[tool]}</span><small className="sr-only">{currentLayer.name}</small></button><button type="button" className="takeoff-label-toggle" aria-label="적산 물량 라벨 표시" aria-pressed={doc.options.labelsVisible!==false} title={doc.options.labelsVisible!==false?"물량 라벨 숨기기":"물량 라벨 표시"} disabled={blocked()} onClick={()=>toggleOption({labelsVisible:doc.options.labelsVisible===false})}><VisibilityIcon/></button>{draft.length?<><button className="takeoff-finish" disabled={blocked()} onClick={finish}>완료</button><button aria-label="적산 이전 점 취소" onClick={()=>setDraft(p=>p.slice(0,-1))}>↶</button></>:null}</div>;
- let formPreview:TakeoffObject|null=null;if(form)try{const candidate=dimensionCandidate(form.object,values,specUnits);quantity(candidate,doc.unit);formPreview=candidate;}catch{/* Invalid partial input is not a saved result. */}
+ const formReview=form?reviewDimensions(form.object,values,specUnits,doc.unit,form.previous):null,formPreview=formReview?.candidate??null;
  return <>
   <svg ref={svg} className="takeoff-overlay" aria-hidden="true"/><svg ref={target} className="takeoff-overlay measurement-overlay takeoff-target" aria-hidden="true"/>
   {active?<button type="button" className={`active-layer-badge takeoff-layer-badge ${currentLayer.visible?"":"layer-hidden"}`} aria-label={`적산 레이어 열기 · ${currentLayer.name}`} aria-controls="arcad-layer-panel" aria-expanded={layersOpen} onClick={layerButton} title={currentLayer.name}>적{doc.layers.findIndex(l=>l.id===currentLayer.id)+1}</button>:null}
@@ -180,10 +185,12 @@ export const TakeoffEditor=forwardRef<TakeoffHandle,Props>(function TakeoffEdito
    {revisions.length?<div className="takeoff-modal"><section role="dialog" aria-modal="true" aria-label="도면 개정 확인"><h3>같은 이름의 다른 도면입니다</h3><p>내용 식별자가 다릅니다. 이전 적산을 이 도면에 자동 적용하지 않습니다.</p><p>이전 적산 {revisions.reduce((n,r)=>n+r.count,0)}개는 원래 도면에 보존됩니다.</p><button disabled={busy||!!saveError} onClick={()=>void persist(doc,false,()=>setRevisions([]))}>새 도면으로 적산 시작</button></section></div>:null}
    {unitChange?<div className="takeoff-modal"><section role="dialog" aria-modal="true" aria-label="적산 단위 변경 확인"><h3>도면 단위를 변경할까요?</h3><p>좌표는 유지하고 모든 저장 객체의 길이·면적·물량을 {unitChange} 기준으로 다시 계산합니다.</p><button onClick={()=>setUnitChange(null)}>취소</button><button onClick={()=>{const unit=unitChange;commit({...doc,unit},()=>setUnitChange(null));}}>변경·다시 계산</button></section></div>:null}
    {form?<div className="takeoff-modal"><form className="takeoff-dimensions" role="dialog" aria-modal="true" aria-label={`${NAMES[form.object.kind]} 적산 규격`} onSubmit={e=>{e.preventDefault();applyForm();}}><h3>{NAMES[form.object.kind]} · {form.existing?"규격 수정":"물량 확정"}</h3><small>도면 단위: {doc.unit} · 중첩·개구부 공제 전</small>
-    {dimensionFields(form.object.kind).map((field,i)=><label key={field.key}>{field.label}<input ref={i===form.focus?firstInput:undefined} aria-label={field.label} inputMode="decimal" autoComplete="off" value={values[i]??""} disabled={busy} onChange={e=>{setValues(p=>p.map((s,j)=>j===i?e.target.value:s));setFormError("");}}/><select aria-label={`${NAMES[form.object.kind]} ${field.label} 단위`} value={specUnits[i]} disabled={busy} onChange={e=>{const next=e.target.value as SpecificationUnit;setValues(p=>p.map((s,j)=>j===i?convertDimensionInput(s,specUnits[i],next):s));setSpecUnits(p=>p.map((s,j)=>j===i?next:s));setFormError("");}}><option>m</option><option>mm</option></select></label>)}
-    <section className="takeoff-form-preview" aria-label="규격 변경 산식 미리보기"><small>미리보기 · 적용하면 물량과 합계에 반영됩니다.</small>{formPreview?<TakeoffFormula object={formPreview} unit={doc.unit} measurementUnit={sourceUnit}/>:<p role="status">0보다 큰 규격을 입력하면 산식이 표시됩니다.</p>}</section>
-    {formError?<p role="alert">{formError}</p>:null}<div><button type="button" disabled={busy} onClick={cancelDraft}>취소</button><button type="submit" disabled={busy||!!saveError||!formPreview}>{form.existing?"적용·저장":"확정·저장"}</button></div>
+    {dimensionFields(form.object.kind).map((field,i)=><label key={field.key}>{field.label}<input ref={i===form.focus?firstInput:undefined} aria-label={field.label} inputMode="decimal" autoComplete="off" value={values[i]??""} disabled={busy||!!dimensionConfirmation} onChange={e=>{setValues(p=>p.map((s,j)=>j===i?e.target.value:s));setFormError("");}}/><select aria-label={`${NAMES[form.object.kind]} ${field.label} 단위`} value={specUnits[i]} disabled={busy||!!dimensionConfirmation} onChange={e=>{const next=e.target.value as SpecificationUnit;setValues(p=>p.map((s,j)=>j===i?convertDimensionInput(s,specUnits[i],next):s));setSpecUnits(p=>p.map((s,j)=>j===i?next:s));setFormError("");}}><option>m</option><option>mm</option></select></label>)}
+    {formReview?.warnings.length?<ul className="takeoff-dimension-warnings" role="status">{formReview.warnings.map(w=><li key={w.code+w.message}>{w.message}</li>)}</ul>:null}
+    <section className="takeoff-form-preview" aria-label="규격 변경 산식 미리보기"><small>미리보기 · 적용하면 물량과 합계에 반영됩니다.</small>{formPreview?<TakeoffFormula object={formPreview} unit={doc.unit} measurementUnit={sourceUnit}/>:<p className="takeoff-dimension-invalid" role="status">{formReview?.error}</p>}</section>
+    {formError?<p role="alert">{formError}</p>:null}<div><button type="button" disabled={busy} onClick={cancelDraft}>취소</button><button type="submit" disabled={busy||!!saveError||!formPreview||!!dimensionConfirmation}>{form.existing?"적용·저장":"확정·저장"}</button></div>
    </form></div>:null}
+   {dimensionConfirmation?<div className="takeoff-modal takeoff-confirmation"><section ref={confirmationElement} tabIndex={-1} role="alertdialog" aria-modal="true" aria-labelledby="takeoff-dimension-confirm-title" onKeyDown={e=>{if(e.key==="Escape")setDimensionConfirmation(null);}}><h3 id="takeoff-dimension-confirm-title">{dimensionConfirmation.warnings.some(w=>w.code==="previous-size")?"앞서 입력한 규격과 다릅니다. 적용하겠습니까?":"입력 단위와 규격을 확인하세요"}</h3><ul className="takeoff-dimension-warnings">{dimensionConfirmation.warnings.map(w=><li key={w.code+w.message}>{w.message}</li>)}</ul><TakeoffFormula object={dimensionConfirmation.object} unit={doc.unit} measurementUnit={sourceUnit}/><div className="takeoff-confirm-actions"><button type="button" disabled={busy} onClick={()=>setDimensionConfirmation(null)}>돌아가서 수정</button><button type="button" className="takeoff-confirm-apply" disabled={blocked()} onClick={confirmDimensions}>확인 후 적용</button></div></section></div>:null}
   </>:null}
   {(active||layersOpen)&&loadError?<div className="takeoff-error" role="alert">{loadError}<button onClick={()=>reload(n=>n+1)}>다시 불러오기</button></div>:null}
   {(active||layersOpen)&&saveError?<div className="takeoff-error" role="alert">{saveError}<button disabled={busy} onClick={()=>{const p=failed.current;if(p)void persist(p.next,p.record,p.done,p.rollback);}}>저장 다시 시도</button><button disabled={busy} onClick={()=>{failed.current?.rollback?.();failed.current=null;setSaveError("");cancelDraft();}}>변경 취소</button></div>:null}
