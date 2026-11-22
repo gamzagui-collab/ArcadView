@@ -659,6 +659,9 @@ export function App() {
         selecting={(annotationActive||takeoffActive)&&editHistory.selecting} canDelete={(annotationActive||takeoffActive)&&editHistory.canDelete}
         onSelect={()=>{setLayersOpen(false);viewerRef.current?.objectAction?.("select");setAnnotationOpen(false);}}
         onDelete={()=>viewerRef.current?.objectAction?.("delete")}
+        objectTool={annotationActive?editHistory.objectTool:undefined}
+        onMove={()=>{setLayersOpen(false);viewerRef.current?.objectAction?.("move");setAnnotationOpen(false);}}
+        onRotate={()=>{setLayersOpen(false);viewerRef.current?.objectAction?.("rotate");setAnnotationOpen(false);}}
         canUndo={measurement.enabled&&!annotationActive&&!takeoffActive?measurementHistory.current.canUndo:editHistory.canUndo}
         canRedo={measurement.enabled&&!annotationActive&&!takeoffActive?measurementHistory.current.canRedo:editHistory.canRedo}
         onUndo={()=>handleEditCommand("undo")} onRedo={()=>handleEditCommand("redo")} onCancel={()=>handleEditCommand("cancel")} onSettingsOpen={()=>viewerRef.current?.cancelGesture?.()}
