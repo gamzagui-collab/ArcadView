@@ -10,11 +10,11 @@ export function drawTakeoff(svg:SVGSVGElement,doc:TakeoffDocument,selected:strin
  const ns="http://www.w3.org/2000/svg",nodes:SVGElement[]=[],el=(tag:string,attrs:Record<string,string|number>,parent?:SVGElement)=>{const e=document.createElementNS(ns,tag);for(const[k,v]of Object.entries(attrs))e.setAttribute(k,String(v));if(parent)parent.append(e);else nodes.push(e);return e;};
  for(const o of [...doc.objects.filter(o=>takeoffVisible(doc,o)&&o.id!==draft?.id),...draft?[draft]:[]]){
   const group=doc.groups.find(g=>g.id===o.groupId)!,color=group.color,chosen=active&&o.id===selected,world=o.geometry.points,points=project(world),closed=isAreaKind(o.kind),coords=points.map(p=>`${p.x},${p.y}`).join(" "),tag=closed?"polygon":"polyline";
-  if(closed)el("polygon",{points:coords,fill:color,"fill-opacity":.13,stroke:"none","data-takeoff":o.id});
-  el(tag,{points:coords,fill:"none",stroke:"#04101e","stroke-width":chosen?9:7,"stroke-linejoin":"round","stroke-linecap":"round"});
-  el(tag,{points:coords,fill:"none",stroke:color,"stroke-width":chosen?5:3,"stroke-linejoin":"round","stroke-linecap":"round","data-takeoff":o.id});
-  el(tag,{points:coords,fill:"none",stroke:"#f2fbff","stroke-width":.7,"stroke-opacity":.75});
-  points.forEach((p,i)=>{el("circle",{cx:p.x,cy:p.y,r:chosen?6:4,style:`fill:none;stroke:${color};stroke-width:1.6`,"data-takeoff-vertex":i,"data-takeoff":o.id});el("circle",{cx:p.x,cy:p.y,r:1.2,style:"fill:white;stroke:none"});});
+  if(closed)el("polygon",{points:coords,fill:color,"fill-opacity":.13,stroke:"none","data-takeoff":o.id,class:"takeoff-area-fill"});
+  el(tag,{points:coords,fill:"none",stroke:"#04101e","stroke-width":chosen?9:7,"stroke-linejoin":"round","stroke-linecap":"round",class:"takeoff-line-halo"});
+  el(tag,{points:coords,fill:"none",stroke:color,"stroke-width":chosen?5:3,"stroke-linejoin":"round","stroke-linecap":"round","data-takeoff":o.id,class:"takeoff-line-color"});
+  el(tag,{points:coords,fill:"none",stroke:"#f2fbff","stroke-width":.7,"stroke-opacity":.75,class:"takeoff-line-center"});
+  points.forEach((p,i)=>{el("circle",{cx:p.x,cy:p.y,r:chosen?6:4,style:`fill:none;stroke:${color};stroke-width:1.6`,"data-takeoff-vertex":i,"data-takeoff":o.id,class:"takeoff-vertex-ring"});el("circle",{cx:p.x,cy:p.y,r:1.2,style:"fill:white;stroke:none",class:"takeoff-vertex-dot"});});
   if(doc.options.labelsVisible!==false&&o.label.visible){let text:string,formula:string;try{const q=quantity(o,doc.unit),d=o.dimensions;text=`${q.volumeM3.toFixed(3)} m³`;formula=(o.kind==="wall"?`L ${q.lengthM.toFixed(2)} × H ${(d.heightMm!*.001).toFixed(2)} × T ${(d.thicknessMm!*.001).toFixed(2)}`:o.kind==="beam"?`L ${q.lengthM.toFixed(2)} × W ${(d.widthMm!*.001).toFixed(2)} × D ${(d.depthMm!*.001).toFixed(2)}`:o.kind==="column"?`A ${q.areaM2.toFixed(2)} m² × H ${(d.heightMm!*.001).toFixed(2)} m`:`A ${q.areaM2.toFixed(2)} m² × T ${(d.thicknessMm!*.001).toFixed(2)} m`)+` = ${text}`;}catch{text="규격 확인";formula=text;}
    const anchor=project([labelPosition(o)])[0],width=Math.min(172,Math.max(64,text.length*6+14)),height=22;
    const p={x:anchor.x,y:closed?anchor.y+height/2:anchor.y-18},left=p.x-width/2,top=p.y-height;

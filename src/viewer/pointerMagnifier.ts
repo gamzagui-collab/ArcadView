@@ -2,6 +2,13 @@ import{MAGNIFIER_WIDTHS,readViewerPreferences,VIEWER_PREFERENCES_EVENT}from'./vi
 type Point={x:number;y:number};
 type Rect=Point&{width:number;height:number};
 export const MAGNIFIER_ZOOM=5;
+/** Reserve a readable totals card below the lens on short landscape screens. */
+export function magnifierStack(width:number,maxWidth:number,top:number,bottom:number,summaryHeight=0){
+ const border=3,gap=8,reserve=summaryHeight?summaryHeight+gap:0;
+ const height=Math.max(border,bottom-top-reserve),w=Math.max(border,Math.min(width,maxWidth,(height-border)*4/3+border));
+ const summaryTop=top+(w-border)*3/4+border+gap;
+ return{width:w,summaryTop,summaryHeight:Math.max(0,bottom-summaryTop)};
+}
 /** Keep the snapped point at the exact centre, including near viewport edges. */
 export function magnifierRegion(point:Point,width:number,height:number):Rect{
  return{x:point.x-width/MAGNIFIER_ZOOM/2,y:point.y-height/MAGNIFIER_ZOOM/2,width:width/MAGNIFIER_ZOOM,height:height/MAGNIFIER_ZOOM};
@@ -27,6 +34,8 @@ export class PointerMagnifier{
  private shell:Element|null;
  private id='arcad-lens-'+(++nextId)+'-';
  private prefs=readViewerPreferences();
+ private resize:ResizeObserver;
+ private resized=()=>{if(this.point&&!this.frame)this.frame=requestAnimationFrame(()=>{this.frame=0;if(this.point){this.tile=null;this.draw(this.point);}});};
  private syncPreferences=()=>{this.prefs=readViewerPreferences();this.host.dataset.size=this.prefs.magnifierSize;this.host.style.setProperty('--magnifier-width',MAGNIFIER_WIDTHS[this.prefs.magnifierSize]+'px');if(!this.prefs.magnifierEnabled)this.hide();else if(this.point&&!this.frame)this.frame=requestAnimationFrame(()=>{this.frame=0;if(this.point)this.draw(this.point);});};
  constructor(private parent:HTMLElement,private source:HTMLCanvasElement,private render:()=>void,private cadVisible:()=>boolean){
   this.host=document.createElement('div');this.host.className='pointer-magnifier';this.host.hidden=true;this.host.setAttribute('aria-hidden','true');
@@ -38,6 +47,7 @@ export class PointerMagnifier{
   this.body.append(this.canvas,this.vectors,reticle,zoom);this.host.append(this.body);this.parent.append(this.host);
   this.tileCanvas=document.createElement('canvas');this.tileCanvas.width=this.tileCanvas.height=1;this.shell=parent.closest('.viewer-shell');
   this.syncPreferences();window.addEventListener(VIEWER_PREFERENCES_EVENT,this.syncPreferences);window.addEventListener('storage',this.syncPreferences);
+  this.resize=new ResizeObserver(this.resized);for(const e of [this.host,this.parent,...this.shell?[this.shell]:[]])this.resize.observe(e);window.addEventListener('resize',this.resized);window.visualViewport?.addEventListener('resize',this.resized);
  }
  show(point:Point,world:Point,snapped:string|null){
   if(!this.prefs.magnifierEnabled){this.hide();return;}
@@ -49,9 +59,21 @@ export class PointerMagnifier{
  hide(){
   cancelAnimationFrame(this.frame);this.frame=0;this.point=null;this.host.hidden=true;this.shell?.classList.remove('precision-lens-active');
   this.vectors.replaceChildren();this.tile=null;this.tileCanvas.width=this.tileCanvas.height=1;
+  if(this.shell instanceof HTMLElement){this.shell.style.removeProperty('--precision-summary-top');this.shell.style.removeProperty('--precision-summary-height');}
  }
- destroy(){window.removeEventListener(VIEWER_PREFERENCES_EVENT,this.syncPreferences);window.removeEventListener('storage',this.syncPreferences);this.hide();this.canvas.width=this.canvas.height=1;this.host.remove();}
+ destroy(){this.resize.disconnect();window.removeEventListener('resize',this.resized);window.visualViewport?.removeEventListener('resize',this.resized);window.removeEventListener(VIEWER_PREFERENCES_EVENT,this.syncPreferences);window.removeEventListener('storage',this.syncPreferences);this.hide();this.canvas.width=this.canvas.height=1;this.host.remove();}
+ private layout(){
+  if(!(this.shell instanceof HTMLElement))return;
+  const shell=this.shell.getBoundingClientRect(),top=this.host.getBoundingClientRect().top,nav=this.shell.querySelector('.viewer-toolbar')?.getBoundingClientRect(),bottom=(nav?.top??shell.bottom-62)-8,summary=this.shell.querySelector<HTMLElement>('.takeoff-summary');
+  const rows=summary?.querySelector<HTMLElement>(':scope > div'),border=summary?parseFloat(getComputedStyle(summary).borderTopWidth)+parseFloat(getComputedStyle(summary).borderBottomWidth):0;
+  const needed=summary?Math.max(summary.classList.contains('collapsed')?30:108,summary.scrollHeight+border+(rows?rows.scrollHeight-rows.clientHeight:0)):0;
+  const stack=magnifierStack(MAGNIFIER_WIDTHS[this.prefs.magnifierSize],shell.width-20,top,bottom,needed);
+  this.host.style.setProperty('--magnifier-layout-width',stack.width.toFixed(2)+'px');
+  const next=this.host.getBoundingClientRect().bottom+8,parent=(summary?.offsetParent??this.parent)as HTMLElement,origin=parent.getBoundingClientRect().top+parent.clientTop;
+  this.shell.style.setProperty('--precision-summary-top',(next-origin).toFixed(2)+'px');this.shell.style.setProperty('--precision-summary-height',Math.max(0,bottom-next).toFixed(2)+'px');
+ }
  private draw(point:Point){
+  this.layout();
   const r=this.source.getBoundingClientRect(),b=this.body.getBoundingClientRect(),width=b.width,height=b.height;
   if(!r.width||!r.height||!width||!height)return;
   const dpr=Math.min(2,window.devicePixelRatio||1),region=magnifierRegion(point,width,height),ctx=this.canvas.getContext('2d');if(!ctx)return;
@@ -79,7 +101,7 @@ export class PointerMagnifier{
    for(const e of svg.children){
     if(e.matches('.measurement-target,.measurement-target-cross'))continue;
     // The lens has its own fine reticle; don't magnify the active dot/ring over the CAD detail.
-    if(e.matches('.measurement-point-ring,.measurement-point-dot')&&Math.hypot(Number(e.getAttribute('cx'))-point.x,Number(e.getAttribute('cy'))-point.y)<.01)continue;
+    if(e.matches('.measurement-point-ring,.measurement-point-dot,.takeoff-vertex-ring,.takeoff-vertex-dot')&&Math.hypot(Number(e.getAttribute('cx'))-point.x,Number(e.getAttribute('cy'))-point.y)<.01)continue;
     const a=e.getBoundingClientRect();
     if(e.tagName.toLowerCase()!=='defs'&&(a.right<r.left+region.x-3||a.left>r.left+region.x+region.width+3||a.bottom<r.top+region.y-3||a.top>r.top+region.y+region.height+3))continue;
     const copy=e.cloneNode(true) as SVGElement,originals=[e,...e.querySelectorAll('*')],clones=[copy,...copy.querySelectorAll('*')];
@@ -90,6 +112,17 @@ export class PointerMagnifier{
      if(clone.id)clone.id=this.id+clone.id;
      const mask=original.getAttribute('mask');if(mask)clone.style.setProperty('mask',mask.replace(/#([^)'"\s]+)/g,'#'+this.id+'$1'));
      for(const name of ['width','height'])if(clone.getAttribute(name)==='100%')clone.setAttribute(name,String(name==='width'?r.width:r.height));
+     // Magnify geometry, not UI pen widths or opaque marker halos. Keep the
+     // white measuring centreline visible through every hollow point ring.
+     if(original.matches('.measurement-line-halo,.measurement-line-rails,.measurement-line-core,.measurement-extension-halo,.measurement-right-angle-halo,.measurement-area-fill,.measurement-value-badge,.measurement-value-label,.measurement-point-number,.annotation-halo,.point-mark-halo,.takeoff-line-halo,.takeoff-line-color,.takeoff-area-fill,[data-takeoff-label],.annotation-grip-halo,[data-grip]'))clone.style.display='none';
+     if(!original.closest('defs')&&style.stroke!=='none'){
+      clone.style.setProperty('vector-effect','non-scaling-stroke');clone.style.setProperty('stroke-width',String(Math.min(1.25,parseFloat(style.strokeWidth)||1)));
+     }
+     if(original.matches('.measurement-line-highlight,.measurement-extension,.measurement-right-angle,.takeoff-line-center')){clone.style.stroke='#fff';clone.style.setProperty('stroke-width','1.25');clone.style.setProperty('stroke-opacity','1');}
+     if(original.matches('.measurement-point-ring,.takeoff-vertex-ring')){clone.setAttribute('r',String(6.5/MAGNIFIER_ZOOM));clone.style.fill='none';clone.style.setProperty('stroke-width','1');}
+     if(original.matches('.measurement-point-dot,.takeoff-vertex-dot')){clone.setAttribute('r',String(1.5/MAGNIFIER_ZOOM));clone.style.fill='#fff';clone.style.stroke='none';}
+     if(original.matches('[data-free-move],[data-takeoff-move]'))clone.style.fill='none';
+     if(original.tagName.toLowerCase()==='circle'&&original.closest('mask')?.id.startsWith('arcad-point-window-'))clone.setAttribute('r',String(5.5/MAGNIFIER_ZOOM));
     });copies.push(copy);
    }
   }

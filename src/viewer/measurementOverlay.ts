@@ -48,7 +48,7 @@ export function drawMeasurementOverlay(svg: SVGSVGElement, settings: Measurement
     // Hollow rings retain the drawing around a precise, small centre dot.
     make("circle", { cx: p.x, cy: p.y, r: 6.5, class: "measurement-point-ring", "data-point": i + 1 });
     make("circle", { cx: p.x, cy: p.y, r: 1.7, class: "measurement-point-dot" });
-    make("text", { x: p.x + 12, y: p.y - 12 }).textContent = String(i + 1);
+    make("text", { x: p.x + 12, y: p.y - 12, class:"measurement-point-number" }).textContent = String(i + 1);
   });
   if (preview) {
     const p = project([preview.point])[0];

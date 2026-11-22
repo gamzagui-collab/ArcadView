@@ -123,14 +123,23 @@
 .viewer-shell .layer-panel :is(.add-user-layer,.add-takeoff-layer){background:#173e5b;color:#b6e5ff;border-color:#46718e}
 
 /* Pointer-only, upper-right precision lens. Existing pan/pinch gestures remain intact. */
-.pointer-magnifier{position:absolute;z-index:24;right:10px;top:var(--precision-top,calc(54px + env(safe-area-inset-top)));width:min(var(--magnifier-width,208px),calc(100% - 20px),calc((100dvh - var(--precision-top,54px) - 80px)*1.3333));border:1.5px solid #79d9ff;border-radius:12px;background:#0b1118;box-shadow:0 4px 18px #0008;pointer-events:none;overflow:hidden}
+.pointer-magnifier{position:absolute;z-index:24;right:10px;top:var(--precision-top,calc(54px + env(safe-area-inset-top)));width:min(var(--magnifier-layout-width,var(--magnifier-width,208px)),calc(100% - 20px));border:1.5px solid #79d9ff;border-radius:12px;background:#0b1118;box-shadow:0 4px 18px #0008;pointer-events:none;overflow:hidden}
 .pointer-magnifier[hidden]{display:none}
 .pointer-magnifier-view{position:relative;width:100%;aspect-ratio:4/3;overflow:hidden}
 .drawing-canvas .pointer-magnifier-raster,.drawing-canvas .pointer-magnifier-vectors{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
 .pointer-magnifier-reticle{position:absolute;left:50%;top:50%;width:14px;height:14px;transform:translate(-50%,-50%);border:1px solid #8de2ff;border-radius:50%;box-shadow:0 0 0 1px #041421}
 .pointer-magnifier-reticle:before{content:'';position:absolute;inset:5px;border-radius:50%;background:white;box-shadow:0 0 1px #000}
 .pointer-magnifier-zoom{position:absolute;right:4px;top:3px;padding:1px 4px;border-radius:4px;background:#10283ee6;color:#b9e9ff;font-size:10px;line-height:16px}
-.precision-lens-active .takeoff-summary{visibility:hidden;pointer-events:none}
+.viewer-shell.precision-lens-active .takeoff-summary{top:var(--precision-summary-top,calc(var(--precision-top,54px) + 170px));max-height:var(--precision-summary-height,180px);overflow:auto;visibility:visible;pointer-events:auto}
+.precision-lens-active .takeoff-summary:not(.collapsed){display:flex;flex-direction:column}
+.precision-lens-active .takeoff-summary>div{min-height:0;flex:0 1 auto;overflow:auto;scrollbar-width:thin}
+.precision-lens-active .takeoff-summary>:not(div){flex-shrink:0}
+@media(max-height:420px){
+ .precision-lens-active .takeoff-summary:not(.collapsed)>small,.precision-lens-active .takeoff-summary .takeoff-current-total{display:none}
+ .precision-lens-active .takeoff-summary:not(.collapsed) .takeoff-summary-heading{min-height:20px}
+ .precision-lens-active .takeoff-summary>div>button{min-height:14px;height:14px;padding:0;font-size:10px;line-height:14px}
+ .precision-lens-active .takeoff-summary>div>button b{font-size:10px}
+}
 
 .geometry-edit-dialog,.text-color-palette{color-scheme:dark;background:#10283ef5;color:#dcefff;border-color:#427392}
 .geometry-edit-dialog :is(h2,p,label),.text-color-palette header{color:#c7e6fb}

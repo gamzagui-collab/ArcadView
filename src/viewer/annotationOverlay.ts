@@ -58,7 +58,7 @@ export function drawAnnotations(svg:SVGSVGElement,doc:AnnotationDocument,selecte
       const grips=objectGrips(o),step=Math.max(1,Math.ceil(grips.length/512));
       for(const[g,i]of grips.map((g,i)=>[g,i]as const).filter(([,i])=>i%step===0||i===grips.length-1)){
         const p=project([g.point])[0];if(p.x< -10||p.x>svg.clientWidth+10||p.y< -10||p.y>svg.clientHeight+10)continue;
-        el("rect",{x:p.x-6,y:p.y-6,width:12,height:12,rx:2,fill:"#03101d",stroke:"#03101d","stroke-width":3});
+        el("rect",{x:p.x-6,y:p.y-6,width:12,height:12,rx:2,fill:"#03101d",stroke:"#03101d","stroke-width":3,class:"annotation-grip-halo"});
         el("rect",{x:p.x-4,y:p.y-4,width:8,height:8,fill:"#fff",stroke:color,"stroke-width":1.5,"data-grip":g.id,"data-grip-index":i,"data-object":o.id});
       }
       const p=moveHandlePosition(o,project,svg.clientWidth,svg.clientHeight);
