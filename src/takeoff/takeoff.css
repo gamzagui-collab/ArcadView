@@ -69,3 +69,5 @@
 .takeoff-color-pick{margin-bottom:6px;min-height:30px}.takeoff-object-layer{display:flex;align-items:center;gap:7px;font-size:11px;margin:6px 0}.takeoff-object-layer select{min-width:0;max-width:75%}
 
 .takeoff-tool-row button{min-width:0;flex-direction:column;min-height:40px;gap:2px;padding:4px 2px}.takeoff-export-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:7px 0}.takeoff-export-row small{font-size:10px;color:#8baac2}.takeoff-panel .takeoff-export,.takeoff-layer-panel .takeoff-export{min-height:30px;padding:5px 10px;border:1px solid #467fa8;border-radius:6px;background:#15547a;color:#e0f6ff;font-size:11px}.takeoff-export:disabled{opacity:.4}
+
+.takeoff-calculation{display:flex;gap:14px;align-items:center;padding:4px 0 7px;font-size:12px;color:#dcefff}.takeoff-calculation label{display:flex;align-items:center;gap:5px;cursor:pointer}.takeoff-calculation input{width:17px;height:17px;margin:0;accent-color:#37c7fa}.takeoff-summary .takeoff-summary-heading{white-space:nowrap}.takeoff-summary b{min-width:0;max-width:95px;overflow-wrap:anywhere;text-align:right}.takeoff-layer-row small b{white-space:normal}

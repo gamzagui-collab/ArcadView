@@ -48,3 +48,8 @@ it("reopens original CAD colors and object layer transfers with identical geomet
  await saveTakeoff(before);const after=moveTakeoffToLayer(before,"W01","second");after.options={...after.options,focus:true,keepColors:["#34aadc"]};await saveTakeoff(after);
  const restored=(await loadTakeoff(drawing,"mm")).document;expect(restored).toEqual(after);expect(totals(restored).volumeM3).toBe(12);expect(totals(restored).visibleVolumeM3).toBe(0);expect(before.objects[0].layerId).toBe(before.activeLayerId);
 });
+
+it("reopens mixed area/volume objects and the explicit calculation choice without deriving or storing fake specs",async()=>{
+ vi.stubGlobal("indexedDB",new IDBFactory());const d=newTakeoff(drawing,"m");d.options.calculation="area";d.objects=[{id:"area-wall",layerId:d.activeLayerId,kind:"wall",groupId:"wall",calculation:"area",geometry:{type:"polygon",points:[{x:0,y:0},{x:8,y:0},{x:8,y:5},{x:0,y:5}]},dimensions:{},label:{visible:true}},{id:"volume-wall",layerId:d.activeLayerId,kind:"wall",groupId:"wall",geometry:{type:"path",points:[{x:0,y:8},{x:20,y:8}]},dimensions:{heightMm:3000,thicknessMm:200},label:{visible:true}}];
+ await saveTakeoff(d);const restored=(await loadTakeoff(drawing,"mm")).document;expect(restored).toEqual(d);expect(totals(restored).volumeM3).toBe(12);expect(totals(restored).areaOnlyM2).toBe(40);expect(restored.objects[0].dimensions).toEqual({});expect(JSON.stringify(restored)).not.toContain("volumeM3");
+});

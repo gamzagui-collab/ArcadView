@@ -22,7 +22,7 @@ it('retains a hidden selected layer quantity and separates its visible subtotal'
 });
 it("W01=12.000, W02=8.000, B01=2.160, S01=7.200 and concrete total=29.360 m³",()=>{
  expect(quantity(w1,"mm")).toEqual({lengthM:20,areaM2:0,volumeM3:12});expect(quantity(w2,"mm").volumeM3).toBeCloseTo(8,12);expect(quantity(b1,"mm").volumeM3).toBeCloseTo(2.16,12);expect(quantity(s1,"mm")).toEqual({lengthM:0,areaM2:40,volumeM3:7.2});
- const d={...newTakeoff(drawing,"mm"),objects:[w1,w2,b1,s1]},t=totals(d);expect(t.groups.wall).toEqual({count:2,lengthM:30,areaM2:0,volumeM3:20});expect(t.volumeM3).toBeCloseTo(29.36,12);expect(t.groups.slab.areaM2).toBe(40);expect(t.groups.beam.lengthM).toBe(12);validateDocument(d);
+ const d={...newTakeoff(drawing,"mm"),objects:[w1,w2,b1,s1]},t=totals(d);expect(t.groups.wall).toEqual({count:2,lengthM:30,areaM2:0,volumeM3:20,areaOnlyM2:0});expect(t.volumeM3).toBeCloseTo(29.36,12);expect(t.groups.slab.areaM2).toBe(40);expect(t.groups.beam.lengthM).toBe(12);validateDocument(d);
 });
 it.each(["mm","cm","m","in","ft"]as MeasurementUnit[])("converts %s coordinates before computing length, squared area and volume",unit=>{
  const ratio=UNIT_METERS[unit],scale=(o:TakeoffObject)=>({...o,geometry:{...o.geometry,points:o.geometry.points.map(p=>({x:p.x*.001/ratio,y:p.y*.001/ratio}))}});

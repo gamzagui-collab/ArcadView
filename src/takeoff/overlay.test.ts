@@ -44,3 +44,7 @@ it("toggles only label graphics, preserving geometry, totals and individual visi
  f.doc.options.labelsVisible=true;f.draw();expect(f.labels()).toHaveLength(1);expect(f.labels()[0].attributes["data-takeoff-label"]).toBe("wall-visible");
  expect(()=>validateDocument({...f.doc,options:{...f.doc.options,labelsVisible:"false"}})).toThrow();
 });
+
+it("draws an area-mode wall as a filled closed polygon with an m² label and no height/thickness formula",()=>{
+ const f=labelFixture(),o=f.doc.objects[0];f.doc.objects=[{...o,calculation:"area",geometry:{type:"polygon",points:[{x:0,y:0},{x:8000,y:0},{x:8000,y:5000},{x:0,y:5000}]},dimensions:{}}];f.draw();expect(f.nodes().some(n=>n.attributes.class==="takeoff-area-fill")).toBe(true);const label=f.labels()[0];expect(label.children.some(n=>n.textContent==="40.000 m²")).toBe(true);expect(label.children.map(n=>n.textContent).join(" ")).not.toContain("m³");
+});
