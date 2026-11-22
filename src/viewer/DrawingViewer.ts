@@ -1,4 +1,5 @@
 import { DxfViewer } from "dxf-viewer";
+import {CadMagnifierDetail} from './magnifierDetail';
 import { Color, Vector3 } from "three";
 import {
   AppError,
@@ -106,7 +107,7 @@ export class DrawingViewer {
   private showMagnifier(pick:MeasurementPick|null):void{
     if(!pick){this.magnifier?.hide();if(this.magnifying){this.magnifying=false;if(this.ready&&!this.destroyed&&this.baseDrawingVisible)this.viewer.Render();}return;}
     this.magnifying=true;
-    if(!this.magnifier){const canvas=this.viewer.GetCanvas(),parent=canvas.parentElement?.closest<HTMLElement>('.drawing-canvas');if(!parent)return;this.magnifier=new PointerMagnifier(parent,canvas,()=>{const draw=()=>this.panCache?this.panCache.detail():this.viewer.Render();if(this.strokeStyle)this.strokeStyle.withExact(draw);else draw();},()=>this.baseDrawingVisible);}
+    if(!this.magnifier){const canvas=this.viewer.GetCanvas(),parent=canvas.parentElement?.closest<HTMLElement>('.drawing-canvas');if(!parent)return;this.magnifier=new PointerMagnifier(parent,canvas,()=>{const draw=()=>this.panCache?this.panCache.detail():this.viewer.Render();if(this.strokeStyle)this.strokeStyle.withExact(draw);else draw();},()=>this.baseDrawingVisible,new CadMagnifierDetail(this.viewer as any,(camera,width)=>{if((this.viewer as any).options.izcadCulling!==false)this.culler?.update(camera,width);else this.culler?.restore();},draw=>this.strokeStyle?this.strokeStyle.withExact(draw):draw()));}
     const point=pick.contact?.contact??pick.point;
     this.magnifier.show(this.projectPoints([point])[0],point,pick.snapped);
   }

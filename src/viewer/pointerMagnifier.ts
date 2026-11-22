@@ -1,6 +1,10 @@
 import{MAGNIFIER_WIDTHS,readViewerPreferences,VIEWER_PREFERENCES_EVENT}from'./viewerPreferences';
+import{MagnifierQuality}from'./magnifierQuality';
 type Point={x:number;y:number};
 type Rect=Point&{width:number;height:number};
+export type MagnifierPoint=Point;
+export type MagnifierRect=Rect;
+export interface MagnifierDetail{draw(output:HTMLCanvasElement,point:Point,width:number,height:number):{captureMs:number|null}|null;invalidate():void;dispose():void;}
 export const MAGNIFIER_ZOOM=5;
 /** Reserve a readable totals card below the lens on short landscape screens. */
 export function magnifierStack(width:number,maxWidth:number,top:number,bottom:number,summaryHeight=0){
@@ -30,6 +34,8 @@ export class PointerMagnifier{
  private tileCanvas:HTMLCanvasElement;
  private tile:Rect|null=null;
  private frame=0;
+ private idle:ReturnType<typeof setTimeout>|undefined;
+ private quality=new MagnifierQuality();
  private point:Point|null=null;
  private shell:Element|null;
  private id='arcad-lens-'+(++nextId)+'-';
@@ -37,7 +43,7 @@ export class PointerMagnifier{
  private resize:ResizeObserver;
  private resized=()=>{if(this.point&&!this.frame)this.frame=requestAnimationFrame(()=>{this.frame=0;if(this.point){this.tile=null;this.draw(this.point);}});};
  private syncPreferences=()=>{this.prefs=readViewerPreferences();this.host.dataset.size=this.prefs.magnifierSize;this.host.style.setProperty('--magnifier-width',MAGNIFIER_WIDTHS[this.prefs.magnifierSize]+'px');if(!this.prefs.magnifierEnabled)this.hide();else if(this.point&&!this.frame)this.frame=requestAnimationFrame(()=>{this.frame=0;if(this.point)this.draw(this.point);});};
- constructor(private parent:HTMLElement,private source:HTMLCanvasElement,private render:()=>void,private cadVisible:()=>boolean){
+ constructor(private parent:HTMLElement,private source:HTMLCanvasElement,private render:()=>void,private cadVisible:()=>boolean,private detail?:MagnifierDetail){
   this.host=document.createElement('div');this.host.className='pointer-magnifier';this.host.hidden=true;this.host.setAttribute('aria-hidden','true');
   this.body=document.createElement('div');this.body.className='pointer-magnifier-view';
   this.canvas=document.createElement('canvas');this.vectors=document.createElementNS(NS,'svg');
@@ -51,17 +57,19 @@ export class PointerMagnifier{
  }
  show(point:Point,world:Point,snapped:string|null){
   if(!this.prefs.magnifierEnabled){this.hide();return;}
+  this.quality.move(point,performance.now());clearTimeout(this.idle);this.idle=undefined;
   this.point=point;this.host.hidden=false;this.shell?.classList.add('precision-lens-active');
   this.host.dataset.worldX=String(world.x);this.host.dataset.worldY=String(world.y);this.host.dataset.snapped=snapped??'none';
   if(!this.frame)this.frame=requestAnimationFrame(()=>{this.frame=0;if(this.point)this.draw(this.point);});
  }
- invalidate(){this.tile=null;}
+ invalidate(){this.tile=null;this.detail?.invalidate();}
  hide(){
   cancelAnimationFrame(this.frame);this.frame=0;this.point=null;this.host.hidden=true;this.shell?.classList.remove('precision-lens-active');
+  clearTimeout(this.idle);this.idle=undefined;this.quality.reset();this.detail?.invalidate();
   this.vectors.replaceChildren();this.tile=null;this.tileCanvas.width=this.tileCanvas.height=1;
   if(this.shell instanceof HTMLElement){this.shell.style.removeProperty('--precision-summary-top');this.shell.style.removeProperty('--precision-summary-height');}
  }
- destroy(){this.resize.disconnect();window.removeEventListener('resize',this.resized);window.visualViewport?.removeEventListener('resize',this.resized);window.removeEventListener(VIEWER_PREFERENCES_EVENT,this.syncPreferences);window.removeEventListener('storage',this.syncPreferences);this.hide();this.canvas.width=this.canvas.height=1;this.host.remove();}
+ destroy(){this.resize.disconnect();window.removeEventListener('resize',this.resized);window.visualViewport?.removeEventListener('resize',this.resized);window.removeEventListener(VIEWER_PREFERENCES_EVENT,this.syncPreferences);window.removeEventListener('storage',this.syncPreferences);this.hide();this.detail?.dispose();this.canvas.width=this.canvas.height=1;this.host.remove();}
  private layout(){
   if(!(this.shell instanceof HTMLElement))return;
   const shell=this.shell.getBoundingClientRect(),top=this.host.getBoundingClientRect().top,nav=this.shell.querySelector('.viewer-toolbar')?.getBoundingClientRect(),bottom=(nav?.top??shell.bottom-62)-8,summary=this.shell.querySelector<HTMLElement>('.takeoff-summary');
@@ -79,7 +87,9 @@ export class PointerMagnifier{
   const dpr=Math.min(2,window.devicePixelRatio||1),region=magnifierRegion(point,width,height),ctx=this.canvas.getContext('2d');if(!ctx)return;
   const w=Math.round(width*dpr),h=Math.round(height*dpr);if(this.canvas.width!==w||this.canvas.height!==h){this.canvas.width=w;this.canvas.height=h;}
   ctx.setTransform(dpr,0,0,dpr,0,0);ctx.fillStyle=BG;ctx.fillRect(0,0,width,height);
+  this.host.dataset.quality='raster';
   if(this.cadVisible()){
+   const raster=()=>{
    const minX=Math.max(0,region.x),minY=Math.max(0,region.y),maxX=Math.min(r.width,region.x+region.width),maxY=Math.min(r.height,region.y+region.height);
    if(maxX>minX&&maxY>minY){
     if(!this.tile||minX<this.tile.x||minY<this.tile.y||maxX>this.tile.x+this.tile.width||maxY>this.tile.y+this.tile.height){
@@ -92,6 +102,14 @@ export class PointerMagnifier{
     }
     if(this.tile)ctx.drawImage(this.tileCanvas,(minX-this.tile.x)*this.tileCanvas.width/this.tile.width,(minY-this.tile.y)*this.tileCanvas.height/this.tile.height,(maxX-minX)*this.tileCanvas.width/this.tile.width,(maxY-minY)*this.tileCanvas.height/this.tile.height,(minX-region.x)*MAGNIFIER_ZOOM,(minY-region.y)*MAGNIFIER_ZOOM,(maxX-minX)*MAGNIFIER_ZOOM,(maxY-minY)*MAGNIFIER_ZOOM);
    }
+   }
+   // Prepare the cheap movement tile while the initial pointer is stationary,
+   // instead of deferring its first full-scene copy to the first drag.
+   if(this.detail&&!this.tile)raster();
+   const detailed=this.quality.allowDetail(performance.now())?this.detail?.draw(this.canvas,point,width,height):null;
+   if(detailed){this.host.dataset.quality='sharp';if(detailed.captureMs!==null)this.quality.captured(detailed.captureMs);}
+   else raster();
+   const delay=this.quality.remaining(performance.now());if(delay>0&&!this.idle)this.idle=setTimeout(()=>{this.idle=undefined;if(this.point&&!this.frame)this.frame=requestAnimationFrame(()=>{this.frame=0;if(this.point)this.draw(this.point);});},delay);
   }
   this.vectors.setAttribute('viewBox',`${region.x} ${region.y} ${region.width} ${region.height}`);
   this.vectors.setAttribute('preserveAspectRatio','none');
