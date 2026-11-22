@@ -6,6 +6,7 @@ import { AppErrorBoundary } from "./components/AppErrorBoundary";
 import "./app/app.css";
 import "./app/arcad.css";
 import "./app/viewerToolPanels.css";
+import "./app/homeGuide.css";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

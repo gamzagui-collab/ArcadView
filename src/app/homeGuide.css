@@ -1,0 +1,35 @@
+.home-guide{min-width:0;overflow:hidden;position:relative;border:1px solid #285574;border-radius:18px;background:#0b141e;color:#effaff;box-shadow:0 10px 30px #183b5f14}
+.home-guide-track{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;scroll-behavior:smooth;scrollbar-width:none;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch}
+.home-guide-track::-webkit-scrollbar{display:none}
+.home-guide-slide{flex:0 0 100%;min-width:0;scroll-snap-align:start;scroll-snap-stop:always}
+.home-guide-copy{height:150px;padding:19px 20px 12px;background:linear-gradient(120deg,#123651,#0b2237);box-sizing:border-box}
+.home-guide-kicker{display:flex;align-items:center;gap:7px;font-size:10px;line-height:1.4;color:#71d8ff;letter-spacing:.3px;margin:0 0 9px;font-weight:700}
+.home-guide-kicker>span{width:5px;height:5px;border-radius:50%;background:#44cafa;box-shadow:0 0 0 4px #44cafa14}
+.home-guide-copy h1,.home-guide-copy h2{font-size:23px;line-height:1.4;letter-spacing:-.8px;color:#f2fbff;margin:0;font-weight:800;white-space:pre-line}
+.home-guide-copy h2{font-size:22px}
+.home-guide-copy>p:last-child{margin:8px 0 0;font-size:11px;line-height:1.65;color:#b5cedf;max-width:490px}
+.home-guide-intro .home-guide-copy>p:last-child{font-size:10px;margin-top:6px}
+.home-guide-stage{position:relative;aspect-ratio:8/5;min-height:190px;overflow:hidden;background:#0b141e}
+.home-guide-stage>img{display:block;width:100%;height:100%;object-fit:contain;position:absolute;inset:0}
+.home-guide-intro .home-guide-stage{background:radial-gradient(ellipse at 70% 20%,#154369,#091f34 70%)}
+.home-guide-intro .arcad-blueprint{width:100%;height:115%;right:-15%;bottom:-20%;color:#5ccfff;opacity:.6}
+.home-guide-intro .home-open{position:absolute;bottom:20px;left:20px;width:calc(100% - 40px);min-height:44px;max-width:380px;background:linear-gradient(120deg,#1688ef,#0963c9);box-shadow:0 8px 25px #0003}
+.home-guide-sample{position:absolute;right:8px;bottom:8px;padding:3px 6px;border-radius:4px;background:#0b141ee6;color:#8ca8bc;font-size:8px;line-height:1.3;pointer-events:none}
+.home-guide-controls{display:flex;align-items:center;gap:2px;padding:7px 12px;border-top:1px solid #27445b;background:#102b42;min-height:46px}
+.home-guide-controls button{border:0;background:transparent;color:#b3d8ed;display:grid;place-items:center;min-width:32px;min-height:32px;padding:6px;border-radius:7px;cursor:pointer}
+.home-guide-controls button:active{background:#235171}
+.home-guide-controls svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.home-guide-back{transform:rotate(180deg)}
+.home-guide-dots{display:flex;align-items:center}
+.home-guide-dots button{min-width:24px;padding:7px}
+.home-guide-dots span{width:5px;height:5px;border-radius:8px;background:#4c6b84;transition:width .2s,background .2s}
+.home-guide-dots [aria-current=step] span{width:16px;background:#48cafa}
+.home-guide-controls .home-guide-library{display:flex;gap:6px;margin-left:auto;padding:7px 9px;background:#174565;color:#b9ebff}
+.home-guide-library span{font-size:10px;white-space:nowrap;font-weight:600}
+.home-guide-controls .home-guide-play{background:#193c56;color:#a4e6ff;margin-left:4px}
+.home-guide[data-locale=tr] .home-guide-copy{height:180px}
+@media(min-width:760px){.home-guide{grid-column:1;grid-row:1 / span 2}.home-guide-copy{height:164px;padding:22px 24px 12px}.home-guide-copy h1{font-size:28px}.home-guide-copy h2{font-size:25px}.home-guide-copy>p:last-child{font-size:12px}.home-guide-intro .home-guide-copy>p:last-child{font-size:11px}}
+@media(max-width:480px){.home-guide-library span{display:none}}
+@media(max-width:360px){.home-guide-copy{height:158px;padding:16px}.home-guide-copy h1{font-size:23px}.home-guide-copy h2{font-size:20px}.home-guide-copy>p:last-child{font-size:10px}.home-guide-stage{min-height:190px}}
+@media(max-width:360px){.home-guide[data-locale=tr] .home-guide-copy{height:198px}}
+@media(prefers-reduced-motion:reduce){.home-guide-track{scroll-behavior:auto}.home-guide-dots span{transition:none}}

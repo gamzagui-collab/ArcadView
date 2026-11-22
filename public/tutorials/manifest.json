@@ -1,0 +1,23 @@
+{
+  "measure": {
+    "width": 800,
+    "height": 500,
+    "durationMs": 10000,
+    "frames": 57,
+    "bytes": 126361
+  },
+  "takeoff": {
+    "width": 800,
+    "height": 500,
+    "durationMs": 12000,
+    "frames": 41,
+    "bytes": 101360
+  },
+  "layers": {
+    "width": 800,
+    "height": 500,
+    "durationMs": 11000,
+    "frames": 12,
+    "bytes": 70004
+  }
+}
