@@ -17,9 +17,15 @@ export async function loadTakeoff(drawing:TakeoffDocument["drawing"],unit:Measur
  const db=await open();try{const t=db.transaction("documents","readonly"),s=t.objectStore("documents"),[stored,previous]=await Promise.all([result(s.get(drawing.key)),result(s.index("drawingName").getAll(drawing.name))]);
  if(stored)validateDocument(stored,drawing.key);const revisions=(previous as TakeoffDocument[]).filter(d=>d.drawing.key!==drawing.key);return{document:stored??newTakeoff(drawing,unit),existing:!!stored,revisions:revisions.map(d=>({key:d.drawing.key,count:d.objects?.length??0,revision:d.revision}))};
  }finally{db.close();}}
-export async function saveTakeoff(document:TakeoffDocument):Promise<void>{
+async function writeTakeoff(document:TakeoffDocument):Promise<void>{
  validateDocument(document);const db=await open();try{await new Promise<void>((resolve,reject)=>{const t=db.transaction("documents","readwrite");t.oncomplete=()=>resolve();t.onabort=()=>reject(t.error??Error("적산 저장이 취소되었습니다."));t.onerror=()=>reject(t.error??Error("적산 저장에 실패했습니다."));t.objectStore("documents").put(document);});}finally{db.close();}
 }
+const pendingWrites=new Map<Promise<void>,string>();
+export function saveTakeoff(document:TakeoffDocument):Promise<void>{
+ const job=writeTakeoff(document);pendingWrites.set(job,document?.drawing?.key??'');void job.finally(()=>pendingWrites.delete(job)).catch(()=>{});return job;
+}
+/** Wait for transaction completion before closing the Android activity. */
+export async function flushTakeoffSaves(key:string):Promise<void>{for(;;){const jobs=[...pendingWrites].filter(([,k])=>k===key).map(([p])=>p);if(!jobs.length)return;await Promise.all(jobs);}}
 export type TakeoffCompletion={drawingKey:string;objectId:string;kind:"wall"|"beam"|"slab"|"column"};
 /** Future usage integration point. Deliberately has no billing implementation. */
 export function notifyTakeoffCompleted(detail:TakeoffCompletion){globalThis.dispatchEvent?.(new CustomEvent("arcad:takeoff-completed",{detail}));}

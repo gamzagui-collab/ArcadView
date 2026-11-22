@@ -3,6 +3,9 @@ import type {Locale} from "./translations";
 // Keep the Korean source phrases as typed keys, including interpolation tokens.
 // This catalog is shared by the workbench, validation and exported workbooks.
 export const takeoffMessages={
+ "체적{n}":["Volume{n}","Hacim{n}"],"면적{n}":["Area{n}","Alan{n}"],"체{n}":["V{n}","H{n}"],"면{n}":["A{n}","A{n}"],
+ "＋ 체적 레이어 추가":["＋ Add volume layer","＋ Hacim katmanı ekle"],"＋ 면적 레이어 추가":["＋ Add area layer","＋ Alan katmanı ekle"],
+ "체적과 면적은 같은 적산 레이어로 이동할 수 없습니다.":["Volume and area objects cannot share a takeoff layer.","Hacim ve alan nesneleri aynı metraj katmanına taşınamaz."],
  "적산":["Takeoff","Metraj"],
  "기본":["Default","Varsayılan"],"치수그리기":["Dimensions","Ölçülendirme"],
  "콘크리트 적산":["Concrete takeoff","Beton metrajı"],
@@ -58,5 +61,8 @@ export function takeoffError(locale:Locale,error:unknown){
 }
 /** Translate only generated default names for display. Never rewrite a saved
  * layer name or translate arbitrary user text, drawing names or object IDs. */
-export function takeoffLayerName(locale:Locale,name:string){const match=/^적산 (\d+)$/.exec(name);return match?takeoffText(locale,"적산 {n}",{n:match[1]}):name;}
+export function takeoffLayerName(locale:Locale,name:string){
+ const typed=/^(.* · )?(체적|면적)\s*(\d+)$/.exec(name);if(typed)return(typed[1]??"")+takeoffText(locale,typed[2]==="면적"?"면적{n}":"체적{n}",{n:typed[3]});
+ const legacy=/^적산 (\d+)$/.exec(name);return legacy?takeoffText(locale,"적산 {n}",{n:legacy[1]}):name;
+}
 export const intlLocale=(locale:Locale)=>({ko:"ko-KR",en:"en-US",tr:"tr-TR"})[locale];

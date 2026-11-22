@@ -17,13 +17,17 @@ import { readMeasurement,saveMeasurement } from "../commerce/operationJournal";
 import { Capacitor, type PluginListenerHandle } from "@capacitor/core";
 import { DrawingLibrary } from "../components/DrawingLibrary";
 import { ErrorScreen } from "../components/ErrorScreen";
-import { CloseIcon, FolderIcon } from "../components/Icons";
+import { CloseIcon } from "../components/Icons";
 import { LanguageSwitch } from "../components/LanguageSwitch";
 import { LoadingScreen } from "../components/LoadingScreen";
 import { HomeDashboard } from "../components/HomeDashboard";
 import { AboutPanel } from "../components/AboutPanel";
 import { AppUpdateCenter } from "../components/AppUpdateCenter";
-import { Brand, ArcadMark } from "../components/Brand";
+import { Brand } from "../components/Brand";
+import {DrawingHeader}from'../components/DrawingHeader';
+import {ExitConfirmation}from'../components/AppNavigation';
+import {ViewerSettings}from'../components/ViewerSettings';
+import {navigationWords}from'../i18n/navigation';
 import { ViewerToolbar } from "../components/ViewerToolbar";
 import { MeasurementPanel, MeasurementStatus } from "../components/MeasurementPanel";
 import type { MeasurementPick } from "../viewer/DrawingViewer";
@@ -99,6 +103,8 @@ export function App() {
   const [state, setState] = useState<AppState>({ status: "home" });
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [aboutOpen,setAboutOpen]=useState(false);
+  const [settingsOpen,setSettingsOpen]=useState(false),[exitOpen,setExitOpen]=useState(false);
+  const [navigationBusy,setNavigationBusy]=useState(false),[navigationError,setNavigationError]=useState(''),navigationLock=useRef(false);
   const [updatePending,setUpdatePending]=useState(false);
   const [libraryNotice, setLibraryNotice] = useState(false);
   const [incomingArchive, setIncomingArchive] = useState<File | null>(null);
@@ -107,6 +113,8 @@ export function App() {
   const measurementHistory=useRef(new UndoHistory<MeasurementSettings>());
   const localMeasurementSaving=useRef(false);
   const [measurementSaving,setMeasurementSaving]=useState(false);
+  const measurementWrites=useRef(new Set<Promise<void>>());
+  const persistMeasurement=(key:string,value:MeasurementSettings)=>{const job=saveMeasurement(key,value);measurementWrites.current.add(job);void job.finally(()=>measurementWrites.current.delete(job)).catch(()=>{});return job;};
   const [editHistory,setEditHistory]=useState<EditHistoryState>({canUndo:false,canRedo:false});
   const [measurementPanelOpen,setMeasurementPanelOpen]=useState(false);
   const [annotationOpen,setAnnotationOpen]=useState(false);
@@ -118,9 +126,10 @@ export function App() {
   const measurementKey=measurementGeometry?.unitPreferenceKey;
   const measurementOperation=useOperation<MeasurementSettings>(measurementKey,"measurement",async candidate=>{
     if(!measurementKey)throw Error("MISSING_DRAWING_KEY");
-    const saved={...candidate,enabled:true,displayOnly:true};await saveMeasurement(measurementKey,saved);
+    const saved={...candidate,enabled:true,displayOnly:true};await persistMeasurement(measurementKey,saved);
     if(unitPreferenceRef.current?.key===measurementKey&&measurementRef.current.mode===candidate.mode){measurementHistory.current.record(measurementRef.current);measurementRef.current=saved;setMeasurement(saved);}
   });
+  const measurementOperationRef=useRef(measurementOperation);measurementOperationRef.current=measurementOperation;
   const [sourceUnit, setSourceUnit] = useState<MeasurementUnit>("drawing");
   const [displayUnit, setDisplayUnit] = useState<MeasurementUnit>("drawing");
   const [precision,setPrecision]=useState(readPrecision);
@@ -377,8 +386,28 @@ export function App() {
     setIncomingArchive(null);
     setState({ status: "home" });
     setMeasurementPanelOpen(false);
+    setSettingsOpen(false);
     setTakeoffActive(false);setAnnotationOpen(false);setAnnotationActive(false);setLayersOpen(false);
   }, []);
+
+  const prepareNavigation=useCallback(async()=>{
+    try{
+      await viewerRef.current?.prepareToLeave?.();
+      while(measurementWrites.current.size)await Promise.all([...measurementWrites.current]);
+      if(commerceSnapshot().managed&&measurementOperationRef.current.blocked())throw Error('Pending operation');
+    }catch{throw Error(navigationWords[locale].saveError);}
+  },[locale]);
+  const requestHome=useCallback(()=>{
+    if(navigationLock.current)return;navigationLock.current=true;setNavigationBusy(true);setNavigationError('');
+    void prepareNavigation().then(closeDrawing).catch(e=>setNavigationError(e.message)).finally(()=>{navigationLock.current=false;setNavigationBusy(false);});
+  },[closeDrawing,prepareNavigation]);
+  const requestExit=useCallback(()=>{viewerRef.current?.cancelGesture?.();setExitOpen(true);},[]);
+  const openSettings=useCallback(()=>{viewerRef.current?.cancelGesture?.();setSettingsOpen(true);},[]);
+  const confirmExit=useCallback(async()=>{
+    await prepareNavigation();
+    if(!Capacitor.isNativePlatform())throw Error(navigationWords[locale].browserExit);
+    try{await incomingDrawingPlugin.exitApp();}catch{throw Error(navigationWords[locale].exitError);}
+  },[prepareNavigation,locale]);
 
   const handleBack = useCallback(() => {
     if (libraryOpen) {
@@ -398,11 +427,11 @@ export function App() {
     } else if (measurement.enabled) {
       setMeasurement((current) => ({ ...current, enabled: false }));
     } else if (state.status !== "home") {
-      closeDrawing();
+      requestHome();
     } else if (Capacitor.isNativePlatform()) {
-      void incomingDrawingPlugin.exitApp().catch(() => undefined);
+      requestExit();
     }
-  }, [closeDrawing, libraryOpen, state.status, measurement.enabled,measurementPanelOpen,annotationOpen,annotationActive,layersOpen,takeoffActive]);
+  }, [requestHome,requestExit, libraryOpen, state.status, measurement.enabled,measurementPanelOpen,annotationOpen,annotationActive,layersOpen,takeoffActive]);
   useBackNavigation(handleBack);
 
   useEffect(() => {
@@ -472,7 +501,7 @@ export function App() {
     if(!key){setMeasurementFeedback(t("librarySaveFailed"));return;}
     const saved={...candidate,enabled:true,displayOnly:true};
     localMeasurementSaving.current=true;setMeasurementSaving(true);
-    void saveMeasurement(key,saved).then(()=>{
+    void persistMeasurement(key,saved).then(()=>{
       if(request!==requestIdRef.current||measurementRef.current.mode!==candidate.mode)return;
       measurementHistory.current.record(measurementRef.current);measurementRef.current=saved;setMeasurement(saved);
     }).catch(()=>{if(request===requestIdRef.current)setMeasurementFeedback(t("librarySaveFailed"));})
@@ -488,7 +517,7 @@ export function App() {
     if(!commerceSnapshot().managed&&next.mode==="path"&&pathIsClosed(next.points)&&canFinishMeasurement(next)){finishLocalMeasurement(next);return;}
     measurementHistory.current.record(current);
     measurementRef.current=next;setMeasurement(next);
-    if(isUnmeteredTool(tool)&&next.points.length===2&&unitPreferenceRef.current?.key)void saveMeasurement(unitPreferenceRef.current.key,next).catch(()=>setMeasurementFeedback(t("librarySaveFailed")));
+    if(isUnmeteredTool(tool)&&next.points.length===2&&unitPreferenceRef.current?.key)void persistMeasurement(unitPreferenceRef.current.key,next).catch(()=>setMeasurementFeedback(t("librarySaveFailed")));
     setMeasurementFeedback(pick.entity ? null : measurement.mode === "object" ? t("measureNoObject") : pick.snapped ? t(({ endpoint: "measureEndpoint", midpoint: "measureMidpoint", center: "measureCenter", insertion:"measureInsertion", start: "measureStartPoint",perpendicular:"measurePerpendicular",intersection:"measureIntersection",curve:"measureCurve",edge:"measureSnap" } as const)[pick.snapped]) : null);
   }, [measurement.mode, t,measurementOperation]);
 
@@ -609,7 +638,7 @@ export function App() {
       </>
     );
   } else if (state.status === "home") {
-    content = <HomeDashboard onLibrary={()=>setLibraryOpen(true)} onOpen={openFile} onAbout={()=>setAboutOpen(true)} updatePending={updatePending}/>;
+    content = <HomeDashboard onLibrary={()=>setLibraryOpen(true)} onOpen={openFile} onAbout={()=>setAboutOpen(true)} onExit={requestExit} onSettings={openSettings} updatePending={updatePending}/>;
   } else if (state.status === "loading") {
     content = (
         <LoadingScreen
@@ -622,38 +651,8 @@ export function App() {
   } else {
     content = (
     <>
-      <header className="viewer-header">
-        <div className="file-heading">
-          <ArcadMark className="viewer-brand-mark"/>
-          <div>
-            <strong>{state.drawing.name}</strong>
-            <span>
-              <b className="file-format">{state.drawing.format}</b> · {formatBytes(state.drawing.size, locale)}
-            </span>
-          </div>
-        </div>
-        <div className="viewer-header-actions">
-          <button
-            type="button"
-            className="open-button compact"
-            aria-label={t("myDrawings")}
-            title={t("myDrawings")}
-            onClick={() => setLibraryOpen(true)}
-          >
-            <FolderIcon />
-            <span>{t("myDrawings")}</span>
-          </button>
-          <button
-            type="button"
-            className="icon-button"
-            aria-label={t("close")}
-            title={t("close")}
-            onClick={closeDrawing}
-          >
-            <CloseIcon />
-          </button>
-        </div>
-      </header>
+      <DrawingHeader name={state.drawing.name} format={state.drawing.format} size={formatBytes(state.drawing.size,locale)} busy={navigationBusy} settingsOpen={settingsOpen} onHome={requestHome} onLibrary={()=>setLibraryOpen(true)} onSettings={openSettings} onExit={requestExit}/>
+
 
       <ViewerToolbar takeoffActive={takeoffActive} onTakeoff={()=>{viewerRef.current?.cancelGesture?.();setTakeoffActive(true);viewerRef.current?.showTakeoffTools?.();setAnnotationActive(false);setAnnotationOpen(false);setLayersOpen(false);setMeasurementPanelOpen(false);setMeasurement(m=>({...m,enabled:false}));}} onCommand={sendCommand}
         selecting={(annotationActive||takeoffActive)&&editHistory.selecting} canDelete={(annotationActive||takeoffActive)&&editHistory.canDelete}
@@ -664,7 +663,7 @@ export function App() {
         onRotate={()=>{setLayersOpen(false);viewerRef.current?.objectAction?.("rotate");setAnnotationOpen(false);}}
         canUndo={measurement.enabled&&!annotationActive&&!takeoffActive?measurementHistory.current.canUndo:editHistory.canUndo}
         canRedo={measurement.enabled&&!annotationActive&&!takeoffActive?measurementHistory.current.canRedo:editHistory.canRedo}
-        onUndo={()=>handleEditCommand("undo")} onRedo={()=>handleEditCommand("redo")} onCancel={()=>handleEditCommand("cancel")} onSettingsOpen={()=>viewerRef.current?.cancelGesture?.()}
+        onUndo={()=>handleEditCommand("undo")} onRedo={()=>handleEditCommand("redo")} onCancel={()=>handleEditCommand("cancel")}
         canMeasure={state.drawing.format !== "pdf"}
         measuring={measurement.enabled}
         panelOpen={measurementPanelOpen}
@@ -685,8 +684,11 @@ export function App() {
 
   return (
     <div className={`app-shell ${state.status === "home" ? "home" : "viewer-shell"}`}>
-      {canvas ? <div className="canvas-layer" inert={libraryOpen||aboutOpen} aria-hidden={libraryOpen||aboutOpen}>{canvas}</div> : null}
-      <div className="app-content" hidden={libraryOpen} inert={aboutOpen}>{content}</div>
+      {canvas ? <div className="canvas-layer" inert={libraryOpen||aboutOpen||settingsOpen||exitOpen||navigationBusy} aria-hidden={libraryOpen||aboutOpen||settingsOpen||exitOpen}>{canvas}</div> : null}
+      <div className="app-content" hidden={libraryOpen} inert={aboutOpen||settingsOpen||exitOpen||navigationBusy} aria-busy={navigationBusy}>{content}</div>
+      {navigationError?<div className="navigation-error" role="alert">{navigationError}<button type="button" aria-label={navigationWords[locale].dismiss} onClick={()=>setNavigationError('')}><CloseIcon/></button></div>:null}
+      {settingsOpen?<ViewerSettings onClose={()=>setSettingsOpen(false)}/>:null}
+      {exitOpen?<ExitConfirmation onCancel={()=>setExitOpen(false)} onConfirm={confirmExit}/>:null}
       {aboutOpen?<AboutPanel onClose={()=>setAboutOpen(false)}/>:null}
       <CommercePortal/>
       {commerce.managed?measurementOperation.controls:null}

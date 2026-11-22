@@ -1,14 +1,13 @@
 import type { ViewerCommand } from "../types/drawing";
-import {useLayoutEffect,useRef,useState} from "react";
+import {useLayoutEffect,useRef} from "react";
 import { useI18n } from "../i18n/I18nProvider";
 import {
   ResetIcon,
   MeasureIcon,
-  UndoIcon, RedoIcon, CancelToolIcon,SettingsIcon,
+  UndoIcon, RedoIcon, CancelToolIcon,
 } from "./Icons";
 import { ToolIcon } from "./ToolIcon";
 import { ToolStrip } from "./ToolStrip";
-import {ViewerSettings}from'./ViewerSettings';
 
 type Props = {
   onCommand(command: ViewerCommand): void;
@@ -33,12 +32,10 @@ type Props = {
   objectTool?:"move"|"rotate";
   onMove?():void;
   onRotate?():void;
-  onSettingsOpen?():void;
 };
 
-export function ViewerToolbar({ onCommand,takeoffActive,onTakeoff, canMeasure, measuring, panelOpen, onMeasure,onEdit,editing,editOpen,canUndo,canRedo,onUndo,onRedo,onCancel,selecting,canDelete,onSelect,onDelete,objectTool,onMove,onRotate,onSettingsOpen }: Props) {
+export function ViewerToolbar({ onCommand,takeoffActive,onTakeoff, canMeasure, measuring, panelOpen, onMeasure,onEdit,editing,editOpen,canUndo,canRedo,onUndo,onRedo,onCancel,selecting,canDelete,onSelect,onDelete,objectTool,onMove,onRotate }: Props) {
   const { t,locale } = useI18n();
-  const[settingsOpen,setSettingsOpen]=useState(false);
   const objectWords={ko:{move:"이동",rotate:"회전"},en:{move:"Move",rotate:"Rotate"},tr:{move:"Taşı",rotate:"Döndür"}}[locale];
   const toolbar=useRef<HTMLElement>(null),history=useRef<HTMLElement>(null);
   useLayoutEffect(()=>{
@@ -57,14 +54,15 @@ export function ViewerToolbar({ onCommand,takeoffActive,onTakeoff, canMeasure, m
     <>
       {canMeasure?<aside ref={history} className={`viewer-history-dock${takeoffActive?" takeoff-history":""}`} role="group" aria-label={words.history}>
         <div id="viewer-status-slot"/>
+        <button type="button" className="viewer-reset-tool" aria-label={t("reset")} title={t("reset")} onClick={()=>onCommand("reset")}><ResetIcon/></button>
         <button type="button" aria-label={words.undo} title={words.undo} disabled={!canUndo} onClick={onUndo}><UndoIcon/></button>
         <button type="button" aria-label={words.redo} title={words.redo} disabled={!canRedo} onClick={onRedo}><RedoIcon/></button>
       </aside>:null}
     <nav ref={toolbar} className={`viewer-toolbar ${canMeasure ? "with-measure with-edit" : ""}${takeoffActive?" with-takeoff":""}`} aria-label={t("viewerControls")}>
       <div className="viewer-tool-row">
-        <div className="viewer-view-group" role="group" aria-label={words.view}>
+        {!canMeasure?<div className="viewer-view-group" role="group" aria-label={words.view}>
           <button type="button" aria-label={t("reset")} title={t("reset")} onClick={()=>onCommand("reset")}><ResetIcon/></button>
-        </div>
+        </div>:null}
         {canMeasure?<ToolStrip className="viewer-tools-scroll" role="group" aria-label={words.tools} tabIndex={0}>
           <button type="button" aria-pressed={!!measuring} aria-expanded={!!panelOpen} aria-label={t("measure")} title={t("measure")} onClick={onMeasure}><MeasureIcon/><span>{t("measure")}</span></button>
           <button type="button" aria-pressed={!!editing} aria-expanded={!!editOpen} aria-label={t("editTools")} onClick={onEdit}><ToolIcon name="polyline"/><span>{t("editTools")}</span></button>
@@ -75,11 +73,9 @@ export function ViewerToolbar({ onCommand,takeoffActive,onTakeoff, canMeasure, m
           <button type="button" className="viewer-object-tool" data-tool="rotate" aria-label={objectWords.rotate} title={objectWords.rotate} aria-pressed={objectTool==="rotate"} disabled={takeoffActive} onClick={onRotate}><ToolIcon name="rotate"/></button>
           <button type="button" className="viewer-object-tool" data-tool="delete" aria-label={words.remove} title={words.remove} disabled={!canDelete} onClick={onDelete}><ToolIcon name="delete"/></button>
         </ToolStrip>:null}
-        {canMeasure?<button type="button" className="viewer-settings-tool" aria-label={locale==='ko'?'뷰어 설정':locale==='en'?'Viewer settings':'Görünüm ayarları'} aria-haspopup="dialog" aria-expanded={settingsOpen} onClick={()=>{onSettingsOpen?.();setSettingsOpen(true);}}><SettingsIcon/></button>:null}
         {canMeasure?<button type="button" className="viewer-cancel-tool" aria-label={words.cancel} title={words.cancel} onClick={onCancel}><CancelToolIcon/></button>:null}
       </div>
     </nav>
-    {settingsOpen?<ViewerSettings onClose={()=>setSettingsOpen(false)}/>:null}
     </>
   );
 }

@@ -23,6 +23,9 @@ import type { EditHistoryState } from "../viewer/undoHistory";
 import { measurementReadout,measurementPointsAfterPick } from "../viewer/measurementTools";
 import { formatCadNumber } from "../viewer/displayPrecision";
 import { useI18n } from "../i18n/I18nProvider";
+import {annotationStorage}from'../viewer/annotationStorage';
+import {flushTakeoffSaves}from'../takeoff/storage';
+import {navigationWords}from'../i18n/navigation';
 
 type Props = {
   file: File;
@@ -95,6 +98,15 @@ export const DrawingCanvas = forwardRef<ViewerHandle, Props>(
         cancelGesture() { viewerRef.current?.cancelInteraction(); },
         showTakeoffTools() { takeoffRef.current?.showTools(); },
         finishText() { return annotationRef.current?.finishText()??false; },
+        async prepareToLeave(){
+          viewerRef.current?.cancelInteraction();annotationRef.current?.finishText();
+          // Text completion updates React state; let its layout save effect
+          // enqueue the final immutable document before waiting for disk ACKs.
+          await new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve())));
+          const key=viewerRef.current?.getMeasurementGeometry().unitPreferenceKey;
+          if(key)await Promise.all([annotationStorage.flush(key),flushTakeoffSaves(key)]);
+          if(annotationRef.current?.hasSaveError()||takeoffRef.current?.hasSaveError())throw Error(navigationWords[unitRef.current.locale].saveError);
+        },
         execute(command: ViewerCommand) {
           try {
             viewerRef.current?.execute(command);

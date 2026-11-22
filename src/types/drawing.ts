@@ -24,6 +24,7 @@ export type ViewerHandle = {
   cancelGesture?(): void;
   showTakeoffTools?():void;
   finishText?(): boolean;
+  prepareToLeave?():Promise<void>;
 };
 
 export type AppErrorCode =

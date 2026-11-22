@@ -328,3 +328,34 @@ button:disabled{opacity:.45}
 .viewer-shell #viewer-status-slot .takeoff-compact{position:static;flex:0 0 auto;width:max-content;max-width:340px;padding:3px 5px;box-shadow:none;border:0;border-left:1px solid #34506c;border-radius:0;background:transparent}
 .viewer-shell #viewer-status-slot .takeoff-compact>button{min-height:32px}
 .viewer-shell.toolbar-status-inline .takeoff-history{bottom:calc(10px + env(safe-area-inset-bottom))}
+
+/* Header navigation and a compact creation/object toolbar. */
+.viewer-shell .viewer-header{gap:6px}
+.viewer-shell .viewer-header .viewer-home-button{flex:0 0 30px;width:30px;height:32px;min-height:32px;padding:5px;background:#102b44}
+.viewer-home-button svg{transform:rotate(180deg)}
+.viewer-shell .file-heading{flex:1;min-width:0}
+.viewer-shell .file-heading>div{min-width:0}
+.viewer-shell .file-heading strong{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.viewer-shell .viewer-header-actions{flex:0 0 auto;margin-left:0;gap:5px}
+.viewer-header-actions .viewer-settings-button[aria-expanded=true]{background:#175473;color:#e1f7ff}
+.viewer-shell .viewer-tools-scroll{flex:0 1 auto;gap:2px}
+.viewer-shell .viewer-toolbar .viewer-cancel-tool{flex-basis:30px;width:30px;padding:5px}
+.viewer-tool-row{gap:3px}
+.viewer-history-dock .viewer-reset-tool{border-bottom:1px solid #34506c;border-radius:7px 7px 0 0}
+.home-library-actions{grid-column:1/-1;display:flex;align-items:stretch;gap:8px;margin-top:22px}
+.home-library-actions .home-library-link{flex:1;min-width:0;width:auto;margin:0}
+.home-library-actions .viewer-settings-button{flex:0 0 44px;width:44px;height:auto;min-height:44px;border:1px solid #cfdfef;border-radius:10px;background:#e8f2fc;color:#315b7e}
+.home .viewer-settings-panel.tool-panel{position:fixed;inset:0;width:min(380px,calc(100% - 28px));height:max-content;max-height:calc(100dvh - 32px);overflow:auto;margin:auto;padding:14px;border:1px solid #427392;border-radius:12px;background:#10283e;color:#dcefff;color-scheme:dark}
+.home .viewer-settings-panel input[type=checkbox]{width:18px;height:18px;min-width:18px}
+.app-exit-dialog{position:fixed;inset:0;width:min(340px,calc(100% - 28px));height:max-content;max-height:calc(100dvh - 28px);overflow:auto;margin:auto;padding:20px;border:1px solid #467493;border-radius:13px;background:#10283e;color:#dcefff;box-shadow:0 14px 40px #0005;color-scheme:dark}
+.app-exit-dialog::backdrop{background:#031425b3}
+.app-exit-dialog h2{margin:0 0 18px;font-size:18px;line-height:1.4}
+.app-exit-dialog p{margin:0 0 16px;font-size:13px;line-height:1.6;color:#ffd39b}
+.app-exit-actions{display:flex;justify-content:flex-end;gap:8px}
+.app-exit-actions button{min-width:76px;min-height:40px;padding:8px 14px;border:1px solid #467493;border-radius:8px;background:#173e5b;color:#e0f3ff;font:inherit;font-size:14px}
+.app-exit-actions .app-exit-confirm{background:#087fc1;border-color:#56bbee;color:#fff}
+.app-exit-actions button:disabled{opacity:.5}
+.navigation-error{position:fixed;z-index:30;left:50%;bottom:calc(72px + env(safe-area-inset-bottom));transform:translateX(-50%);display:flex;align-items:center;gap:10px;width:min(420px,calc(100% - 24px));padding:12px;border:1px solid #ba915a;border-radius:10px;background:#163147;color:#ffddaa;font-size:13px;line-height:1.5}
+.navigation-error button{flex:0 0 30px;width:30px;height:30px;padding:5px;border:0;background:transparent;color:inherit}
+.navigation-error svg{width:20px;height:20px}
+@media(min-width:760px){.home-library-actions{margin-top:0}}

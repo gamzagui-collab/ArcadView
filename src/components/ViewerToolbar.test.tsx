@@ -9,6 +9,9 @@ it("keeps fixed actions separate from the grouped creation and object tools",()=
   const fixed=locked.split('class="viewer-tools-scroll"')[0];
   for(const action of ["reset","Undo","Redo"])expect(fixed).toContain(`aria-label="${action}"`);
   expect(locked).toContain('class="viewer-history-dock"');
+  const dock=locked.split('</aside>')[0],horizontal=locked.split('<nav')[1];
+  expect(dock.indexOf('aria-label="reset"')).toBeLessThan(dock.indexOf('aria-label="Undo"'));
+  expect(horizontal).not.toContain('aria-label="reset"');expect(horizontal).not.toContain('settings');
   expect(locked).toMatch(/class="viewer-cancel-tool"[^>]*aria-label="Cancel tool"/);
   for(const action of ["fit","zoomIn","zoomOut"])expect(locked).not.toContain(`aria-label="${action}"`);
   const scrolling=locked.match(/class="viewer-tools-scroll"[^>]*>([\s\S]*?)<\/div>/)![1];

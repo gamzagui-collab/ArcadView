@@ -11,8 +11,8 @@ export type Dimensions={heightMm?:number;thicknessMm?:number;widthMm?:number;dep
 export const DEFAULT_TAKEOFF_LAYER="takeoff-default";
 export type TakeoffObject={id:string;layerId:string;groupId:TakeoffKind;kind:TakeoffKind;calculation?:TakeoffCalculation;geometry:{type:"path"|"polygon";points:P[]};dimensions:Dimensions;label:{position?:P;visible:boolean}};
 export type TakeoffGroup={id:TakeoffKind;visible:boolean;color:string};
-export type TakeoffLayer={id:string;name:string;visible:boolean};
-export type TakeoffDocument={schemaVersion:3;drawing:{key:string;name:string;size:number;lastModified:number};unit:MeasurementUnit;groups:TakeoffGroup[];layers:TakeoffLayer[];activeLayerId:string;objects:TakeoffObject[];defaults:Record<TakeoffKind,Dimensions>;options:{focus:boolean;keepLayers:string[];keepColors:string[];collapsed:boolean;heightUnit:"m"|"mm";cadVisible:boolean;labelsVisible?:boolean;calculation?:TakeoffCalculation};revision:number};
+export type TakeoffLayer={id:string;name:string;visible:boolean;calculation?:TakeoffCalculation};
+export type TakeoffDocument={schemaVersion:3;drawing:{key:string;name:string;size:number;lastModified:number};unit:MeasurementUnit;groups:TakeoffGroup[];layers:TakeoffLayer[];activeLayerId:string;objects:TakeoffObject[];defaults:Record<TakeoffKind,Dimensions>;options:{focus:boolean;keepLayers:string[];keepColors:string[];collapsed:boolean;heightUnit:"m"|"mm";cadVisible:boolean;labelsVisible?:boolean;calculation?:TakeoffCalculation;calculationLayers?:Partial<Record<TakeoffCalculation,string>>};revision:number};
 export type Quantity={lengthM:number;areaM2:number;volumeM3:number};
 export type QuantityTotal=Quantity&{count:number;areaOnlyM2:number};
 export const calculationOf=(o:Pick<TakeoffObject,"calculation">):TakeoffCalculation=>o.calculation??"volume";
@@ -20,13 +20,14 @@ export const quantityText=(q:Quantity)=>q.volumeM3>0?`${q.volumeM3.toFixed(3)} m
 export function totalText(q:Pick<QuantityTotal,"volumeM3"|"areaOnlyM2">,emptyMode:TakeoffCalculation="volume"){if(!q.volumeM3&&!q.areaOnlyM2)return emptyMode==="area"?"0.000 m²":"0.000 m³";const parts:string[]=[];if(q.volumeM3>0)parts.push(`${q.volumeM3.toFixed(3)} m³`);if(q.areaOnlyM2>0)parts.push(`${q.areaOnlyM2.toFixed(3)} m²`);return parts.join(" · ");}
 export const knownUnit=(unit:MeasurementUnit)=>unit!=="drawing"&&unit in UNIT_METERS;
 export const validPoint=(p:P)=>!!p&&Number.isFinite(p.x)&&Number.isFinite(p.y)&&Math.abs(p.x)<=1e12&&Math.abs(p.y)<=1e12;
-export function newTakeoff(drawing:TakeoffDocument["drawing"],unit:MeasurementUnit):TakeoffDocument{return{schemaVersion:3,drawing,unit,groups:[{id:"wall",visible:true,color:"#49cfff"},{id:"beam",visible:true,color:"#ffdc63"},{id:"slab",visible:true,color:"#b18bff"},{id:"column",visible:true,color:"#83e4bc"}],layers:[{id:DEFAULT_TAKEOFF_LAYER,name:"적산 1",visible:true}],activeLayerId:DEFAULT_TAKEOFF_LAYER,objects:[],defaults:{wall:{heightMm:3000,thicknessMm:200},beam:{widthMm:300,depthMm:600},slab:{thicknessMm:180},column:{heightMm:3000}},options:{focus:false,keepLayers:[],keepColors:[],collapsed:true,heightUnit:"m",cadVisible:true,labelsVisible:true},revision:0};}
+export function newTakeoff(drawing:TakeoffDocument["drawing"],unit:MeasurementUnit):TakeoffDocument{return{schemaVersion:3,drawing,unit,groups:[{id:"wall",visible:true,color:"#49cfff"},{id:"beam",visible:true,color:"#ffdc63"},{id:"slab",visible:true,color:"#b18bff"},{id:"column",visible:true,color:"#83e4bc"}],layers:[{id:DEFAULT_TAKEOFF_LAYER,name:"체적1",visible:true,calculation:"volume"}],activeLayerId:DEFAULT_TAKEOFF_LAYER,objects:[],defaults:{wall:{heightMm:3000,thicknessMm:200},beam:{widthMm:300,depthMm:600},slab:{thicknessMm:180},column:{heightMm:3000}},options:{focus:false,keepLayers:[],keepColors:[],collapsed:true,heightUnit:"m",cadVisible:true,labelsVisible:true,calculation:"volume",calculationLayers:{volume:DEFAULT_TAKEOFF_LAYER}},revision:0};}
 export const takeoffVisible=(doc:TakeoffDocument,o:TakeoffObject)=>!!doc.groups.find(g=>g.id===o.groupId)?.visible&&!!doc.layers.find(l=>l.id===o.layerId)?.visible;
 /** Layer transfer only changes membership; geometry, specifications, manual
  * labels, visibility preferences and the original CAD document remain intact. */
 export function moveTakeoffToLayer(doc:TakeoffDocument,id:string,layerId:string):TakeoffDocument{
- if(!doc.layers.some(l=>l.id===layerId))throw Error("대상 적산 레이어가 없습니다.");
+ const layer=doc.layers.find(l=>l.id===layerId);if(!layer)throw Error("대상 적산 레이어가 없습니다.");
  const object=doc.objects.find(o=>o.id===id);if(!object)throw Error("적산 객체가 없습니다.");
+ if(layer.calculation&&layer.calculation!==calculationOf(object))throw Error("체적과 면적은 같은 적산 레이어로 이동할 수 없습니다.");
  if(object.layerId===layerId)return doc;
  return{...doc,objects:doc.objects.map(o=>o.id===id?{...o,layerId}:o)};
 }
@@ -115,5 +116,6 @@ export function validateDocument(value:unknown,key?:string):asserts value is Tak
  if(typeof d.options.cadVisible!=="boolean")throw Error("원본 도면 표시 설정이 유효하지 않습니다.");
  if(d.options.labelsVisible!==undefined&&typeof d.options.labelsVisible!=="boolean")throw Error("물량 라벨 표시 설정이 유효하지 않습니다.");
  if(d.options.calculation!==undefined&&!["volume","area"].includes(d.options.calculation))throw Error("적산 계산 방식이 유효하지 않습니다.");
+ if(d.layers.some(l=>l.calculation!==undefined&&!["volume","area"].includes(l.calculation))||d.options.calculationLayers!==undefined&&(!d.options.calculationLayers||typeof d.options.calculationLayers!=="object"||Array.isArray(d.options.calculationLayers)||Object.entries(d.options.calculationLayers).some(([k,v])=>!["volume","area"].includes(k)||typeof v!=="string"||!v)))throw Error("적산 레이어가 유효하지 않습니다.");
  const ids=new Set<string>();for(const o of d.objects){if(!o||typeof o.id!=="string"||!o.id||ids.has(o.id)||!KINDS.includes(o.kind)||o.groupId!==o.kind||o.calculation!==undefined&&!["volume","area"].includes(o.calculation)||!d.layers.some(l=>l.id===o.layerId)||o.geometry?.type!==(takeoffPolygon(o.kind,calculationOf(o))?"polygon":"path")||!Array.isArray(o.geometry.points)||!o.dimensions||typeof o.dimensions!=="object"||!o.label||typeof o.label.visible!=="boolean"||o.label.position&&!validPoint(o.label.position))throw Error("적산 객체 형식이 유효하지 않습니다.");ids.add(o.id);quantity(o,d.unit);}
 }

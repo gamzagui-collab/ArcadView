@@ -26,6 +26,8 @@ export class AnnotationStorage{
    try{this.legacy.setItem(prefix+key,raw);}catch{/* Android canonical file remains authoritative. */}
   });
  }
+ /** Navigation waits for the same durable acknowledgements as the editor. */
+ async flush(key:string):Promise<void>{while(this.queues.has(key))await this.queues.get(key);}
 }
 // Browser builds keep their existing storage API. Android does not treat a
 // WebView localStorage acknowledgement as a disk persistence guarantee.

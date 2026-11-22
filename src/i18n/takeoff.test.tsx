@@ -28,7 +28,7 @@ it.each(["ko","en","tr"] as Locale[])("translates new toolbar, summary, layer co
  const viewer={getMeasurementGeometry:()=>({unitPreferenceKey:"v1-"+"b".repeat(64)}),getCadFocusOptions:()=>({colors:[],layers:[]})} as unknown as DrawingViewer;
  const identity={name:"drawing.dwg",size:1,lastModified:0};
  const html=renderToStaticMarkup(<TakeoffEditor viewer={viewer} identity={identity} active sourceUnit="mm" onHistory={()=>{}} layersOpen layerTabs={<LayerTabs value="takeoff" onChange={()=>{}}/>} onLayersToggle={()=>{}} onLayersHide={()=>{}}/>);
- expect(html).toContain(tx("[레이어]"));expect(html).toContain(tx("＋ 적산 레이어 추가"));expect(html).toContain(tx("Excel 집계표"));
+ expect(html).toContain(tx("[레이어]"));expect(html).toContain(tx("＋ 체적 레이어 추가"));expect(html).toContain(tx("Excel 집계표"));
  const formula=renderToStaticMarkup(<TakeoffFormula object={wall} unit="mm" measurementUnit="mm" onEdit={()=>{}} locale={locale}/>);
  expect(formula).toContain(tx("선택 적산 객체 산식"));expect(formula).toContain(tx("높이"));expect(formula).toContain('class="takeoff-formula-value"');expect(formula).toContain("8.448 m³");
  if(locale!=="ko")expect(toolbar+html+formula).not.toMatch(/[가-힣]/);
@@ -49,4 +49,9 @@ it.each(["en","tr"] as Locale[])("exports localized sheet names, all columns and
  const tx=(key:TakeoffTextKey)=>takeoffText(locale,key),r=file.mainRows.get(wall.id)!;
  expect(main).toContain(`<f>C${r}*E${r}*F${r}</f><v>8.448</v>`);expect(main).toContain(`&apos;${tx("산출근거")}&apos;!D`);
  expect(main).toContain(tx("레이어 합계"));expect(main).toContain(tx("두께")+" (m)");expect(main).toContain(tx("깊이")+" (m)");expect(main).toContain('TEXT(');expect(main).toContain('SUMIFS(');expect(main).toContain(`${tx("옹벽")} ${tx("소계")}`);expect(book).toContain(`name="${tx("면적집계")}"`);expect(doc).toEqual(before);
+});
+
+it("localizes generated volume/area layer names while preserving custom region names",()=>{
+ expect(takeoffLayerName("ko","체적2")).toBe("체적2");expect(takeoffLayerName("en","체적2")).toBe("Volume2");expect(takeoffLayerName("tr","면적3")).toBe("Alan3");
+ expect(takeoffLayerName("en","2동 1·2호 · 면적1")).toBe("2동 1·2호 · Area1");expect(takeoffLayerName("en","체적 사용자 이름")).toBe("체적 사용자 이름");
 });

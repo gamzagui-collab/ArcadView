@@ -7,8 +7,8 @@ export function TakeoffLayerRow({layer,number,selected,disabled,canRemove,quanti
  const{locale}=useI18n(),tx=(key:TakeoffTextKey,values?:Record<string,string|number>)=>takeoffText(locale,key,values);
  const[name,setName]=useState(layer.name);useEffect(()=>setName(layer.name),[layer.name]);
  const rename=()=>{const value=name.trim();if(value&&value!==layer.name)onRename(value);else setName(layer.name);};
- return <div className={`takeoff-layer-row ${selected?"active":""}`} data-takeoff-layer={layer.id}>
+ return <div className={`takeoff-layer-row ${selected?"active":""}`} data-takeoff-layer={layer.id} data-calculation={layer.calculation}>
   <div><input type="radio" name="takeoff-layer" aria-label={tx("적산 레이어 {n} 선택",{n:number})} checked={selected} disabled={disabled} onChange={onSelect}/><input type="checkbox" aria-label={tx("{name} 표시",{name:takeoffLayerName(locale,layer.name)})} checked={layer.visible} disabled={disabled} onChange={onVisible}/><input aria-label={tx("적산 레이어 {n} 이름",{n:number})} className="takeoff-layer-name" value={takeoffLayerName(locale,name)} maxLength={48} disabled={disabled} onChange={e=>setName(e.target.value)} onBlur={rename} onKeyDown={e=>{if(e.key==="Enter")e.currentTarget.blur();}}/><button type="button" aria-label={tx("적산 레이어 {n} 삭제",{n:number})} disabled={disabled||!canRemove} onClick={onRemove}>×</button></div>
-  <small>{tx("{n}개",{n:q.count})} <b>{totalText(q)}</b></small>
+  <small>{tx("{n}개",{n:q.count})} <b>{totalText(q,layer.calculation)}</b></small>
  </div>;
 }
