@@ -1,13 +1,15 @@
 import type {DrawingPoint as P} from "../viewer/savedView";
 import {calculationOf,labelPosition,takeoffPolygon,takeoffVisible,type TakeoffDocument,type TakeoffObject} from "./model";
 import {takeoffFormula} from "./formula";
+import type {Locale} from "../i18n/translations";
+import {takeoffText} from "../i18n/takeoff";
 /** Keep a clamped movement cross away from the object's editable vertices. */
 export function takeoffMovePoint(points:readonly P[],width:number,height:number):P{
  const xs=points.map(p=>p.x),ys=points.map(p=>p.y),minX=Math.min(...xs),maxX=Math.max(...xs),minY=Math.min(...ys),maxY=Math.max(...ys),clamp=(p:P)=>({x:Math.max(20,Math.min(width-20,p.x)),y:Math.max(100,Math.min(height-125,p.y))});
  const candidates=[{x:(minX+maxX)/2,y:maxY+32},{x:(minX+maxX)/2,y:minY-32},{x:minX-32,y:(minY+maxY)/2},{x:maxX+32,y:(minY+maxY)/2}].map(clamp);
  return candidates.find(p=>points.every(q=>Math.hypot(p.x-q.x,p.y-q.y)>=30))??candidates.reduce((a,b)=>Math.min(...points.map(q=>Math.hypot(a.x-q.x,a.y-q.y)))>=Math.min(...points.map(q=>Math.hypot(b.x-q.x,b.y-q.y)))?a:b);
 }
-export function drawTakeoff(svg:SVGSVGElement,doc:TakeoffDocument,selected:string|null,draft:TakeoffObject|null,project:(p:readonly P[])=>P[],active:boolean){
+export function drawTakeoff(svg:SVGSVGElement,doc:TakeoffDocument,selected:string|null,draft:TakeoffObject|null,project:(p:readonly P[])=>P[],active:boolean,locale:Locale="ko"){
  const ns="http://www.w3.org/2000/svg",nodes:SVGElement[]=[],el=(tag:string,attrs:Record<string,string|number>,parent?:SVGElement)=>{const e=document.createElementNS(ns,tag);for(const[k,v]of Object.entries(attrs))e.setAttribute(k,String(v));if(parent)parent.append(e);else nodes.push(e);return e;};
  for(const o of [...doc.objects.filter(o=>takeoffVisible(doc,o)&&o.id!==draft?.id),...draft?[draft]:[]]){
   const group=doc.groups.find(g=>g.id===o.groupId)!,color=group.color,chosen=active&&o.id===selected,world=o.geometry.points,points=project(world),closed=takeoffPolygon(o.kind,calculationOf(o)),coords=points.map(p=>`${p.x},${p.y}`).join(" "),tag=closed?"polygon":"polyline";
@@ -16,7 +18,7 @@ export function drawTakeoff(svg:SVGSVGElement,doc:TakeoffDocument,selected:strin
   el(tag,{points:coords,fill:"none",stroke:color,"stroke-width":chosen?5:3,"stroke-linejoin":"round","stroke-linecap":"round","data-takeoff":o.id,class:"takeoff-line-color"});
   el(tag,{points:coords,fill:"none",stroke:"#f2fbff","stroke-width":.7,"stroke-opacity":.75,class:"takeoff-line-center"});
   points.forEach((p,i)=>{el("circle",{cx:p.x,cy:p.y,r:chosen?6:4,style:`fill:none;stroke:${color};stroke-width:1.6`,"data-takeoff-vertex":i,"data-takeoff":o.id,class:"takeoff-vertex-ring"});el("circle",{cx:p.x,cy:p.y,r:1.2,style:"fill:white;stroke:none",class:"takeoff-vertex-dot"});});
-  if(doc.options.labelsVisible!==false&&o.label.visible){let text:string,formula:string;try{const detail=takeoffFormula(o,doc.unit);text=detail.result;formula=detail.description;}catch{text="규격 확인";formula=text;}
+  if(doc.options.labelsVisible!==false&&o.label.visible){let text:string,formula:string;try{const detail=takeoffFormula(o,doc.unit,locale);text=detail.result;formula=detail.description;}catch{text=takeoffText(locale,"규격 확인");formula=text;}
    const anchor=project([labelPosition(o)])[0],width=Math.min(172,Math.max(64,text.length*6+14)),height=22;
    const p={x:anchor.x,y:closed?anchor.y+height/2:anchor.y-18},left=p.x-width/2,top=p.y-height;
    if(left+width>=0&&left<=svg.clientWidth&&top+height>=0&&top<=svg.clientHeight){

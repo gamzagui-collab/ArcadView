@@ -6,7 +6,7 @@ export type TakeoffCalculation="volume"|"area";
 export const isAreaKind=(kind:TakeoffKind)=>kind==="slab"||kind==="column";
 export const takeoffPolygon=(kind:TakeoffKind,calculation:TakeoffCalculation="volume")=>calculation==="area"||isAreaKind(kind);
 export const KINDS:TakeoffKind[]=["wall","beam","slab","column"];
-export const NAMES={wall:"옹벽",beam:"보",slab:"슬래브",column:"기둥"};
+export const NAMES={wall:"옹벽",beam:"보",slab:"슬래브",column:"기둥"} as const;
 export type Dimensions={heightMm?:number;thicknessMm?:number;widthMm?:number;depthMm?:number};
 export const DEFAULT_TAKEOFF_LAYER="takeoff-default";
 export type TakeoffObject={id:string;layerId:string;groupId:TakeoffKind;kind:TakeoffKind;calculation?:TakeoffCalculation;geometry:{type:"path"|"polygon";points:P[]};dimensions:Dimensions;label:{position?:P;visible:boolean}};

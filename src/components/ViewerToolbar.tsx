@@ -68,7 +68,7 @@ export function ViewerToolbar({ onCommand,takeoffActive,onTakeoff, canMeasure, m
         {canMeasure?<ToolStrip className="viewer-tools-scroll" role="group" aria-label={words.tools} tabIndex={0}>
           <button type="button" aria-pressed={!!measuring} aria-expanded={!!panelOpen} aria-label={t("measure")} title={t("measure")} onClick={onMeasure}><MeasureIcon/><span>{t("measure")}</span></button>
           <button type="button" aria-pressed={!!editing} aria-expanded={!!editOpen} aria-label={t("editTools")} onClick={onEdit}><ToolIcon name="polyline"/><span>{t("editTools")}</span></button>
-          {onTakeoff?<button type="button" data-tool="takeoff" aria-label="콘크리트 적산" aria-pressed={!!takeoffActive} onClick={onTakeoff}><ToolIcon name="layers"/><span>적산</span></button>:null}
+          {onTakeoff?<button type="button" data-tool="takeoff" aria-label={locale==="ko"?"콘크리트 적산":locale==="en"?"Concrete takeoff":"Beton metrajı"} aria-pressed={!!takeoffActive} onClick={onTakeoff}><ToolIcon name="layers"/><span>{locale==="ko"?"적산":locale==="en"?"Takeoff":"Metraj"}</span></button>:null}
           <span className="tool-group-divider" role="separator" aria-orientation="vertical"/>
           <button type="button" className="viewer-object-tool" data-tool="select" aria-label={words.select} title={words.select} aria-pressed={!!selecting} onClick={onSelect}><ToolIcon name="select"/></button>
           <button type="button" className="viewer-object-tool" data-tool="move" aria-label={objectWords.move} title={objectWords.move} aria-pressed={objectTool==="move"} disabled={takeoffActive} onClick={onMove}><ToolIcon name="move"/></button>
