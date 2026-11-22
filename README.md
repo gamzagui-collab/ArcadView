@@ -12,6 +12,7 @@
 - 거리(정렬·선형), 총길이, 면적, 각도, 객체 측정과 블록·해치 경계 스냅
 - 폴리라인·총길이·면적의 중간 완료 버튼, 진행 중 직전 구간 표시와 완료 후 결과 확인
 - 도면별 단위 기억, 변환·화면 캐시, XCLIP과 한글 도면 글꼴
+- 객체가 많은 도면의 이동·확대/축소 화면 캐시와 축소 배율에 맞춘 가는 선 표시
 - 원본을 변경하지 않는 일반 레이어 1~3, 포인트 전용 4번과 치수 전용 5번 레이어
 - 폴리라인·원·호·사각형·한글 텍스트·치수선, 객체 선택·X/Y 이동·옵셋·삭제·트림
 - 원·호의 반지름, 사각형 가로·세로, 폴리라인 구간 길이 직접 입력
@@ -28,7 +29,7 @@
 
 ## 설치
 
-[직원용 APK 바로 다운로드 — 2.1.44](https://github.com/gamzagui-collab/ArcadView/releases/download/v2.1.44/Arcad-View-v2.1.44-72.apk)를 눌러 설치하세요. 기존 앱은 제거하지 말고 업데이트 설치합니다. 앱 정보의 **업데이트 확인** 버튼으로 새 버전을 확인할 수 있습니다. 자동 업데이트 확인은 앱 실행과 복귀 때 수행하며 다운로드·설치는 사용자의 승인이 필요합니다. [최신 릴리스의 변경 안내](https://github.com/gamzagui-collab/ArcadView/releases/latest)와 [같은 버전의 전체 대응 소스](https://github.com/gamzagui-collab/ArcadView-Source/tree/v2.1.44)도 확인할 수 있습니다.
+[직원용 APK 바로 다운로드 — 2.1.45](https://github.com/gamzagui-collab/ArcadView/releases/download/v2.1.45/Arcad-View-v2.1.45-73.apk)를 눌러 설치하세요. 기존 앱은 제거하지 말고 업데이트 설치합니다. 앱 정보의 **업데이트 확인** 버튼으로 새 버전을 확인할 수 있습니다. 자동 업데이트 확인은 앱 실행과 복귀 때 수행하며 다운로드·설치는 사용자의 승인이 필요합니다. [최신 릴리스의 변경 안내](https://github.com/gamzagui-collab/ArcadView/releases/latest)와 [같은 버전의 전체 대응 소스](https://github.com/gamzagui-collab/ArcadView-Source/tree/v2.1.45)도 확인할 수 있습니다.
 
 ## 빌드
 
