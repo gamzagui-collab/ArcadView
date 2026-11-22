@@ -1,5 +1,6 @@
 import type {DrawingPoint as P} from "../viewer/savedView";
-import {calculationOf,labelPosition,quantity,quantityText,takeoffPolygon,takeoffVisible,type TakeoffDocument,type TakeoffObject} from "./model";
+import {calculationOf,labelPosition,takeoffPolygon,takeoffVisible,type TakeoffDocument,type TakeoffObject} from "./model";
+import {takeoffFormula} from "./formula";
 /** Keep a clamped movement cross away from the object's editable vertices. */
 export function takeoffMovePoint(points:readonly P[],width:number,height:number):P{
  const xs=points.map(p=>p.x),ys=points.map(p=>p.y),minX=Math.min(...xs),maxX=Math.max(...xs),minY=Math.min(...ys),maxY=Math.max(...ys),clamp=(p:P)=>({x:Math.max(20,Math.min(width-20,p.x)),y:Math.max(100,Math.min(height-125,p.y))});
@@ -15,7 +16,7 @@ export function drawTakeoff(svg:SVGSVGElement,doc:TakeoffDocument,selected:strin
   el(tag,{points:coords,fill:"none",stroke:color,"stroke-width":chosen?5:3,"stroke-linejoin":"round","stroke-linecap":"round","data-takeoff":o.id,class:"takeoff-line-color"});
   el(tag,{points:coords,fill:"none",stroke:"#f2fbff","stroke-width":.7,"stroke-opacity":.75,class:"takeoff-line-center"});
   points.forEach((p,i)=>{el("circle",{cx:p.x,cy:p.y,r:chosen?6:4,style:`fill:none;stroke:${color};stroke-width:1.6`,"data-takeoff-vertex":i,"data-takeoff":o.id,class:"takeoff-vertex-ring"});el("circle",{cx:p.x,cy:p.y,r:1.2,style:"fill:white;stroke:none",class:"takeoff-vertex-dot"});});
-  if(doc.options.labelsVisible!==false&&o.label.visible){let text:string,formula:string;try{const q=quantity(o,doc.unit),d=o.dimensions;text=quantityText(q);formula=(calculationOf(o)==="area"?`A ${q.areaM2.toFixed(3)} m²`:o.kind==="wall"?`L ${q.lengthM.toFixed(2)} × H ${(d.heightMm!*.001).toFixed(2)} × T ${(d.thicknessMm!*.001).toFixed(2)}`:o.kind==="beam"?`L ${q.lengthM.toFixed(2)} × W ${(d.widthMm!*.001).toFixed(2)} × D ${(d.depthMm!*.001).toFixed(2)}`:o.kind==="column"?`A ${q.areaM2.toFixed(2)} m² × H ${(d.heightMm!*.001).toFixed(2)} m`:`A ${q.areaM2.toFixed(2)} m² × T ${(d.thicknessMm!*.001).toFixed(2)} m`)+` = ${text}`;}catch{text="규격 확인";formula=text;}
+  if(doc.options.labelsVisible!==false&&o.label.visible){let text:string,formula:string;try{const detail=takeoffFormula(o,doc.unit);text=detail.result;formula=detail.description;}catch{text="규격 확인";formula=text;}
    const anchor=project([labelPosition(o)])[0],width=Math.min(172,Math.max(64,text.length*6+14)),height=22;
    const p={x:anchor.x,y:closed?anchor.y+height/2:anchor.y-18},left=p.x-width/2,top=p.y-height;
    if(left+width>=0&&left<=svg.clientWidth&&top+height>=0&&top<=svg.clientHeight){

@@ -10,7 +10,7 @@ import {createMoveSnap} from "../viewer/moveSnapping";
 import {UndoHistory,type EditCommand,type EditHistoryState} from "../viewer/undoHistory";
 import {drawMeasurementOverlay} from "../viewer/measurementOverlay";
 import {parseEditNumber} from "../viewer/offsetGeometry";
-import {asAnnotation,calculationOf,cleanPoints,dimensionsError,fromAnnotation,geometryError,insidePolygon,KINDS,knownUnit,labelPosition,moveTakeoffToLayer,NAMES,newTakeoff,quantity,quantityText,takeoffPolygon,takeoffVisible,totalText,totals,selectedLayerTotals,type Dimensions,type TakeoffCalculation,type TakeoffDocument,type TakeoffKind,type TakeoffObject} from "../takeoff/model";
+import {asAnnotation,calculationOf,cleanPoints,dimensionsError,fromAnnotation,geometryError,insidePolygon,KINDS,knownUnit,labelPosition,moveTakeoffToLayer,NAMES,newTakeoff,quantity,takeoffPolygon,takeoffVisible,totalText,totals,selectedLayerTotals,type Dimensions,type TakeoffCalculation,type TakeoffDocument,type TakeoffKind,type TakeoffObject} from "../takeoff/model";
 import {loadTakeoff,notifyTakeoffCompleted,saveTakeoff} from "../takeoff/storage";
 import {drawTakeoff} from "../takeoff/overlay";
 import {takeoffDraftPoints} from "../takeoff/draft";
@@ -19,6 +19,7 @@ import {ToolIcon} from "./ToolIcon";
 import {VisibilityIcon} from "./Icons";
 import {ToolStrip} from "./ToolStrip";
 import {TakeoffLayerRow} from "./TakeoffLayerRow";
+import {TakeoffFormula} from "./TakeoffFormula";
 import "../takeoff/takeoff.css";
 export type TakeoffHandle={execute(command:EditCommand):void;objectAction(command:"select"|"delete"):void;showTools():void};
 type Props={viewer:DrawingViewer;identity:{name:string;size:number;lastModified:number};active:boolean;sourceUnit:MeasurementUnit;onHistory(state:EditHistoryState):void;layersOpen:boolean;layerTabs:ReactNode;onLayersToggle():void;onLayersHide():void};
@@ -39,6 +40,7 @@ export const TakeoffEditor=forwardRef<TakeoffHandle,Props>(function TakeoffEdito
  const calculation=doc.options.calculation??"volume",polygon=(o:TakeoffObject)=>takeoffPolygon(o.kind,calculationOf(o));
  const blocked=()=>!loaded||!!loadError||!!revisions.length||lock.current||!!failed.current;
  useLayoutEffect(()=>{setOpen(active);},[active]);
+ useLayoutEffect(()=>{if(open&&active)svg.current?.parentElement?.querySelector('.takeoff-panel')?.scrollTo({top:0});},[selected,open,active]);
  useEffect(()=>{if(layersOpen)setOpen(false);},[layersOpen]);
  useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;};},[]);
  useEffect(()=>{let live=true;setLoaded(false);setLoadError("");if(!key){setLoadError("도면 내용 식별자를 준비하지 못했습니다. 다시 열어 주세요.");return;}
@@ -85,7 +87,7 @@ export const TakeoffEditor=forwardRef<TakeoffHandle,Props>(function TakeoffEdito
    const color=pick.cadColor;
    commit({...doc,options:{...doc.options,keepColors:[...new Set([...doc.options.keepColors,color])]}},()=>{setPickingColor(false);setNotice(`${color} 원본 색상을 유지합니다.`);});return;
   }
-  if(tool==="select"){setSelected(hit(pick.point)?.id??null);setVertex(null);setNotice("");return;}
+  if(tool==="select"){const object=hit(pick.point);setSelected(object?.id??null);setVertex(null);setNotice("");if(object){onLayersHide();setOpen(true);}return;}
   if(tool==="insert"){
    if(!selectedObject)return;const p=selectedObject.geometry.points;let index=0,best=Infinity;for(let i=1;i<p.length+(polygon(selectedObject)?1:0);i++){const d=pointSegmentDistance(pick.point,p[i-1],p[i%p.length]);if(d<best){best=d;index=i;}}
    const points=cleanPoints([...p.slice(0,index),pick.point,...p.slice(index)],polygon(selectedObject));if(points.length===p.length){setNotice("이미 있는 점입니다.");return;}const error=geometryError(points,polygon(selectedObject));if(error){setNotice(error);return;}commit({...doc,objects:doc.objects.map(o=>o.id===selected?{...o,geometry:{...o.geometry,points}}:o)},()=>{setTool("select");setNotice("점이 추가되었습니다.");});return;
@@ -107,7 +109,7 @@ export const TakeoffEditor=forwardRef<TakeoffHandle,Props>(function TakeoffEdito
   const clear=()=>{dragPreview.current=null;setDragging(false);preview.current=null;renderRef.current();};dragPreview.current=object;setDragging(true);
   const normal=viewer.getAnnotationTargets(),own=annotationGeometry(visible.filter(o=>o.id!==objectId).map(o=>asAnnotation(o)));
   return{offset:{x:projected.x+rect.left-client.x,y:projected.y+rect.top-client.y},anchor:free?base:original.geometry.points.find(p=>distance(p,base)>1e-8),translation:free?{snap:createMoveSnap(annotation,base),geometry:{...own,entities:[...normal.geometry.entities,...own.entities],snaps:[...normal.geometry.snaps,...own.snaps].sort((a,b)=>a.x-b.x)},masks:normal.masks}:undefined,
-   move:p=>{moved||=distance(base,p.point)>viewer.worldTolerance(2);dragPreview.current=candidate(p);renderRef.current();},end:p=>{const next=candidate(p);clear();if(!moved||!next)return;const error=geometryError(next.geometry.points,polygon(next));if(error){setNotice(error);return;}commit({...docRef.current,objects:docRef.current.objects.map(o=>o.id===objectId?next:o)});},cancel:clear};
+   move:p=>{moved||=distance(base,p.point)>viewer.worldTolerance(2);dragPreview.current=candidate(p);renderRef.current();},end:p=>{const next=candidate(p);clear();if(!moved){onLayersHide();setOpen(true);return;}if(!next)return;const error=geometryError(next.geometry.points,polygon(next));if(error){setNotice(error);return;}commit({...docRef.current,objects:docRef.current.objects.map(o=>o.id===objectId?next:o)});},cancel:clear};
  };
  const draftObject:TakeoffObject|null=tool!=="select"&&tool!=="insert"&&draft.length?{id:"takeoff-draft",layerId:doc.activeLayerId,groupId:tool,kind:tool,calculation,geometry:{type:takeoffPolygon(tool,calculation)?"polygon":"path",points:draft},dimensions:{},label:{visible:false}}:null;
  const render=()=>{
@@ -126,7 +128,6 @@ export const TakeoffEditor=forwardRef<TakeoffHandle,Props>(function TakeoffEdito
  useEffect(()=>{if(!active)setPickingColor(false);},[active]);
  useLayoutEffect(()=>{viewer.configureAnnotations(active&&!blocked()&&!form&&!unitChange&&!layerDelete?{tool:pickingColor?"cad-color":tool==="select"?"select":"polyline",editableDraftPoints:!pickingColor&&tool!=="select"&&tool!=="insert",snapping:!pickingColor&&snap&&tool!=="select",handleSnapping:snap,points:pickingColor?[]:draft,anchor:pickingColor?undefined:draft.at(-1),onHandleDown:pickingColor?undefined:beginHandle,onPick:pick,onPreview:p=>{preview.current=p;renderRef.current();}}:null,"takeoff");return()=>viewer.configureAnnotations(null,"takeoff");},[viewer,active,doc,draft,tool,snap,selected,form,busy,saveError,loaded,revisions,unitChange,layerDelete,pickingColor]);
  const sum=totals(doc),layerSum=selectedLayerTotals(doc);
- const q=selectedObject?quantity(selectedObject,doc.unit):null;
  const toggleOption=(options:Partial<TakeoffDocument["options"]>)=>commit({...doc,options:{...doc.options,...options}});
  const exportExcel=async()=>{
   if(blocked()||exportLock.current||!docRef.current.objects.length)return;
@@ -161,6 +162,7 @@ export const TakeoffEditor=forwardRef<TakeoffHandle,Props>(function TakeoffEdito
    </aside>
    <ToolbarStatus>{compact}</ToolbarStatus>
    {open?<section className="takeoff-panel tool-panel" aria-label="독립 적산 도구"><header className="tool-panel-header"><strong className="sr-only">적산 도구</strong><span className="sr-only">{busy?"저장 중…":saved?"저장 완료":"원본 보존"}</span><button onClick={()=>setOpen(false)} aria-label="적산 도구 접기">×</button></header>
+    {selectedObject&&(tool==="select"||tool==="insert")?<div className="takeoff-selection" data-selected-takeoff={selectedObject.id}><b>{NAMES[selectedObject.kind]} · {calculationOf(selectedObject)==="area"?"면적":"체적"} · {selectedObject.id.slice(0,8)}</b><TakeoffFormula object={selectedObject} unit={doc.unit} measurementUnit={sourceUnit}/><label className="takeoff-object-layer">적산 레이어 <select aria-label="선택 적산 객체 레이어" value={selectedObject.layerId} disabled={blocked()} onChange={e=>changeObjectLayer(e.target.value)}>{doc.layers.map(l=><option key={l.id} value={l.id}>{l.name}{l.visible?"":" (숨김)"}</option>)}</select></label><div>{calculationOf(selectedObject)==="volume"?<button disabled={blocked()} onClick={()=>startForm(selectedObject,true)}>규격 수정</button>:null}<button disabled={blocked()} onClick={()=>setTool("insert")}>점 추가</button><button disabled={blocked()||vertex===null} onClick={deleteVertex}>선택 점 삭제</button><button disabled={blocked()} onClick={()=>commit({...doc,objects:doc.objects.map(o=>o.id===selected?{...o,label:{...o.label,visible:!o.label.visible}}:o)})}>{selectedObject.label.visible?"라벨 숨김":"라벨 표시"}</button><button disabled={blocked()} onClick={deleteObject}>객체 삭제</button></div><small>원형 점은 꼭짓점 수정 · 아래 십자는 이동 · 라벨을 잡아 위치 이동</small></div>:null}
     <div className="takeoff-calculation" role="group" aria-label="적산 계산 방식">{(["volume","area"] as const).map(value=><label key={value}><input type="checkbox" aria-label={value==="volume"?"체적 적산":"면적 적산"} checked={calculation===value} disabled={blocked()} onChange={()=>changeCalculation(value)}/>{value==="volume"?"체적 (m³)":"면적 (m²)"}</label>)}</div>
     <ToolStrip className="takeoff-tool-row" tabIndex={0}>{KINDS.map(k=><button key={k} data-takeoff-tool={k} aria-pressed={tool===k} disabled={blocked()} onClick={()=>resetTool(k)}><ToolIcon name={takeoffPolygon(k,calculation)?"area":"polyline"}/>{NAMES[k]}</button>)}</ToolStrip>
     <div className="takeoff-display-controls">{exportButton}<div className="takeoff-display-row"><label><input aria-label="원본 도면 표시" type="checkbox" checked={doc.options.cadVisible} disabled={blocked()} onChange={e=>toggleOption({cadVisible:e.target.checked})}/> 원본 도면</label><label><input aria-label="적산 집중 보기" type="checkbox" checked={doc.options.focus} disabled={blocked()} onChange={e=>toggleOption({focus:e.target.checked})}/> 집중 보기</label></div></div>
@@ -169,7 +171,6 @@ export const TakeoffEditor=forwardRef<TakeoffHandle,Props>(function TakeoffEdito
     <div className="takeoff-unit-row"><label>도면 1단위 <select aria-label="적산 도면 단위" value={doc.unit} disabled={blocked()} onChange={e=>{const u=e.target.value as MeasurementUnit;if(doc.objects.length)setUnitChange(u);else commit({...doc,unit:u});}}><option value="drawing" disabled={!!doc.objects.length}>단위 확인 필요</option>{["mm","cm","m","in","ft"].map(u=><option key={u} value={u}>{u}</option>)}</select></label><label><input type="checkbox" checked={snap} onChange={e=>setSnap(e.target.checked)}/> 스냅</label></div>
     <div className="takeoff-groups">{doc.groups.map(g=><div key={g.id}><label><input aria-label={`${NAMES[g.id]} 적산 표시`} type="checkbox" checked={g.visible} disabled={blocked()} onChange={e=>commit({...doc,groups:doc.groups.map(v=>v.id===g.id?{...v,visible:e.target.checked}:v)})}/>{NAMES[g.id]}</label><input type="color" aria-label={`${NAMES[g.id]} 적산 색상`} value={g.color} disabled={blocked()} onChange={e=>commit({...doc,groups:doc.groups.map(v=>v.id===g.id?{...v,color:e.target.value}:v)})}/><span>{sum.groups[g.id].count}개 · {totalText(sum.groups[g.id])}</span></div>)}</div>
     </details>
-    {selectedObject?<div className="takeoff-selection" data-selected-takeoff={selectedObject.id}><b>{NAMES[selectedObject.kind]} · {calculationOf(selectedObject)==="area"?"면적":"체적"} · {selectedObject.id.slice(0,8)}</b><output>{calculationOf(selectedObject)==="area"?quantityText(q!):`${polygon(selectedObject)?`${q!.areaM2.toFixed(3)} m²`:`${q!.lengthM.toFixed(3)} m`} · ${quantityText(q!)}`}</output><label className="takeoff-object-layer">적산 레이어 <select aria-label="선택 적산 객체 레이어" value={selectedObject.layerId} disabled={blocked()} onChange={e=>changeObjectLayer(e.target.value)}>{doc.layers.map(l=><option key={l.id} value={l.id}>{l.name}{l.visible?"":" (숨김)"}</option>)}</select></label><div>{calculationOf(selectedObject)==="volume"?<button disabled={blocked()} onClick={()=>startForm(selectedObject,true)}>규격 수정</button>:null}<button disabled={blocked()} onClick={()=>setTool("insert")}>점 추가</button><button disabled={blocked()||vertex===null} onClick={deleteVertex}>선택 점 삭제</button><button disabled={blocked()} onClick={()=>commit({...doc,objects:doc.objects.map(o=>o.id===selected?{...o,label:{...o.label,visible:!o.label.visible}}:o)})}>{selectedObject.label.visible?"라벨 숨김":"라벨 표시"}</button><button disabled={blocked()} onClick={deleteObject}>객체 삭제</button></div><small>원형 점은 꼭짓점 수정 · 아래 십자는 이동 · 라벨을 잡아 위치 이동</small></div>:null}
     <details className="tool-help"><summary aria-label="적산 사용법" title="적산 사용법">?</summary><p>점을 차례로 찍고 완료를 누른 뒤 규격을 입력합니다. 찍은 점을 길게 눌러 수정할 수 있습니다. 면적은 영역을 닫고 완료하면 규격 입력 없이 m²로 저장합니다. 체적은 기존 규격을 입력합니다.</p></details>
     {notice?<p className="takeoff-notice" role="status">{notice}</p>:null}
    </section>:null}

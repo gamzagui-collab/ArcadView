@@ -35,7 +35,7 @@ it("shows volume in one small line while keeping full calculation details availa
  const f=labelFixture();f.draw();const label=f.labels()[0],box=label.children.find(e=>"rx"in e.attributes)!;
  expect(+box.attributes.width).toBeLessThanOrEqual(80);expect(+box.attributes.height).toBe(22);
  const text=label.children.filter(e=>"font-size"in e.attributes);expect(text).toHaveLength(1);expect(text[0].textContent).toBe("12.000 m³");expect(text[0].attributes["font-size"]).toBe("10");
- expect(label.children.find(e=>e.textContent.includes("L 20.00 × H 3.00 × T 0.20"))?.textContent).toContain("12.000 m³");
+ expect(label.children.find(e=>e.textContent.includes("길이 20 m × 높이 3 m × 두께 0.2 m"))?.textContent).toContain("12.000 m³");
 });
 it("toggles only label graphics, preserving geometry, totals and individual visibility; old documents default to shown",()=>{
  const f=labelFixture();f.doc.objects.push({...f.doc.objects[0],id:"individually-hidden",label:{visible:false}});delete f.doc.options.labelsVisible;validateDocument(f.doc);f.draw();expect(f.labels()).toHaveLength(1);
