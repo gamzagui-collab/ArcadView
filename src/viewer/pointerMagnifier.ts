@@ -1,5 +1,4 @@
 import{MAGNIFIER_WIDTHS,readViewerPreferences,VIEWER_PREFERENCES_EVENT}from'./viewerPreferences';
-import{MagnifierQuality}from'./magnifierQuality';
 type Point={x:number;y:number};
 type Rect=Point&{width:number;height:number};
 export type MagnifierPoint=Point;
@@ -34,8 +33,6 @@ export class PointerMagnifier{
  private tileCanvas:HTMLCanvasElement;
  private tile:Rect|null=null;
  private frame=0;
- private idle:ReturnType<typeof setTimeout>|undefined;
- private quality=new MagnifierQuality();
  private point:Point|null=null;
  private shell:Element|null;
  private id='arcad-lens-'+(++nextId)+'-';
@@ -57,7 +54,6 @@ export class PointerMagnifier{
  }
  show(point:Point,world:Point,snapped:string|null){
   if(!this.prefs.magnifierEnabled){this.hide();return;}
-  this.quality.move(point,performance.now());clearTimeout(this.idle);this.idle=undefined;
   this.point=point;this.host.hidden=false;this.shell?.classList.add('precision-lens-active');
   this.host.dataset.worldX=String(world.x);this.host.dataset.worldY=String(world.y);this.host.dataset.snapped=snapped??'none';
   if(!this.frame)this.frame=requestAnimationFrame(()=>{this.frame=0;if(this.point)this.draw(this.point);});
@@ -65,7 +61,7 @@ export class PointerMagnifier{
  invalidate(){this.tile=null;this.detail?.invalidate();}
  hide(){
   cancelAnimationFrame(this.frame);this.frame=0;this.point=null;this.host.hidden=true;this.shell?.classList.remove('precision-lens-active');
-  clearTimeout(this.idle);this.idle=undefined;this.quality.reset();this.detail?.invalidate();
+  this.detail?.invalidate();
   this.vectors.replaceChildren();this.tile=null;this.tileCanvas.width=this.tileCanvas.height=1;
   if(this.shell instanceof HTMLElement){this.shell.style.removeProperty('--precision-summary-top');this.shell.style.removeProperty('--precision-summary-height');}
  }
@@ -103,13 +99,11 @@ export class PointerMagnifier{
     if(this.tile)ctx.drawImage(this.tileCanvas,(minX-this.tile.x)*this.tileCanvas.width/this.tile.width,(minY-this.tile.y)*this.tileCanvas.height/this.tile.height,(maxX-minX)*this.tileCanvas.width/this.tile.width,(maxY-minY)*this.tileCanvas.height/this.tile.height,(minX-region.x)*MAGNIFIER_ZOOM,(minY-region.y)*MAGNIFIER_ZOOM,(maxX-minX)*MAGNIFIER_ZOOM,(maxY-minY)*MAGNIFIER_ZOOM);
    }
    }
-   // Prepare the cheap movement tile while the initial pointer is stationary,
-   // instead of deferring its first full-scene copy to the first drag.
-   if(this.detail&&!this.tile)raster();
-   const detailed=this.quality.allowDetail(performance.now())?this.detail?.draw(this.canvas,point,width,height):null;
-   if(detailed){this.host.dataset.quality='sharp';if(detailed.captureMs!==null)this.quality.captured(detailed.captureMs);}
+   // Always use original-geometry detail, including while moving. Its wider
+   // cache absorbs normal finger motion without a new GPU capture per frame.
+   const detailed=this.detail?.draw(this.canvas,point,width,height);
+   if(detailed)this.host.dataset.quality='sharp';
    else raster();
-   const delay=this.quality.remaining(performance.now());if(delay>0&&!this.idle)this.idle=setTimeout(()=>{this.idle=undefined;if(this.point&&!this.frame)this.frame=requestAnimationFrame(()=>{this.frame=0;if(this.point)this.draw(this.point);});},delay);
   }
   this.vectors.setAttribute('viewBox',`${region.x} ${region.y} ${region.width} ${region.height}`);
   this.vectors.setAttribute('preserveAspectRatio','none');

@@ -12,14 +12,16 @@ export function magnifierCamera(camera:OrthographicCamera,tile:MagnifierRect,wid
  crop.clearViewOffset();crop.updateProjectionMatrix();crop.updateMatrixWorld();return crop;
 }
 export function detailTile(point:MagnifierPoint,width:number,height:number,lensWidth:number,lensHeight:number){
- const w=Math.min(width,lensWidth/MAGNIFIER_ZOOM*2),h=Math.min(height,lensHeight/MAGNIFIER_ZOOM*2);
+ // Cover a finger's travel as well as the lens. Recentring a small sharp tile
+ // every few pixels causes synchronous GPU readback stalls during a drag.
+ const w=Math.min(width,lensWidth/MAGNIFIER_ZOOM+256),h=Math.min(height,lensHeight/MAGNIFIER_ZOOM+256);
  return{x:Math.max(0,Math.min(width-w,point.x-w/2)),y:Math.max(0,Math.min(height-h,point.y-h/2)),width:w,height:h};
 }
 /** One bounded original-geometry tile. All GPU and CPU buffers are reused and
  * released with the drawing. No second scene, drawing conversion or storage. */
 export class CadMagnifierDetail implements MagnifierDetail{
  private tile:MagnifierRect|null=null;private target:WebGLRenderTarget|null=null;private pixels=new Uint8Array(0);
- private bitmap:HTMLCanvasElement|null=null;private image:ImageData|null=null;private failed=false;
+ private bitmap:HTMLCanvasElement|null=null;private image:ImageData|null=null;private failed=false;private size='';
  constructor(private source:Source,private cull:(camera:OrthographicCamera,width:number)=>void,private exact:(draw:()=>void)=>void){}
  invalidate(){this.tile=null;}
  draw(output:HTMLCanvasElement,point:MagnifierPoint,width:number,height:number){
@@ -27,11 +29,15 @@ export class CadMagnifierDetail implements MagnifierDetail{
   if(this.failed||renderer.getContext().isContextLost()||camera.view?.enabled||Math.abs(camera.quaternion.x)+Math.abs(camera.quaternion.y)+Math.abs(camera.quaternion.z)>1e-10)return null;
   const sw=canvas.clientWidth,sh=canvas.clientHeight,region=magnifierRegion(point,width,height),x=Math.max(0,region.x),y=Math.max(0,region.y),clip={x,y,width:Math.min(sw,region.x+region.width)-x,height:Math.min(sh,region.y+region.height)-y};
   if(sw<=0||sh<=0||clip.width<=0||clip.height<=0)return null;
+  // ResizeObserver also fires after our first layout has already been drawn.
+  // Refresh only when the actual source/lens resolution changed, not twice
+  // merely because that initial resize notification arrived a frame later.
+  const size=[sw,sh,width,height,renderer.getPixelRatio()].join(',');if(size!==this.size){this.tile=null;this.size=size;}
   let captureMs:number|null=null;
   try{
    if(!this.tile||!contains(this.tile,clip)){
-    const t=performance.now(),tile=detailTile(point,sw,sh,width,height),density=Math.min(2,renderer.getPixelRatio()),scale=Math.min(density,Math.sqrt(786432/(tile.width*tile.height*MAGNIFIER_ZOOM**2)));
-    this.capture(tile,Math.max(1,Math.round(tile.width*MAGNIFIER_ZOOM*scale)),Math.max(1,Math.round(tile.height*MAGNIFIER_ZOOM*scale)));
+    const t=performance.now(),tile=detailTile(point,sw,sh,width,height),density=Math.min(2,renderer.getPixelRatio()),scale=Math.min(density,Math.sqrt(2097152/(tile.width*tile.height*MAGNIFIER_ZOOM**2)),(renderer.capabilities.maxTextureSize??2048)/(Math.max(tile.width,tile.height)*MAGNIFIER_ZOOM));
+    this.capture(tile,Math.max(1,Math.floor(tile.width*MAGNIFIER_ZOOM*scale)),Math.max(1,Math.floor(tile.height*MAGNIFIER_ZOOM*scale)));
     captureMs=performance.now()-t;
    }
    const tile=this.tile!,bitmap=this.bitmap!,ctx=output.getContext('2d')!,dpr=output.width/width;
@@ -60,5 +66,5 @@ export class CadMagnifierDetail implements MagnifierDetail{
   }
   this.bitmap!.getContext('2d')!.putImageData(this.image!,0,0);this.tile=tile;
  }
- dispose(){this.target?.dispose();this.target=null;this.tile=null;this.pixels=new Uint8Array(0);this.image=null;if(this.bitmap)this.bitmap.width=this.bitmap.height=1;this.bitmap=null;}
+ dispose(){this.target?.dispose();this.target=null;this.tile=null;this.size='';this.pixels=new Uint8Array(0);this.image=null;if(this.bitmap)this.bitmap.width=this.bitmap.height=1;this.bitmap=null;}
 }
