@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DrawingViewer } from "./DrawingViewer";
 import { registerSavedDrawingView } from "./savedView";
+import {buildMeasurementGeometry} from './measurementGeometry';
+import {annotationGeometry} from './annotations';
 
 const state = vi.hoisted(() => ({
   hasRenderer: true,
@@ -56,6 +58,33 @@ class FakeErrorEvent extends Event {
 }
 
 describe("drawing viewer lifecycle", () => {
+  it('reads viewport bounds a bounded number of times even when thousands of snap candidates overlap',async()=>{
+    const viewer=new DrawingViewer({}as HTMLElement);await viewer.load(new File(['0\nEOF\n'],'dense.dxf'),vi.fn());
+    const canvas=state.current.canvas,rect=vi.fn(()=>({left:0,top:0,width:1000,height:200}));canvas.getBoundingClientRect=rect;
+    Object.assign(state.current.camera,{left:0,right:10000,top:1000,bottom:-1000});state.current.camera.updateProjectionMatrix();
+    (viewer as any).geometry=buildMeasurementGeometry({entities:Array.from({length:2000},(_,i)=>({type:'LINE',vertices:[{x:0,y:i*.001},{x:10000,y:i*.001}]}))}as any,{},undefined,true);
+    viewer.configureMeasurement({enabled:true,mode:'area',points:[],snapping:true,entity:null});rect.mockClear();
+    expect((viewer as any).pickAt({x:370,y:92},false).snapped).not.toBeNull();expect(rect.mock.calls.length).toBeLessThan(8);viewer.destroy();
+  });
+  it('shares exact nearest picks across measurement, drawing, takeoff and handles while excluding inactive takeoff geometry',async()=>{
+    const picked=vi.fn(),viewer=new DrawingViewer({}as HTMLElement,undefined,picked);
+    await viewer.load(new File(['0\nEOF\n'],'nearest.dxf'),vi.fn());
+    const native=state.current,canvas=native.canvas;canvas.getBoundingClientRect=()=>({left:0,top:0,width:1000,height:200});
+    Object.assign(native.camera,{left:0,right:10000,top:1000,bottom:-1000});native.camera.updateProjectionMatrix();
+    (viewer as any).geometry=buildMeasurementGeometry({entities:[{type:'LINE',vertices:[{x:0,y:0},{x:10000,y:0}]}]}as any,{});
+    const emit=()=>{for(const type of['pointerdown','pointerup'])canvas.dispatchEvent(Object.assign(new Event(type),{pointerId:1,clientX:370,clientY:92,pointerType:'touch',button:0}));};
+    for(const mode of['distance','linear','path','area','angle']as const){viewer.configureAnnotations(null);viewer.configureMeasurement({enabled:true,mode,points:[],snapping:true,entity:null});emit();expect(picked.mock.calls.at(-1)![0]).toMatchObject({point:{x:3700,y:0},snapped:'edge'});}
+    for(const tool of['polyline','circle','rectangle','dimension-aligned']){const onPick=vi.fn();viewer.configureAnnotations({tool,snapping:true,points:[],onPick,onPreview:vi.fn()});emit();expect(onPick.mock.calls[0][0].point).toEqual({x:3700,y:0});}
+    const user=annotationGeometry([{id:'user',layerId:'one',kind:'polyline',points:[{x:0,y:400},{x:10000,y:400}]}]);viewer.setUserGeometry(user,[]);
+    const takeoff=annotationGeometry([{id:'takeoff',layerId:'t',kind:'polyline',points:[{x:0,y:600},{x:10000,y:600}]}]);viewer.setTakeoffGeometry(takeoff);
+    viewer.configureAnnotations(null);viewer.configureMeasurement({enabled:true,mode:'distance',points:[],snapping:true,entity:null});
+    expect((viewer as any).pickAt({x:370,y:58},false).point).toEqual({x:3700,y:400});
+    expect((viewer as any).pickAt({x:370,y:38},false).snapped).toBeNull();
+    viewer.setTakeoffMode(true);expect((viewer as any).pickAt({x:370,y:38},false).point).toEqual({x:3700,y:600});
+    expect((viewer as any).pickAt({x:370,y:58},false).point).toEqual({x:3700,y:400});
+    viewer.setTakeoffMode(false);expect((viewer as any).pickAt({x:370,y:38},false).snapped).toBeNull();
+    viewer.configureMeasurement({enabled:true,mode:'distance',points:[],snapping:false,entity:null});expect((viewer as any).pickAt({x:370,y:92},false).snapped).toBeNull();viewer.destroy();
+  });
   it("releases owned packed buffers even when a parent still holds the old geometry", async () => {
     const viewer = new DrawingViewer({} as HTMLElement);
     await viewer.load(new File(["0\nEOF\n"], "test.dxf"), vi.fn());

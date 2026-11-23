@@ -19,7 +19,8 @@ it("pans between separated objects without leaving empty label hit targets, and 
  const check=(id:string)=>{expect(labels().map(e=>e.attributes["data-takeoff-label"])).toEqual([id]);expect(labels().every(e=>e.children.some(c=>"rx"in c.attributes))).toBe(true);};
  drawTakeoff(svg,doc,"near",null,p=>p.map(v=>({...v})),true);check("near");
  drawTakeoff(svg,doc,"far",null,p=>p.map(v=>({x:v.x-9900,y:v.y-9900})),true);check("far");
- drawTakeoff(svg,doc,null,null,p=>p.map(v=>({...v})),false);check("near");
+ drawTakeoff(svg,doc,null,null,p=>p.map(v=>({...v})),false);expect(nodes).toEqual([]);
+ drawTakeoff(svg,doc,null,null,p=>p.map(v=>({...v})),true);check("near");
  expect(doc.objects[0].geometry.points[0]).toEqual({x:100,y:300});
 });
 
@@ -28,7 +29,7 @@ function labelFixture(){
  const doc=newTakeoff({key:"v1-"+"b".repeat(64),name:"labels.dwg",size:1,lastModified:0},"mm");
  doc.objects=[{id:"wall-visible",layerId:doc.activeLayerId,groupId:"wall",kind:"wall",geometry:{type:"path",points:[{x:0,y:0},{x:20000,y:0}]},dimensions:{heightMm:3000,thicknessMm:200},label:{visible:true}}];
  let nodes:Element[]=[];const svg={clientWidth:360,clientHeight:616,replaceChildren:(...children:Element[])=>{nodes=children;}}as unknown as SVGSVGElement;
- const draw=()=>drawTakeoff(svg,doc,null,null,p=>p.map(v=>({x:100+v.x*.005,y:300-v.y*.005})),false);
+ const draw=()=>drawTakeoff(svg,doc,null,null,p=>p.map(v=>({x:100+v.x*.005,y:300-v.y*.005})),true);
  return{doc,draw,nodes:()=>nodes,labels:()=>nodes.filter(e=>"data-takeoff-label"in e.attributes)};
 }
 it("shows volume in one small line while keeping full calculation details available",()=>{

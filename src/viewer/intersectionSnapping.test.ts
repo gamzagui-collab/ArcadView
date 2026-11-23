@@ -3,6 +3,11 @@ import {buildMeasurementGeometry} from "./measurementGeometry";
 import {annotationGeometry,type Annotation} from "./annotations";
 import {intersectionSnap} from "./intersectionSnapping";
 const line=(id:string,points:Annotation["points"]):Annotation=>({id,layerId:"base",kind:"polyline",points});
+it('retains the closest crossing among thousands of overlapping edges without unbounded candidate sorting',()=>{
+ const g=annotationGeometry([line('h',[{x:-1000,y:0},{x:1000,y:0}]),line('v',[{x:0,y:-1000},{x:0,y:1000}]),
+  ...Array.from({length:10000},(_,i)=>line('dense-'+i,[{x:-1000,y:1+i*.001},{x:1000,y:1+i*.001}]))]);
+ expect(intersectionSnap([g],{x:.001,y:.001},20)).toEqual({x:0,y:0});
+});
 it("snaps a selected overlay crossing an original packed/unpacked line away from their endpoints",()=>{
  for(const packed of[false,true]){
   const cad=buildMeasurementGeometry({entities:[{type:"LINE",vertices:[{x:1e9,y:1e9},{x:1e9+1000,y:1e9}]}]}as any,{},undefined,packed);

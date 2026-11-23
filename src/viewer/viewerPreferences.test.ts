@@ -1,6 +1,12 @@
 import{afterEach,expect,it,vi}from'vitest';
 import{readViewerPreferences,saveViewerPreferences,VIEWER_PREFERENCES_KEY,VIEWER_PREFERENCES_EVENT}from'./viewerPreferences';
 afterEach(()=>vi.unstubAllGlobals());
+it('defaults nearest to enabled without rewriting older settings and persists a deliberate off choice',()=>{
+ const raw=JSON.stringify({magnifierEnabled:false,magnifierSize:'large',nearestSnapEnabled:false});
+ expect(readViewerPreferences({getItem:()=>raw})).toEqual({magnifierEnabled:false,magnifierSize:'large',nearestSnapEnabled:false});
+ expect(readViewerPreferences({getItem:()=>null}).nearestSnapEnabled).not.toBe(false);
+ expect(readViewerPreferences({getItem:()=>JSON.stringify({nearestSnapEnabled:'false'})}).nearestSnapEnabled).not.toBe(false);
+});
 it('opens with a larger enabled medium lens and tolerates unavailable or corrupt storage',()=>{
  expect(readViewerPreferences({getItem:()=>null})).toEqual({magnifierEnabled:true,magnifierSize:'medium'});
  expect(readViewerPreferences({getItem:()=>'{broken'})).toEqual({magnifierEnabled:true,magnifierSize:'medium'});

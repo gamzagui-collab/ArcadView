@@ -34,7 +34,7 @@
 
 ## 설치
 
-[직원용 APK 바로 다운로드 — 2.1.52](https://github.com/gamzagui-collab/ArcadView/releases/download/v2.1.52/Arcad-View-v2.1.52-80.apk)를 눌러 설치하세요. 기존 앱은 제거하지 말고 업데이트 설치합니다. 앱 정보의 **업데이트 확인** 버튼으로 새 버전을 확인할 수 있습니다. 자동 업데이트 확인은 앱 실행과 복귀 때 수행하며 다운로드·설치는 사용자의 승인이 필요합니다. [최신 릴리스의 변경 안내](https://github.com/gamzagui-collab/ArcadView/releases/latest)와 [같은 버전의 전체 대응 소스](https://github.com/gamzagui-collab/ArcadView-Source/tree/v2.1.52)도 확인할 수 있습니다.
+[직원용 APK 바로 다운로드 — 2.1.56](https://github.com/gamzagui-collab/ArcadView/releases/download/v2.1.56/Arcad-View-v2.1.56-84.apk)를 눌러 설치하세요. 기존 앱은 제거하지 말고 업데이트 설치합니다. 앱 정보의 **업데이트 확인** 버튼으로 새 버전을 확인할 수 있습니다. 자동 업데이트 확인은 앱 실행과 복귀 때 수행하며 다운로드·설치는 사용자의 승인이 필요합니다. [최신 릴리스의 변경 안내](https://github.com/gamzagui-collab/ArcadView/releases/latest)와 [같은 버전의 전체 대응 소스](https://github.com/gamzagui-collab/ArcadView-Source/tree/v2.1.56)도 확인할 수 있습니다.
 
 ## 빌드
 

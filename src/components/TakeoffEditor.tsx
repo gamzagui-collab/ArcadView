@@ -26,10 +26,10 @@ import {TakeoffFormula} from "./TakeoffFormula";
 import {addCalculationLayer,removeCalculationLayer,selectCalculationLayer,separateCalculationLayers,switchCalculationLayer} from "../takeoff/calculationLayers";
 import "../takeoff/takeoff.css";
 export type TakeoffHandle={execute(command:EditCommand):void;objectAction(command:"select"|"delete"):void;showTools():void;hasSaveError():boolean};
-type Props={viewer:DrawingViewer;identity:{name:string;size:number;lastModified:number};active:boolean;sourceUnit:MeasurementUnit;onHistory(state:EditHistoryState):void;layersOpen:boolean;layerTabs:ReactNode;onLayersToggle():void;onLayersHide():void};
+type Props={viewer:DrawingViewer;identity:{name:string;size:number;lastModified:number};active:boolean;sourceUnit:MeasurementUnit;onHistory(state:EditHistoryState):void;layersOpen:boolean;layerTabs:ReactNode;onLayersToggle():void;onLayersHide():void;onGeneralSelect?(point:P|null):boolean};
 type Form={object:TakeoffObject;existing:boolean;focus:number;previous?:Dimensions};
 type DimensionConfirmation={object:TakeoffObject;existing:boolean;heightUnit?:SpecificationUnit;warnings:DimensionWarning[];revision:number};
-export const TakeoffEditor=forwardRef<TakeoffHandle,Props>(function TakeoffEditor({viewer,identity,active,sourceUnit,onHistory,layersOpen,layerTabs,onLayersToggle,onLayersHide},ref){
+export const TakeoffEditor=forwardRef<TakeoffHandle,Props>(function TakeoffEditor({viewer,identity,active,sourceUnit,onHistory,layersOpen,layerTabs,onLayersToggle,onLayersHide,onGeneralSelect},ref){
  const {locale}=useI18n(),tx=(key:TakeoffTextKey,values?:Record<string,string|number>)=>takeoffText(locale,key,values),ln=(name:string)=>takeoffLayerName(locale,name),names=Object.fromEntries(KINDS.map(k=>[k,tx(NAMES[k])])) as Record<TakeoffKind,string>;
  const key=viewer.getMeasurementGeometry().unitPreferenceKey,drawing={key:key??"",...identity};
  const[doc,setDoc]=useState(()=>newTakeoff(drawing,sourceUnit)),docRef=useRef(doc);docRef.current=doc;
@@ -99,7 +99,7 @@ export const TakeoffEditor=forwardRef<TakeoffHandle,Props>(function TakeoffEdito
    const color=pick.cadColor;
    commit({...doc,options:{...doc.options,keepColors:[...new Set([...doc.options.keepColors,color])]}},()=>{setPickingColor(false);setNotice(tx("{color} 원본 색상을 유지합니다.",{color}));});return;
   }
-  if(tool==="select"){const object=hit(pick.point);setSelected(object?.id??null);setVertex(null);setNotice("");if(object){onLayersHide();setOpen(true);}return;}
+  if(tool==="select"){const object=hit(pick.point);onGeneralSelect?.(object?null:pick.point);setSelected(object?.id??null);setVertex(null);setNotice("");if(object){onLayersHide();setOpen(true);}return;}
   if(tool==="insert"){
    if(!selectedObject)return;const p=selectedObject.geometry.points;let index=0,best=Infinity;for(let i=1;i<p.length+(polygon(selectedObject)?1:0);i++){const d=pointSegmentDistance(pick.point,p[i-1],p[i%p.length]);if(d<best){best=d;index=i;}}
    const points=cleanPoints([...p.slice(0,index),pick.point,...p.slice(index)],polygon(selectedObject));if(points.length===p.length){setNotice(tx("이미 있는 점입니다."));return;}const error=geometryError(points,polygon(selectedObject));if(error){setNotice(takeoffError(locale,error));return;}commit({...doc,objects:doc.objects.map(o=>o.id===selected?{...o,geometry:{...o.geometry,points}}:o)},()=>{setTool("select");setNotice(tx("점이 추가되었습니다."));});return;
@@ -114,7 +114,7 @@ export const TakeoffEditor=forwardRef<TakeoffHandle,Props>(function TakeoffEdito
   if(blocked()||form||draft.length||!active||tool!=="select")return null;
   const rect=viewer.getCanvasElement().getBoundingClientRect(),screen={x:client.x-rect.left,y:client.y-rect.top};let object=selectedObject,label=false;
   for(const e of [...svg.current!.querySelectorAll<SVGGElement>("[data-takeoff-label]")].reverse()){const rect=e.querySelector("rect");if(!rect)continue;const b=rect.getBoundingClientRect();if(client.x>=b.left&&client.x<=b.right&&client.y>=b.top&&client.y<=b.bottom){object=visible.find(o=>o.id===e.dataset.takeoffLabel);label=true;break;}}
-  if(!object)return null;const objectId=object.id,annotation=asAnnotation(object),move=svg.current?.querySelector<SVGCircleElement>(`[data-takeoff-move="${objectId}"]`),free=!label&&!!move&&Math.hypot(screen.x-Number(move.getAttribute("cx")),screen.y-Number(move.getAttribute("cy")))<=18;
+  if(!object||!takeoffVisible(doc,object))return null;const objectId=object.id,annotation=asAnnotation(object),move=svg.current?.querySelector<SVGCircleElement>(`[data-takeoff-move="${objectId}"]`),free=!label&&!!move&&Math.hypot(screen.x-Number(move.getAttribute("cx")),screen.y-Number(move.getAttribute("cy")))<=18;
   const grip=!free&&!label?objectGrips(annotation).find(g=>{const p=viewer.projectPoints([g.point])[0];return Math.hypot(p.x-screen.x,p.y-screen.y)<=12;}):undefined;if(!free&&!label&&!grip)return null;
   setSelected(objectId);if(grip)setVertex(Number(grip.id.split(":")[1]));const base=label?labelPosition(object):free?object.geometry.points[0]:grip!.point,projected=viewer.projectPoints([base])[0],original=object;let moved=false;
   const candidate=(pick:MeasurementPick)=>{if(label)return{...original,label:{...original.label,position:pick.point}};const a=free?translateAnnotation(annotation,base,pick.point):reshapeObject(annotation,grip!.id,pick.point);return a?fromAnnotation(original,a):null;};
@@ -134,7 +134,8 @@ export const TakeoffEditor=forwardRef<TakeoffHandle,Props>(function TakeoffEdito
  renderRef.current=render;
  useLayoutEffect(()=>{render();},[doc,selected,active,draft,dragging,form,locale]);
  useLayoutEffect(()=>viewer.subscribeView(()=>renderRef.current()),[viewer]);
- useLayoutEffect(()=>{viewer.setTakeoffGeometry(annotationGeometry(visible.filter(o=>!dragging||o.id!==selected).map(o=>asAnnotation(o))));return()=>viewer.setTakeoffGeometry(annotationGeometry([]));},[doc,dragging,selected]);
+ useLayoutEffect(()=>{viewer.setTakeoffMode(active);return()=>viewer.setTakeoffMode(false);},[viewer,active]);
+ useLayoutEffect(()=>{viewer.setTakeoffGeometry(annotationGeometry(active?visible.filter(o=>!dragging||o.id!==selected).map(o=>asAnnotation(o)):[]));return()=>viewer.setTakeoffGeometry(annotationGeometry([]));},[active,doc,dragging,selected]);
  useLayoutEffect(()=>{viewer.setTakeoffFocus({enabled:active&&doc.options.focus,layers:[],colors:doc.options.keepColors});return()=>viewer.setTakeoffFocus({enabled:false,layers:[],colors:[]});},[active,doc.options.focus,doc.options.keepColors]);
  useLayoutEffect(()=>{viewer.setBaseDrawingVisible(!active||doc.options.cadVisible);return()=>viewer.setBaseDrawingVisible(true);},[active,doc.options.cadVisible]);
  useEffect(()=>{if(!active)setPickingColor(false);},[active]);

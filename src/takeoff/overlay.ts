@@ -10,6 +10,7 @@ export function takeoffMovePoint(points:readonly P[],width:number,height:number)
  return candidates.find(p=>points.every(q=>Math.hypot(p.x-q.x,p.y-q.y)>=30))??candidates.reduce((a,b)=>Math.min(...points.map(q=>Math.hypot(a.x-q.x,a.y-q.y)))>=Math.min(...points.map(q=>Math.hypot(b.x-q.x,b.y-q.y)))?a:b);
 }
 export function drawTakeoff(svg:SVGSVGElement,doc:TakeoffDocument,selected:string|null,draft:TakeoffObject|null,project:(p:readonly P[])=>P[],active:boolean,locale:Locale="ko"){
+ if(!active){svg.replaceChildren();return;}
  const ns="http://www.w3.org/2000/svg",nodes:SVGElement[]=[],el=(tag:string,attrs:Record<string,string|number>,parent?:SVGElement)=>{const e=document.createElementNS(ns,tag);for(const[k,v]of Object.entries(attrs))e.setAttribute(k,String(v));if(parent)parent.append(e);else nodes.push(e);return e;};
  for(const o of [...doc.objects.filter(o=>takeoffVisible(doc,o)&&o.id!==draft?.id),...draft?[draft]:[]]){
   const group=doc.groups.find(g=>g.id===o.groupId)!,color=group.color,chosen=active&&o.id===selected,world=o.geometry.points,points=project(world),closed=takeoffPolygon(o.kind,calculationOf(o)),coords=points.map(p=>`${p.x},${p.y}`).join(" "),tag=closed?"polygon":"polyline";

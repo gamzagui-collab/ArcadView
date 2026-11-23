@@ -12,6 +12,7 @@ export function ViewerSettings({onClose}:{onClose():void}){
   <header className="viewer-settings-heading"><h2 id="viewer-settings-title">{w.title}</h2><button type="button" onClick={onClose} aria-label={w.close}>×</button></header>
   <label className="viewer-magnifier-enable"><input autoFocus type="checkbox" checked={prefs.magnifierEnabled} onChange={e=>change({...prefs,magnifierEnabled:e.target.checked})}/>{w.enabled}<span>5×</span></label>
   <fieldset className="viewer-magnifier-sizes"><legend>{w.size}</legend><div>{(['small','medium','large']as MagnifierSize[]).map((size,i)=><label key={size}><input type="radio" name="magnifier-size" value={size} checked={prefs.magnifierSize===size} onChange={()=>change({...prefs,magnifierSize:size})}/><span>{w.sizes[i]}</span></label>)}</div></fieldset>
+  <label className="viewer-magnifier-enable"><input type="checkbox" checked={prefs.nearestSnapEnabled!==false} onChange={e=>change({...prefs,nearestSnapEnabled:e.target.checked})}/>{{ko:'선 위 최근접점 스냅',en:'Nearest point on lines',tr:'Çizgi üzerindeki en yakın nokta'}[locale]}</label>
   <p className={error?'viewer-settings-error':'viewer-settings-help'} role={error?'alert':undefined}>{error?w.error:w.help}</p>
  </dialog>;
 }

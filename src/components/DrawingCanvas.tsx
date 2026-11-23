@@ -175,7 +175,7 @@ export const DrawingCanvas = forwardRef<ViewerHandle, Props>(
       <div className={`drawing-canvas ${measurement.enabled ? "measurement-active" : ""}`}>
         <div ref={containerRef} className="drawing-surface" />
         {readyViewer?<AnnotationEditor ref={annotationRef} viewer={readyViewer} active={annotationActive} open={annotationOpen} layersOpen={layersOpen&&layerTab==="draw"} hideLayerBadge={takeoffActive} layerTabs={layerTabs} onLayersToggle={onLayersToggle} onLayersHide={onLayersHide} sourceUnit={sourceUnit} displayUnit={displayUnit} precision={precision} onPrecision={onPrecision} onHide={onAnnotationHide} onActivate={onAnnotationActivate} onPause={onAnnotationPause} onHistoryState={annotationHistory}/>:null}
-        {readyViewer?<TakeoffEditor ref={takeoffRef} viewer={readyViewer} identity={drawingIdentity} active={takeoffActive} sourceUnit={sourceUnit} onHistory={onEditHistory} layersOpen={layersOpen&&layerTab==="takeoff"} layerTabs={layerTabs} onLayersToggle={onLayersToggle} onLayersHide={onLayersHide}/>:null}
+        {readyViewer?<TakeoffEditor ref={takeoffRef} onGeneralSelect={point=>annotationRef.current?.selectVisible(point)??false} viewer={readyViewer} identity={drawingIdentity} active={takeoffActive} sourceUnit={sourceUnit} onHistory={onEditHistory} layersOpen={layersOpen&&layerTab==="takeoff"} layerTabs={layerTabs} onLayersToggle={onLayersToggle} onLayersHide={onLayersHide}/>:null}
         <svg ref={overlayRef} className="measurement-overlay" aria-hidden="true" />
       </div>
     );

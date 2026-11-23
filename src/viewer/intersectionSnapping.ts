@@ -1,33 +1,25 @@
 import { visitCadSegments, type Segment } from "./cadPicking";
-import { lineIntersection, sourceAnnotation } from "./annotations";
-import { distance, pointSegmentDistance, type MeasurableEntity, type MeasurementGeometry } from "./measurementGeometry";
-import { packedEntity } from "./packedMeasurement";
+import { lineIntersection } from "./annotations";
+import { distance, pointSegmentDistance, type MeasurementGeometry } from "./measurementGeometry";
+import {visitCircularEdges} from './circularSnap';
 import type { DrawingPoint as P } from "./savedView";
 
 /** Work near the pointer, never build or persist all pairs in a large drawing. */
 export function intersectionSnap(geometries:MeasurementGeometry[],target:P,tolerance:number,accept:(p:P)=>boolean=()=>true):P|null{
   const box={minX:target.x-tolerance,minY:target.y-tolerance,maxX:target.x+tolerance,maxY:target.y+tolerance};
-  const near:Array<{line:Segment;d:number}>=[],curves:Array<{center:P;radius:number;contains(p:P):boolean}>=[],seen=new Set<string>();
-  const curve=(e:MeasurableEntity)=>{
-    if(e.approximate||!["CIRCLE","ARC"].includes(e.kind)||curves.length>=64)return;
-    const o=sourceAnnotation(e,"intersection"),c=o.points[0],r=distance(c,o.points[1]);
-    if(!["circle","arc"].includes(o.kind)||Math.abs(distance(c,target)-r)>tolerance)return;
-    const tau=Math.PI*2,start=o.start??0,sweep=o.sweep??tau;
-    curves.push({center:c,radius:r,contains:p=>o.kind==="circle"||((Math.atan2(p.y-c.y,p.x-c.x)-start+tau*2)%tau)<=sweep+1e-9});
-  };
+  const near:Array<{line:Segment;d:number;key:string}>=[],curves:Array<{center:P;radius:number;contains(p:P):boolean}>=[],seen=new Set<string>();
+  const siftDown=(i:number)=>{for(;;){let child=i*2+1;if(child>=near.length)return;if(child+1<near.length&&near[child+1].d>near[child].d)child++;if(near[i].d>=near[child].d)return;[near[i],near[child]]=[near[child],near[i]];i=child;}};
   for(const g of geometries){
     visitCadSegments(g,box,(a,b)=>{
-      const d=pointSegmentDistance(target,a,b);if(d>tolerance)return;
-      const label=[a.x,a.y,b.x,b.y].join(":");if(seen.has(label))return;seen.add(label);
-      near.push({line:[a,b],d});
-      // Bound dense hatch work to the closest edges around this screen point.
-      if(near.length>256){near.sort((a,b)=>a.d-b.d);near.length=128;}
+      const d=pointSegmentDistance(target,a,b);if(d>tolerance||near.length===128&&d>=near[0].d)return;
+      const key=[a.x,a.y,b.x,b.y].join(":");if(seen.has(key))return;
+      const item={line:[a,b]as Segment,d,key};seen.add(key);
+      // Keep the same closest-128 budget in a max heap, without sorting or retaining every rejected edge.
+      if(near.length===128){seen.delete(near[0].key);near[0]=item;siftDown(0);}
+      else{near.push(item);let i=near.length-1;while(i>0){const parent=(i-1)>>>1;if(near[parent].d>=near[i].d)break;[near[parent],near[i]]=[near[i],near[parent]];i=parent;}}
     });
-    if(g.packed){const p=g.packed;for(let i=0;i<p.entityCount;i++){
-      const d=p.data[Math.floor(i/16384)],k=i%16384*7;
-      if(d[k+6]||d[k]>box.maxX||d[k+2]<box.minX||d[k+1]>box.maxY||d[k+3]<box.minY)continue;
-      const refs=p.refs[Math.floor(i/16384)],j=i%16384*3;if(["CIRCLE","ARC"].includes(p.kinds[refs[j+2]]))curve(packedEntity(p,i));
-    }}else for(const e of g.entities)if(e.bounds.minX<=box.maxX&&e.bounds.maxX>=box.minX&&e.bounds.minY<=box.maxY&&e.bounds.maxY>=box.minY)curve(e);
+    visitCircularEdges(g,box,arc=>{if(curves.length>=64||Math.abs(distance(arc.center,target)-arc.radius)>tolerance)return;
+      const tau=Math.PI*2;curves.push({center:arc.center,radius:arc.radius,contains:p=>arc.sweep>=tau-1e-8||((arc.direction*(Math.atan2(p.y-arc.center.y,p.x-arc.center.x)-arc.start)+tau*2)%tau)<=arc.sweep+1e-9});});
   }
   near.sort((a,b)=>a.d-b.d);near.length=Math.min(128,near.length);
   let result:P|null=null,best=tolerance;

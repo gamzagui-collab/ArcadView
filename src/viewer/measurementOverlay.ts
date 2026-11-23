@@ -52,8 +52,9 @@ export function drawMeasurementOverlay(svg: SVGSVGElement, settings: Measurement
   });
   if (preview) {
     const p = project([preview.point])[0];
-    make("circle", { cx: p.x, cy: p.y, r: 14, class: "measurement-target", "data-snapped": preview.snapped ?? "none" });
-    make("path", { d: `M${p.x - 20},${p.y}h10 M${p.x + 10},${p.y}h10 M${p.x},${p.y - 20}v10 M${p.x},${p.y + 10}v10`, class: "measurement-target-cross" });
+    make("circle", { cx: p.x, cy: p.y, r: preview.snapped==='edge'?6:14, class: "measurement-target", "data-snapped": preview.snapped ?? "none" });
+    if(preview.snapped==='edge')make('circle',{cx:p.x,cy:p.y,r:1.2,fill:'#fff','data-nearest-center':'true'});
+    else make("path", { d: `M${p.x - 20},${p.y}h10 M${p.x + 10},${p.y}h10 M${p.x},${p.y - 20}v10 M${p.x},${p.y + 10}v10`, class: "measurement-target-cross" });
   }
   for (const corner of rightAngleCorners(points, settings.mode, references, settings.linearAxis,endReferences)) {
     const [a, v, b] = project(corner), la = Math.hypot(a.x - v.x, a.y - v.y), lb = Math.hypot(b.x - v.x, b.y - v.y);
