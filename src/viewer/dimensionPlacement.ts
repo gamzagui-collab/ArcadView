@@ -1,6 +1,7 @@
 import {dimensionGeometry,type Annotation} from "./annotations";
 import {dimensionLabelPoint,isRadialDimension,positionRadialDimension} from "./radialDimensions";
 import type {DrawingPoint as P} from "./savedView";
+import {detachDimensionSeries} from "./dimensionSeries";
 
 /** Position of the completed dimension, independent of its measurement references. */
 export function dimensionPosition(o:Annotation):P|null{
@@ -11,6 +12,7 @@ export function dimensionPosition(o:Annotation):P|null{
 }
 export function positionDimension(o:Annotation,target:P):Annotation|null{
   if(!Number.isFinite(target.x)||!Number.isFinite(target.y))return null;
+  o=detachDimensionSeries(o);
   if(isRadialDimension(o)){const next=positionRadialDimension(o,target);return next?followDimensionText(o,next):null;}
   // Store only the constrained dimension-line midpoint. Never replace any picked reference.
   const labelPoint=dimensionPosition({...o,labelPoint:target});

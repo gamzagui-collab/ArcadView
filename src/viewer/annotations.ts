@@ -3,6 +3,8 @@ import type { DrawingPoint } from "./savedView";
 import { segmentFoot, type Segment } from "./cadPicking";
 import {curveLength,rectangleCorners,rotatePoint} from "./curveGeometry";
 import {isRadialDimension,radialDimensionGeometry} from "./radialDimensions";
+import {dimensionTextHeight} from "./dimensionSizing";
+import {detachDimensionSeries,type DimensionAxis,type DimensionSeries} from "./dimensionSeries";
 type P = DrawingPoint;
 export const POINT_LAYER_ID="arcad-point-layer",POINT_LAYER_NAME="포인트그리기";
 export const DIMENSION_LAYER_ID="arcad-dimension-layer",DIMENSION_LAYER_NAME="치수그리기";
@@ -12,7 +14,7 @@ export const POINT_TOOLS=["point-text","point-arrow","point-cloud","point-circle
 export type PointTool=typeof POINT_TOOLS[number];
 export const isPointTool=(tool:string):tool is PointTool=>(POINT_TOOLS as readonly string[]).includes(tool);
 export type AnnotationTool = "select"|"move"|"rotate"|"extend"|"offset"|"text"|"polyline"|"circle"|"arc"|"rectangle"|"dimension-aligned"|"dimension-linear"|"dimension-angle"|"dimension-radius"|"trim"|PointTool;
-export type Annotation = {id:string;layerId:string;kind:"text"|"polyline"|"circle"|"arc"|"rectangle"|"dimension-aligned"|"dimension-linear"|"dimension-angle"|"dimension-radius"|"mask"|PointTool;points:P[];labelPoint?:P;textPoint?:P;scale?:number;start?:number;sweep?:number;text?:string;textHeight?:number;color?:string;approximate?:boolean;curved?:boolean;rotation?:number;screenWidth?:number;screenFontSize?:number};
+export type Annotation = {id:string;layerId:string;kind:"text"|"polyline"|"circle"|"arc"|"rectangle"|"dimension-aligned"|"dimension-linear"|"dimension-angle"|"dimension-radius"|"mask"|PointTool;points:P[];labelPoint?:P;textPoint?:P;scale?:number;start?:number;sweep?:number;text?:string;textHeight?:number;color?:string;approximate?:boolean;curved?:boolean;rotation?:number;screenWidth?:number;screenFontSize?:number;dimensionTextHeight?:number;dimensionAxis?:DimensionAxis;dimensionSeries?:DimensionSeries};
 export const isPointAnnotation=(object:Annotation)=>isPointTool(object.kind);
 export type UserLayer = {id:string;name:string;color:string;visible:boolean};
 export type AnnotationDocument = {version:1;layers:UserLayer[];activeLayer:string;objects:Annotation[];dimensionScale:number;textHeight?:number};
@@ -62,6 +64,7 @@ export function textBounds(o:Annotation){const b=textLocalBounds(o);if(!o.rotati
 function textCanvasContext(){if(textContext===undefined)textContext=document.createElement('canvas').getContext('2d');return textContext;}
 export function translateAnnotation(o:Annotation,base:P,destination:P):Annotation{
   if(o.kind==="mask")throw Error("A source erasure cannot be moved independently");
+  o=detachDimensionSeries(o);
   const dx=destination.x-base.x,dy=destination.y-base.y;
   return{...o,points:o.points.map(p=>({x:p.x+dx,y:p.y+dy})),...(o.labelPoint?{labelPoint:{x:o.labelPoint.x+dx,y:o.labelPoint.y+dy}}:{}),...(o.textPoint?{textPoint:{x:o.textPoint.x+dx,y:o.textPoint.y+dy}}:{})};
 }
@@ -140,13 +143,13 @@ export function dimensionGeometry(o:Annotation,sourceUnit:MeasurementUnit){
   if(o.kind==="dimension-linear"){
     // The original third pick fixes the axis; later placement changes only its offset.
     const cx=(a.x+b.x)/2,cy=(a.y+b.y)/2;
-    if(Math.abs(p.y-cy)>=Math.abs(p.x-cx)){first={x:a.x,y:placement.y};second={x:b.x,y:placement.y};value=Math.abs(b.x-a.x);}
+    if(o.dimensionAxis==="x"||!o.dimensionAxis&&Math.abs(p.y-cy)>=Math.abs(p.x-cx)){first={x:a.x,y:placement.y};second={x:b.x,y:placement.y};value=Math.abs(b.x-a.x);}
     else{first={x:placement.x,y:a.y};second={x:placement.x,y:b.y};value=Math.abs(b.y-a.y);}
   }else{
     const nx=-(b.y-a.y)/length,ny=(b.x-a.x)/length,h=(placement.x-a.x)*nx+(placement.y-a.y)*ny;
     first={x:a.x+nx*h,y:a.y+ny*h};second={x:b.x+nx*h,y:b.y+ny*h};value=length;
   }
-  const textHeight=2.5*(o.scale??20)*(sourceUnit==="drawing"?1:.001/UNIT_METERS[sourceUnit]);
+  const textHeight=dimensionTextHeight(o,sourceUnit);
   if(rotation)[a,b,first,second]=[a,b,first,second].map(p=>rotatePoint(p,pivot,rotation));
   const middle={x:first.x+(second.x-first.x)/2,y:first.y+(second.y-first.y)/2},textPosition=o.textPoint??middle;
   const dx=second.x-first.x,dy=second.y-first.y,den=dx*dx+dy*dy,t=den?Math.max(0,Math.min(1,((textPosition.x-first.x)*dx+(textPosition.y-first.y)*dy)/den)):.5;
@@ -238,6 +241,9 @@ export function validateAnnotationDocument(d:AnnotationDocument):void{
     if(isRadialDimension(o)&&!radialDimensionGeometry(o))throw Error();
     if(o.color!==undefined&&!/^#[a-f0-9]{6}$/i.test(o.color))throw Error();
     if(o.screenWidth!==undefined&&(!Number.isFinite(o.screenWidth)||o.screenWidth<1||o.screenWidth>12))throw Error();
+    if(o.dimensionTextHeight!==undefined&&(!isDimensionTool(o.kind)||!Number.isFinite(o.dimensionTextHeight)||o.dimensionTextHeight<=0||o.dimensionTextHeight>1e12))throw Error();
+    if(o.dimensionAxis!==undefined&&(o.kind!=="dimension-linear"||!["x","y"].includes(o.dimensionAxis)))throw Error();
+    if(o.dimensionSeries!==undefined){const s=o.dimensionSeries;if(!s||o.kind!=="dimension-linear"||!o.dimensionAxis||typeof s.id!=="string"||!s.id||s.id.length>100||!["chain","baseline"].includes(s.mode)||!Number.isInteger(s.index)||s.index<0||s.index>=3000||!Number.isFinite(s.origin)||![1,-1].includes(s.side))throw Error();}
     if(isPointAnnotation(o)!==(o.layerId===POINT_LAYER_ID))throw Error();
     if(o.layerId===DIMENSION_LAYER_ID&&!isDimensionTool(o.kind))throw Error();
     if(isPointAnnotation(o)&&((!(o.kind==="point-text"?[1]:["point-rectangle","point-cloud"].includes(o.kind)?[2,4]:[2]).includes(o.points.length))||!Number.isFinite(o.screenWidth)||o.screenWidth!<1||o.screenWidth!>12||!o.color))throw Error();

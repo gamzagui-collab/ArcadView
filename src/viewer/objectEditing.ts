@@ -3,7 +3,12 @@ import{normAngle,pointDistance,rectangleCorners,rotatePoint,TAU}from"./curveGeom
 import type{DrawingPoint as P}from"./savedView";
 import{isRadialDimension,radialDimensionGeometry}from"./radialDimensions";
 import{dimensionPosition,positionDimension}from"./dimensionPlacement";
+import{detachDimensionSeries}from"./dimensionSeries";
 export type Grip={id:string;point:P};
+/** A placement grip sits below the label; its drag still uses the logical anchor. */
+export function gripScreenPosition(grip:Grip,project:(p:readonly P[])=>P[]):P {
+ const p=project([grip.point])[0];return grip.id==="dimension-position"?{x:p.x,y:p.y+12}:p;
+}
 /** Moving an existing dimension label changes no measured value. */
 export const canPositionObject=(o:Annotation,hasAccess:(tool:string)=>boolean,positionOnly=true):boolean=>positionOnly&&isDimensionTool(o.kind)||hasAccess("edit.reshape");
 const rectangular=(o:Annotation)=>["rectangle","point-rectangle","point-cloud"].includes(o.kind);
@@ -25,6 +30,7 @@ export function objectGrips(o:Annotation):Grip[]{
 export function reshapeObject(o:Annotation,grip:string,target:P):Annotation|null{
  if(!Number.isFinite(target.x)||!Number.isFinite(target.y)||o.kind==="mask")return null;
  if(grip==="dimension-position")return positionDimension(o,target);
+ o=detachDimensionSeries(o);
  if(grip==="center")return translateAnnotation(o,o.points[0],target);
  if(rectangular(o)&&grip.startsWith("corner:")){
   const p=rectangleCorners(o),i=+grip.split(":")[1],opposite=(i+2)%4,a=p[opposite],b=p[(opposite+1)%4],c=p[(opposite+3)%4],l=pointDistance(a,b),m=pointDistance(a,c);if(!l||!m)return null;
@@ -49,6 +55,7 @@ export function rotateObject(o:Annotation,center:P,degrees:number):Annotation{
  if(o.kind==="mask")throw Error("Erasures cannot rotate independently");
  if(!Number.isFinite(degrees)||!Number.isInteger(degrees))throw Error("Rotation requires integer degrees");
  if(degrees%360===0)return o;
+ o=detachDimensionSeries(o);
  const points=(rectangular(o)?rectangleCorners(o):o.points).map(p=>rotatePoint(p,center,degrees)),next={...o,points,...(o.labelPoint?{labelPoint:rotatePoint(o.labelPoint,center,degrees)}:{}),...(o.textPoint?{textPoint:rotatePoint(o.textPoint,center,degrees)}:{})};
  if(o.kind==="arc")next.start=normAngle((o.start??0)+degrees*Math.PI/180);
  if(o.kind==="text"||o.kind==="dimension-linear")next.rotation=(((o.rotation??0)+degrees)%360+360)%360;

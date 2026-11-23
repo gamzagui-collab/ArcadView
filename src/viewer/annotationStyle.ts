@@ -1,4 +1,4 @@
-import {isPointAnnotation,type Annotation,type AnnotationDocument} from "./annotations";
+import {isDimensionTool,isPointAnnotation,type Annotation,type AnnotationDocument} from "./annotations";
 
 export type ObjectStyle={color?:string;screenWidth?:number;textHeight?:number;screenFontSize?:number};
 export const hasTextSize=(object:Annotation)=>object.kind==="text"||["point-leader","point-text"].includes(object.kind);
@@ -15,5 +15,11 @@ export function styleAnnotation(object:Annotation,style:ObjectStyle):Annotation 
   if(style.screenWidth!==undefined&&(!Number.isFinite(style.screenWidth)||style.screenWidth<1||style.screenWidth>12))throw Error("Invalid line width");
   if(style.textHeight!==undefined&&(object.kind!=="text"||!Number.isFinite(style.textHeight)||style.textHeight<.001||style.textHeight>1e6))throw Error("Invalid text height");
   if(style.screenFontSize!==undefined&&(!["point-leader","point-text"].includes(object.kind)||!Number.isFinite(style.screenFontSize)||style.screenFontSize<10||style.screenFontSize>48))throw Error("Invalid label size");
-  return{...object,...style};
+  const next={...object,...style};
+  if(isDimensionTool(object.kind)&&style.screenWidth!==undefined){
+    const factor=Math.sqrt(style.screenWidth/(object.screenWidth??2));
+    if(object.dimensionTextHeight!==undefined)next.dimensionTextHeight=object.dimensionTextHeight*factor;
+    else next.scale=Math.max(1,Math.min(10000,(object.scale??20)*factor));
+  }
+  return next;
 }

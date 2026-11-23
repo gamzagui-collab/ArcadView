@@ -58,6 +58,37 @@ class FakeErrorEvent extends Event {
 }
 
 describe("drawing viewer lifecycle", () => {
+  it('shares weak midpoint and either-end perpendicular picks across tools, retaining OFF and completed-measurement behavior',async()=>{
+    const viewer=new DrawingViewer({}as HTMLElement);await viewer.load(new File(['0\nEOF\n'],'weak.dxf'),vi.fn());
+    const native=state.current;Object.assign(native.canvas,{clientWidth:1000,clientHeight:2000,getBoundingClientRect:()=>({left:0,top:0,width:1000,height:2000})});
+    Object.assign(native.camera,{left:0,right:10000,top:10000,bottom:-10000});native.camera.updateProjectionMatrix();
+    (viewer as any).geometry=buildMeasurementGeometry({entities:[{type:'LINE',vertices:[{x:0,y:0},{x:10000,y:0}]},{type:'LINE',vertices:[{x:0,y:10000},{x:10000,y:0}]}]}as any,{},undefined,true);
+    const pick=(x:number,y:number)=>(viewer as any).pickAt({x:x/10,y:(10000-y)/10},false),anchor={x:2000,y:0};
+    for(const mode of['distance','linear','path','area','angle']as const){
+      viewer.configureMeasurement({enabled:true,mode,points:[anchor],snapping:true,entity:null});
+      expect(pick(2020,7990)).toMatchObject({point:{x:2000,y:8000},snapped:'perpendicular'});
+      expect(pick(6020,3980)).toMatchObject({point:{x:6000,y:4000},snapped:'perpendicular'});
+    }
+    for(const owner of['annotations','takeoff']){viewer.setTakeoffMode(owner==='takeoff');viewer.configureAnnotations({tool:'polyline',points:[anchor],anchor,snapping:true,onPick:vi.fn(),onPreview:vi.fn()},owner);expect(pick(2020,7990)).toMatchObject({point:{x:2000,y:8000},snapped:'perpendicular'});viewer.configureAnnotations(null,owner);}
+    viewer.configureMeasurement({enabled:true,mode:'distance',points:[],snapping:true,entity:null});expect(pick(5030,0)).toMatchObject({point:{x:5000,y:0},snapped:'midpoint'});
+    viewer.configureMeasurement({enabled:true,mode:'distance',points:[anchor],snapping:false,entity:null});expect(pick(2020,7990).point.x).toBeCloseTo(2020,7);expect(pick(2020,7990).snapped).toBeNull();
+    viewer.configureMeasurement({enabled:true,mode:'distance',points:[anchor,{x:2000,y:8000}],snapping:true,entity:null});expect(pick(2030,3000).snapped).toBeNull();
+    viewer.destroy();
+  });
+  it('uses real arc tangents at both endpoints and caches the fixed endpoint references through a preview',async()=>{
+    const viewer=new DrawingViewer({}as HTMLElement);await viewer.load(new File(['0\nEOF\n'],'arc-normal.dxf'),vi.fn());
+    const native=state.current;Object.assign(native.canvas,{clientWidth:1000,clientHeight:2000,getBoundingClientRect:()=>({left:0,top:0,width:1000,height:2000})});
+    Object.assign(native.camera,{left:-5000,right:5000,top:10000,bottom:-10000});native.camera.updateProjectionMatrix();
+    (viewer as any).geometry=buildMeasurementGeometry({entities:[1000,2000].map(radius=>({type:'ARC',center:{x:0,y:0},radius,startAngle:.1,endAngle:1.4}))}as any,{},undefined,true);
+    const a=.63,anchor={x:1000*Math.cos(a),y:1000*Math.sin(a)},end={x:2000*Math.cos(a),y:2000*Math.sin(a)};
+    viewer.configureMeasurement({enabled:true,mode:'distance',points:[anchor],snapping:true,entity:null});
+    const pick=()=>(viewer as any).pickAt({x:(end.x+20+5000)/10,y:(10000-end.y+30)/10},false),p=pick();
+    expect(p.snapped).toBe('perpendicular');expect(p.point.x).toBeCloseTo(end.x,6);expect(p.point.y).toBeCloseTo(end.y,6);
+    const cached=(viewer as any).perpendicularReferences;pick();expect((viewer as any).perpendicularReferences).toBe(cached);
+    expect(viewer.getMeasurementReferences()).toHaveLength(1);expect(viewer.getMeasurementEndReferences()).toHaveLength(1);
+    native.canvas.style={};viewer.setBaseDrawingVisible(false);expect(viewer.getMeasurementReferences()).toHaveLength(0);expect(pick().snapped).toBeNull();
+    viewer.setBaseDrawingVisible(true);expect(pick().snapped).toBe('perpendicular');viewer.destroy();expect((viewer as any).perpendicularReferences).toBeNull();
+  });
   it('reads viewport bounds a bounded number of times even when thousands of snap candidates overlap',async()=>{
     const viewer=new DrawingViewer({}as HTMLElement);await viewer.load(new File(['0\nEOF\n'],'dense.dxf'),vi.fn());
     const canvas=state.current.canvas,rect=vi.fn(()=>({left:0,top:0,width:1000,height:200}));canvas.getBoundingClientRect=rect;

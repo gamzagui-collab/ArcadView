@@ -2,6 +2,7 @@ import {segmentFoot,visitCadSegments} from './cadPicking';
 import {intersectionSnap} from './intersectionSnapping';
 import {distance,type MeasurementGeometry,type SnapPoint} from './measurementGeometry';
 import type {DrawingPoint as P} from './savedView';
+import {circularPoint,visitCircularEdges} from './circularSnap';
 
 export type PointSnap={point:P;kind:SnapPoint['kind']|'intersection'|'edge'};
 const kinds=['endpoint','midpoint','center','insertion']as const;
@@ -23,17 +24,22 @@ function discrete(g:MeasurementGeometry,target:P,tolerance:number,kind?:SnapPoin
 export function pointSnap(geometries:MeasurementGeometry[],target:P,tolerance:number,
  accept:(p:P,source?:MeasurementGeometry)=>boolean=()=>true,nearest=true,onlyKind?:SnapPoint['kind']):PointSnap|null{
  if(!Number.isFinite(target.x)||!Number.isFinite(target.y)||!Number.isFinite(tolerance)||tolerance<=0)return null;
- let result:PointSnap|null=null,best=Infinity;
+ let result:PointSnap|null=null,best=Infinity,characteristic:PointSnap|null=null,characteristicScore=Infinity;
  const choose=(point:P,kind:PointSnap['kind'],source?:MeasurementGeometry)=>{
   const d=distance(target,point);if(!Number.isFinite(d)||d>tolerance||!accept(point,source))return;
   const rank={endpoint:0,intersection:.25,midpoint:.5,center:.75,insertion:.75,edge:1}[kind],score=d+tolerance*.08*rank;
+  if(kind!=='edge'&&score<characteristicScore){characteristicScore=score;characteristic={point,kind};}
   if(score<best){best=score;result={point,kind};}
  };
  const box={minX:target.x-tolerance,minY:target.y-tolerance,maxX:target.x+tolerance,maxY:target.y+tolerance};
  for(const g of geometries){
   for(const s of discrete(g,target,tolerance,onlyKind))choose(s,s.kind,g);
   if(nearest&&!onlyKind)visitCadSegments(g,box,(a,b)=>{const q=segmentFoot(target,a,b);if(q)choose(q,'edge',g);});
+  if(nearest&&!onlyKind)visitCircularEdges(g,box,arc=>{const q=circularPoint(arc,target);if(q)choose(q,'edge',g);});
  }
  if(!onlyKind){const p=intersectionSnap(geometries,target,tolerance,p=>accept(p,geometries[0]));if(p)choose(p,'intersection',geometries[0]);}
- return result;
+ // A narrow six-pixel band (at the viewer's 18px tolerance) lets a nearby
+ // midpoint beat a moving edge point, retaining endpoint/intersection priority.
+ const picked=result as PointSnap|null,feature=characteristic as PointSnap|null;
+ return picked?.kind==='edge'&&feature&&['midpoint','endpoint','intersection'].includes(feature.kind)&&distance(target,feature.point)<=tolerance/3?feature:picked;
 }

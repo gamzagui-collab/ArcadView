@@ -3,7 +3,7 @@ import type { DrawingPoint } from "./savedView";
 import { annotationPoints, dimensionGeometry, isDimensionTool, isPointAnnotation, textBounds, visibleAnnotations, type Annotation, type AnnotationDocument } from "./annotations";
 import { drawPointAnnotation } from "./pointMarkup";
 import { formatCadNumber } from "./displayPrecision";
-import {moveHandlePosition,objectGrips} from "./objectEditing";
+import {gripScreenPosition,moveHandlePosition,objectGrips} from "./objectEditing";
 import {isRadialDimension,radialDimensionGeometry} from "./radialDimensions";
 const NS="http://www.w3.org/2000/svg";
 export function drawAnnotations(svg:SVGSVGElement,doc:AnnotationDocument,selected:string|null,draft:Annotation|null,project:(p:readonly DrawingPoint[])=>DrawingPoint[],source:MeasurementUnit,display:MeasurementUnit,precision=3,locale="ko",draftPointWindow?:string):void{
@@ -57,14 +57,26 @@ export function drawAnnotations(svg:SVGSVGElement,doc:AnnotationDocument,selecte
     if(active&&o.kind!=="mask"){
       const grips=objectGrips(o),step=Math.max(1,Math.ceil(grips.length/512));
       for(const[g,i]of grips.map((g,i)=>[g,i]as const).filter(([,i])=>i%step===0||i===grips.length-1)){
-        const p=project([g.point])[0];if(p.x< -10||p.x>svg.clientWidth+10||p.y< -10||p.y>svg.clientHeight+10)continue;
-        el("rect",{x:p.x-6,y:p.y-6,width:12,height:12,rx:2,fill:"#03101d",stroke:"#03101d","stroke-width":3,class:"annotation-grip-halo"});
+        const p=gripScreenPosition(g,project);if(p.x< -10||p.x>svg.clientWidth+10||p.y< -10||p.y>svg.clientHeight+10)continue;
+        el("rect",{x:p.x-6,y:p.y-6,width:12,height:12,rx:2,fill:"#03101d",stroke:"#03101d","stroke-width":3,class:"annotation-grip-halo",...(g.id==="dimension-position"?{"data-position-grip-halo":o.id}:{})});
         el("rect",{x:p.x-4,y:p.y-4,width:8,height:8,fill:"#fff",stroke:color,"stroke-width":1.5,"data-grip":g.id,"data-grip-index":i,"data-object":o.id});
       }
       const p=moveHandlePosition(o,project,svg.clientWidth,svg.clientHeight);
-      if(p){el("circle",{cx:p.x,cy:p.y,r:17,fill:"#0a263ce8",stroke:"#9fe5ff","stroke-width":1.5,"data-free-move":o.id,...(isDimensionTool(o.kind)?{"data-dimension-handle":o.id}:{})});el("path",{d:`M${p.x-10},${p.y}h20 M${p.x},${p.y-10}v20 M${p.x-6},${p.y-4}l-4,4 4,4 M${p.x+6},${p.y-4}l4,4 -4,4 M${p.x-4},${p.y-6}l4,-4 4,4 M${p.x-4},${p.y+6}l4,4 4,-4`,fill:"none",stroke:"#b8f0ff","stroke-width":1.6});}
+      if(p){el("circle",{cx:p.x,cy:p.y,r:17,fill:"#0a263ce8",stroke:"#9fe5ff","stroke-width":1.5,"data-free-move":o.id,...(isDimensionTool(o.kind)?{"data-dimension-handle":o.id}:{})});el("path",{d:`M${p.x-10},${p.y}h20 M${p.x},${p.y-10}v20 M${p.x-6},${p.y-4}l-4,4 4,4 M${p.x+6},${p.y-4}l4,4 -4,4 M${p.x-4},${p.y-6}l4,-4 4,4 M${p.x-4},${p.y+6}l4,4 4,-4`,fill:"none",stroke:"#b8f0ff","stroke-width":1.6,...(isDimensionTool(o.kind)?{"data-dimension-move-glyph":o.id}:{})});}
     }
     if(o===draft&&draftPointWindow){const group=document.createElementNS(NS,"g");group.setAttribute("mask",`url(#${draftPointWindow})`);group.append(...children.splice(first));children.push(group);}
   }
   svg.replaceChildren(...children);
+  // A rotated label can extend below its anchor. Measure only the selected
+  // dimension, so handles clear the real glyphs rather than an estimated width.
+  const object=[...objects,...(draft?[draft]:[])].find(o=>o.id===selected&&isDimensionTool(o.kind)&&!o.textPoint);
+  if(object){
+    const text=[...svg.querySelectorAll<SVGTextElement>("text[data-dimension-text]")].find(e=>e.dataset.dimensionText===object.id);
+    const grip=svg.querySelector<SVGRectElement>('[data-grip="dimension-position"]'),move=svg.querySelector<SVGCircleElement>('[data-dimension-handle]');
+    if(text){const bounds=text.getBoundingClientRect(),host=svg.getBoundingClientRect(),bottom=bounds.bottom-host.top;
+      let gripBottom=bottom;
+      if(grip){const y=Math.max(Number(grip.getAttribute("y"))+4,bottom+12);grip.setAttribute("y",String(y-4));svg.querySelector('[data-position-grip-halo]')?.setAttribute("y",String(y-6));gripBottom=y+4;}
+      if(move){const y=Math.max(Number(move.getAttribute("cy")),gripBottom+22),dy=y-Number(move.getAttribute("cy"));move.setAttribute("cy",String(y));svg.querySelector('[data-dimension-move-glyph]')?.setAttribute("transform",`translate(0 ${dy})`);}
+    }
+  }
 }

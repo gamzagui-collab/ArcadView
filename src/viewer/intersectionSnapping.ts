@@ -2,6 +2,7 @@ import { visitCadSegments, type Segment } from "./cadPicking";
 import { lineIntersection } from "./annotations";
 import { distance, pointSegmentDistance, type MeasurementGeometry } from "./measurementGeometry";
 import {visitCircularEdges} from './circularSnap';
+import {segmentCircleIntersections} from './curveGeometry';
 import type { DrawingPoint as P } from "./savedView";
 
 /** Work near the pointer, never build or persist all pairs in a large drawing. */
@@ -26,13 +27,7 @@ export function intersectionSnap(geometries:MeasurementGeometry[],target:P,toler
   const consider=(p:P|null)=>{if(!p||!accept(p))return;const d=distance(p,target);if(d<=best){result=p;best=d;}};
   for(let i=0;i<near.length;i++)for(let j=i+1;j<near.length;j++)consider(lineIntersection(...near[i].line,...near[j].line));
   for(const c of curves)for(const{line:[a,b]}of near){
-    const dx=b.x-a.x,dy=b.y-a.y,length=Math.hypot(dx,dy);if(length<1e-10)continue;
-    // Project relative to the circle centre. A quadratic discriminant subtracts
-    // huge near-equal values for long site axes and can shift a small crossing.
-    const ux=dx/length,uy=dy/length,ox=a.x-c.center.x,oy=a.y-c.center.y,along=-(ox*ux+oy*uy),fx=ox+along*ux,fy=oy+along*uy,h2=c.radius*c.radius-fx*fx-fy*fy;
-    if(h2< -1e-12*c.radius*c.radius)continue;
-    const h=Math.sqrt(Math.max(0,h2));
-    for(const side of[-1,1]){const t=along+side*h;if(t>=0&&t<=length){const q={x:c.center.x+fx+side*h*ux,y:c.center.y+fy+side*h*uy};if(c.contains(q))consider(q);}}
+    for(const q of segmentCircleIntersections(a,b,c.center,c.radius))if(c.contains(q))consider(q);
   }
   for(let i=0;i<curves.length;i++)for(let j=i+1;j<curves.length;j++){
     const a=curves[i],b=curves[j],d=distance(a.center,b.center);if(d<1e-10||d>a.radius+b.radius||d<Math.abs(a.radius-b.radius))continue;

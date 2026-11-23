@@ -19,7 +19,9 @@ it("marks either or both endpoints only with their own perpendicular reference",
  expect(mark[1]).toEqual(points[1]);expect(mark[2]).toEqual(points[0]);
  expect(isRightAngle({x:mark[0].x-mark[1].x,y:mark[0].y-mark[1].y},{x:mark[2].x-mark[1].x,y:mark[2].y-mark[1].y})).toBe(true);
  for(const axis of ["x","y"]as const){const m=rightAngleCorners(points,"linear",[],axis)[0];expect(m[1]).toEqual(points[1]);}
- const axisMarks=rightAngleCorners([{x:0,y:0},{x:100,y:0}],"distance");expect(axisMarks.map(m=>m[1])).toEqual([{x:0,y:0},{x:100,y:0}]);
+ const axisPoints=[{x:0,y:0},{x:100,y:0}],vertical=[{x:0,y:1}];
+ expect(rightAngleCorners(axisPoints,"distance")).toHaveLength(0);
+ const axisMarks=rightAngleCorners(axisPoints,"distance",vertical,"auto",vertical);expect(axisMarks.map(m=>m[1])).toEqual(axisPoints);
  expect(rightAngleCorners(points,"distance",[{x:1,y:1}],"auto",[{x:1,y:1}])).toHaveLength(2);
  expect(rightAngleCorners([{x:0,y:0},{x:1,y:1}],"distance")).toHaveLength(0);
 });

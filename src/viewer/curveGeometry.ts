@@ -42,4 +42,13 @@ export function shapePrimitives(o:CurveShape):Primitive[]{
  return result;
 }
 export function curveLength(o:CurveShape):number{return shapePrimitives(o).reduce((n,p)=>n+(p.kind==="line"?pointDistance(p.a,p.b):p.radius*p.sweep),0);}
-export function onArc(arc:Extract<Primitive,{kind:"arc"}>,p:P,epsilon=1e-8):boolean{return arc.sweep>=TAU-epsilon||normAngle((Math.atan2(p.y-arc.center.y,p.x-arc.center.x)-arc.start)*arc.direction)<=arc.sweep+epsilon;}
+export function onArc(arc:Pick<Extract<Primitive,{kind:"arc"}>,"center"|"start"|"sweep"|"direction">,p:P,epsilon=1e-8):boolean{return arc.sweep>=TAU-epsilon||normAngle((Math.atan2(p.y-arc.center.y,p.x-arc.center.x)-arc.start)*arc.direction)<=arc.sweep+epsilon;}
+/** Project relative to the centre, avoiding cancellation at large site origins. */
+export function segmentCircleIntersections(a:P,b:P,center:P,radius:number):P[]{
+ const dx=b.x-a.x,dy=b.y-a.y,length=Math.hypot(dx,dy);if(length<1e-10||!Number.isFinite(radius)||radius<=0)return[];
+ const ux=dx/length,uy=dy/length,ox=a.x-center.x,oy=a.y-center.y,along=-(ox*ux+oy*uy),fx=ox+along*ux,fy=oy+along*uy,h2=radius*radius-fx*fx-fy*fy;
+ if(h2< -1e-12*radius*radius)return[];
+ const h=Math.sqrt(Math.max(0,h2)),result:P[]=[];
+ for(const side of[-1,1]){const t=along+side*h;if(t>=0&&t<=length)result.push({x:center.x+fx+side*h*ux,y:center.y+fy+side*h*uy});}
+ return result;
+}

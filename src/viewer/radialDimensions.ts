@@ -1,6 +1,7 @@
 import type {Annotation} from "./annotations";
 import type {DrawingPoint as P} from "./savedView";
-import {distance,measuredAngle,UNIT_METERS,type MeasurementUnit} from "./measurementGeometry";
+import {distance,measuredAngle,type MeasurementUnit} from "./measurementGeometry";
+import {dimensionTextHeight} from "./dimensionSizing";
 export const isRadialDimension=(o:{kind:string})=>o.kind==="dimension-radius"||o.kind==="dimension-angle";
 export function dimensionLabelPoint(o:Annotation):P|null {
   if(o.labelPoint)return o.labelPoint;
@@ -24,7 +25,7 @@ export function positionRadialDimension(o:Annotation,target:P):Annotation|null {
 }
 export function radialDimensionGeometry(o:Annotation,source:MeasurementUnit="drawing") {
   const placement=dimensionLabelPoint(o);if(!placement)return null;const label=o.textPoint??placement;
-  const textHeight=2.5*(o.scale??20)*(source==="drawing"?1:.001/UNIT_METERS[source]);
+  const textHeight=dimensionTextHeight(o,source);
   const lines:P[][]=[],extensions:Array<[P,P]>=[],arrows:Array<{tip:P;tail:P}>=[];
   if(o.kind==="dimension-radius"){
     const[center,rim]=o.points,r=distance(center,rim);if(r<1e-9)return null;

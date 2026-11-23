@@ -1,14 +1,14 @@
 import {useLayoutEffect,useRef,useState} from "react";
 import {useI18n} from "../i18n/I18nProvider";
 import {hasTextSize,objectStyleValue,type ObjectStyle} from "../viewer/annotationStyle";
-import type {Annotation} from "../viewer/annotations";
+import {isDimensionTool,type Annotation} from "../viewer/annotations";
 import {PaletteIcon} from "./Icons";
 
 const colors=["#ffffff","#c0c8d2","#808a98","#202a36","#49cfff","#218bff","#3155df","#9a74ff","#fa68df","#ff526d","#ff944d","#ffd65c","#8ce56d","#25c795","#39d9d1","#b99975"];
 type Props={object:Annotation;color:string;onPreview(style:ObjectStyle|null):void;onApply(style:ObjectStyle):void};
 export function ObjectStyleControls({object,color,onPreview,onApply}:Props){
   const{locale}=useI18n(),w={ko:{style:"선택 객체 스타일",width:"선 두께",size:"글자 크기",color:"객체 색상",palette:"색상 팔레트",apply:"적용",close:"닫기",custom:"다른 색상"},en:{style:"Selected object style",width:"Line width",size:"Text size",color:"Object color",palette:"Color palette",apply:"Apply",close:"Close",custom:"Custom color"},tr:{style:"Seçili nesne stili",width:"Çizgi kalınlığı",size:"Metin boyutu",color:"Nesne rengi",palette:"Renk paleti",apply:"Uygula",close:"Kapat",custom:"Özel renk"}}[locale];
-  const value=objectStyleValue(object),text=hasTextSize(object),label=text?w.size:w.width;
+  const value=objectStyleValue(object),text=hasTextSize(object),label=isDimensionTool(object.kind)?{ko:"치수 크기 (선·화살표·글자)",en:"Dimension size (line, arrows and text)",tr:"Ölçü boyutu (çizgi, ok ve metin)"}[locale]:text?w.size:w.width;
   const [size,setSize]=useState(value),[base,setBase]=useState(value),[palette,setPalette]=useState(false),[chosen,setChosen]=useState(color);
   const pending=useRef<ObjectStyle|null>(null),latest=useRef({onApply,onPreview,object});latest.current={onApply,onPreview,object};
   useLayoutEffect(()=>{pending.current=null;setSize(value);setBase(value);setPalette(false);},[object.id,object.points]);

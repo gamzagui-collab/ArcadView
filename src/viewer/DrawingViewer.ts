@@ -36,9 +36,10 @@ import { installCadColorRendering } from "./blockColors";
 import { ViewportCuller } from "./viewportCulling";
 import { DWG_CACHE_VERSION } from "../dwg/conversionCache";
 import { referenceDirections } from "./rightAngles";
-import { isDistanceMode, pathIsClosed, snapToPathStart } from "./measurementTools";
+import { isDistanceMode, measurementPointLimit, pathIsClosed, snapToPathStart } from "./measurementTools";
 import {snapToCircularEdge} from "./circularSnap";
-import { perpendicularSnap, segmentFoot } from "./cadPicking";
+import { segmentFoot } from "./cadPicking";
+import {endpointPerpendicularSnap} from './perpendicularSnapping';
 import { masked, visibleEntityFragment, type Annotation } from "./annotations";
 import {CadFocusFilter,type CadFocus} from "../takeoff/cadFocus";
 import {pickCadColor} from "../takeoff/cadColorPick";
@@ -89,6 +90,7 @@ export class DrawingViewer {
   private references: DrawingPoint[] = [];
   private endAnchor: DrawingPoint | null = null;
   private endReferences: DrawingPoint[] = [];
+  private perpendicularReferences:{anchor:DrawingPoint;tolerance:number;geometries:MeasurementGeometry[];masks:Annotation[];directions:DrawingPoint[]}|null=null;
   private annotationInput: AnnotationInput | null = null;
   private annotationOwner="annotations";
   private takeoffMode=false;
@@ -180,7 +182,8 @@ export class DrawingViewer {
     const radiusSlot=replaceIndex??(measurement.points.length>=2?0:measurement.points.length),centerKind=measurement.mode==="radius"&&radiusSlot===0?"center":undefined;
     const supplemental=this.takeoffMode?this.takeoffGeometry:null;
     const accept=(p:DrawingPoint,g?:MeasurementGeometry)=>g!==cad||!this.masks.length||!masked(p,this.masks,maskTolerance);
-    const snappedPick=measurement.snapping&&measurement.mode!=="object"?pointSnap([cad,this.userGeometry,...supplemental?[supplemental]:[]],point,tolerance,accept,
+    const geometries=[cad,this.userGeometry,...supplemental?[supplemental]:[]];
+    const snappedPick=measurement.snapping&&measurement.mode!=="object"?pointSnap(geometries,point,tolerance,accept,
       readViewerPreferences().nearestSnapEnabled!==false&&measurement.mode!=="radius",centerKind):null;
     let snapped:(DrawingPoint&{kind:MeasurementPick['snapped']})|null=snappedPick?{...snappedPick.point,kind:snappedPick.kind}:null;
     // Markup is excluded from CAD measurement. A selected mark may still use
@@ -196,18 +199,17 @@ export class DrawingViewer {
     }
     const start = snapToPathStart(measurement, point, tolerance, replaceIndex);
     const draftAnchor=editor?.editableDraftPoints&&replaceIndex!==undefined?measurement.points[replaceIndex===0?1:replaceIndex-1]:undefined;
-    const anchor=this.handleDrag?.drag.anchor??draftAnchor??editor?.anchor??(isDistanceMode(measurement.mode)?measurement.points[replaceIndex===0?1:0]:undefined);
+    const completed=!editor&&replaceIndex===undefined&&((measurementPointLimit(measurement.mode)<=3&&measurement.points.length>=measurementPointLimit(measurement.mode))||measurement.mode==="path"&&pathIsClosed(measurement.points));
+    const anchor=completed?undefined:this.handleDrag?.drag.anchor??draftAnchor??editor?.anchor??(isDistanceMode(measurement.mode)?measurement.points[replaceIndex===0?1:0]:measurement.points.at(-1));
     let perpendicular:DrawingPoint|null=null;
-    if(measurement.snapping&&anchor&&measurement.mode!=="radius"){
-      const tol=tolerance/2,accept=(p:DrawingPoint)=>!this.masks.length||!masked(p,this.masks,maskTolerance);
-      perpendicular=perpendicularSnap(cad,anchor,point,tol,accept);
-      let ownFoot=perpendicularSnap(this.userGeometry,anchor,point,tol);
-      const takeoffFoot=supplemental?perpendicularSnap(supplemental,anchor,point,tol):null;
-      if(takeoffFoot&&(!ownFoot||Math.hypot(takeoffFoot.x-point.x,takeoffFoot.y-point.y)<Math.hypot(ownFoot.x-point.x,ownFoot.y-point.y)))ownFoot=takeoffFoot;
-      if(ownFoot&&(!perpendicular||Math.hypot(ownFoot.x-point.x,ownFoot.y-point.y)<Math.hypot(perpendicular.x-point.x,perpendicular.y-point.y)))perpendicular=ownFoot;
+    if(measurement.snapping&&anchor&&measurement.mode!=="radius"&&measurement.mode!=="object"){
+      const referenceTolerance=tolerance/12,cached=this.perpendicularReferences;
+      if(!cached||cached.anchor.x!==anchor.x||cached.anchor.y!==anchor.y||cached.tolerance!==referenceTolerance||cached.masks!==this.masks||cached.geometries.length!==geometries.length||!geometries.every((g,i)=>g===cached.geometries[i]))
+        this.perpendicularReferences={anchor:{...anchor},tolerance:referenceTolerance,masks:this.masks,geometries,directions:geometries.flatMap(g=>accept(anchor,g)?referenceDirections(g,anchor,referenceTolerance):[])};
+      perpendicular=endpointPerpendicularSnap(geometries,anchor,point,tolerance/3,this.perpendicularReferences!.directions,accept,snapped?.kind!=="edge");
     }
     if (start) point = start;
-    else if(perpendicular&&(!snapped||Math.hypot(perpendicular.x-point.x,perpendicular.y-point.y)<=Math.hypot(snapped.x-point.x,snapped.y-point.y)+tolerance*.02))point=perpendicular;
+    else if(perpendicular&&(!snapped||snapped.kind==="edge"||Math.hypot(perpendicular.x-point.x,perpendicular.y-point.y)+tolerance/12<Math.hypot(snapped.x-point.x,snapped.y-point.y)))point=perpendicular;
     else if (snapped) point = { x: snapped.x, y: snapped.y };
     else if(curve)point=curve;
     let entity = !this.handleDrag&&(measurement.mode === "object" || editor?.tool==="select"||editor?.tool==="trim") ?
@@ -225,6 +227,7 @@ export class DrawingViewer {
       return;
     }
     this.ready = false;
+    this.perpendicularReferences=null;
     const error = new AppError(
       "RENDER_FAILED",
       "The drawing's WebGL context was lost.",
@@ -455,7 +458,7 @@ export class DrawingViewer {
     if(anchor && (anchor.x!==this.anchor?.x||anchor.y!==this.anchor?.y)) {
       this.anchor=anchor;const c=this.viewer.GetCamera(),canvas=this.viewer.GetCanvas();
       const tolerance=1.5*(c.right-c.left)/c.zoom/Math.max(1,canvas.clientWidth);
-      this.references=[...(!masked(anchor,this.masks,tolerance)?referenceDirections(this.geometry,anchor,tolerance):[]),...referenceDirections(this.userGeometry,anchor,tolerance)];
+      this.references=this.visibleReferenceDirections(anchor,tolerance);
     } else if(!anchor){this.anchor=null;this.references=[];}
     if(isDistanceMode(settings.mode)&&settings.points[1])this.updateEndReferences(settings.points[1]);else{this.endAnchor=null;this.endReferences=[];}
   }
@@ -464,8 +467,11 @@ export class DrawingViewer {
   private updateEndReferences(point:DrawingPoint):void{
     if(this.endAnchor?.x===point.x&&this.endAnchor.y===point.y)return;
     this.endAnchor=point;const tolerance=this.worldTolerance(1.5);
-    this.endReferences=[...(!masked(point,this.masks,tolerance)?referenceDirections(this.geometry,point,tolerance):[]),...referenceDirections(this.userGeometry,point,tolerance)];
+    this.endReferences=this.visibleReferenceDirections(point,tolerance);
   }
+  private visibleReferenceDirections(point:DrawingPoint,tolerance:number):DrawingPoint[]{return[
+    ...(this.baseDrawingVisible&&!masked(point,this.masks,tolerance)?referenceDirections(this.geometry,point,tolerance):[]),
+    ...referenceDirections(this.userGeometry,point,tolerance),...(this.takeoffMode?referenceDirections(this.takeoffGeometry,point,tolerance):[])];}
   worldTolerance(pixels:number):number{const c=this.viewer.GetCamera();return pixels*(c.right-c.left)/c.zoom/Math.max(1,this.viewer.GetCanvas().clientWidth);}
   configureAnnotations(input:AnnotationInput|null,owner="annotations"):void{if(!input&&owner!==this.annotationOwner)return;if(input&&owner!==this.annotationOwner){this.cancelInteraction();this.annotationOwner=owner;}if(input?.tool!==this.annotationInput?.tool){this.gesture.cancel();if(this.handleDrag)this.lockInteraction(true);if(input&&input.tool!==this.handleDrag?.input.tool)this.cancelHandle();}this.annotationInput=input;}
   cancelInteraction():void { this.gesture.cancel();this.cancelHandle();this.handlePointers.clear();this.precisionIndex=undefined; }
@@ -475,7 +481,7 @@ export class DrawingViewer {
     const v=new Vector3((position.x-r.left)*2/r.width-1,-(position.y-r.top)*2/r.height+1,0).unproject(this.viewer.GetCamera());
     const origin=this.viewer.GetOrigin();return{x:v.x+origin.x,y:v.y+origin.y};
   }
-  setUserGeometry(geometry:MeasurementGeometry,masks:Annotation[]):void{this.userGeometry=geometry;this.masks=masks;this.anchor=null;this.endAnchor=null;if(this.measurement)this.configureMeasurement(this.measurement);}
+  setUserGeometry(geometry:MeasurementGeometry,masks:Annotation[]):void{this.userGeometry=geometry;this.masks=masks;this.perpendicularReferences=null;this.anchor=null;this.endAnchor=null;if(this.measurement)this.configureMeasurement(this.measurement);}
   getAnnotationTargets(){return{geometry:this.userGeometry,masks:this.masks};}
   setTakeoffMode(active:boolean){if(this.takeoffMode!==active)this.cancelInteraction();this.takeoffMode=active;}
   setTakeoffGeometry(geometry:MeasurementGeometry){releaseGeometryQuery(this.takeoffGeometry);this.takeoffGeometry=geometry;}
@@ -487,7 +493,7 @@ export class DrawingViewer {
     try{const read=()=>pickCadColor(renderer,(this.viewer as any).scene,this.viewer.GetCamera(),this.takeoffFocus!,this.viewer.GetCanvas(),client,(x,y)=>!masked(this.clientToDrawing({x,y}),this.masks,this.worldTolerance(3)));return this.strokeStyle?this.strokeStyle.withExact(read):read();}catch{return null;}
   }
   setTakeoffFocus(filter:CadFocus){if(this.destroyed)return;this.takeoffFocus??=new CadFocusFilter((this.viewer as any).scene);this.takeoffFocus.set(filter);this.panCache?.invalidate();this.viewer.Render();}
-  setBaseDrawingVisible(visible:boolean){if(this.destroyed||visible===this.baseDrawingVisible)return;this.baseDrawingVisible=visible;this.panCache?.invalidate();this.viewer.GetCanvas().style.opacity=visible?"":"0";this.viewer.Render();}
+  setBaseDrawingVisible(visible:boolean){if(this.destroyed||visible===this.baseDrawingVisible)return;this.baseDrawingVisible=visible;this.perpendicularReferences=null;this.anchor=null;this.endAnchor=null;if(this.measurement)this.configureMeasurement(this.measurement);this.panCache?.invalidate();this.viewer.GetCanvas().style.opacity=visible?"":"0";this.viewer.Render();}
   subscribeView(listener:()=>void):()=>void{this.viewListeners.add(listener);return()=>{this.viewListeners.delete(listener);};}
 
   projectPoints(points: readonly DrawingPoint[]): DrawingPoint[] {
@@ -507,7 +513,7 @@ export class DrawingViewer {
     this.takeoffFocus?.clear();this.takeoffFocus=null;this.takeoffGeometry.entities=[];this.takeoffGeometry.snaps=[];
     this.strokeStyle?.dispose();this.strokeStyle=null;this.panCache?.dispose();this.panCache=null;
     this.destroyed = true;
-    this.viewListeners.clear();this.annotationInput=null;this.masks=[];this.userGeometry.entities=[];this.userGeometry.snaps=[];
+    this.viewListeners.clear();this.annotationInput=null;this.perpendicularReferences=null;this.masks=[];this.userGeometry.entities=[];this.userGeometry.snaps=[];
     this.culler?.restore(); this.culler = null;
     this.ready = false;
     this.cancelInitialFit();
