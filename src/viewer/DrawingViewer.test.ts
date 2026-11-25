@@ -58,6 +58,22 @@ class FakeErrorEvent extends Event {
 }
 
 describe("drawing viewer lifecycle", () => {
+  it('stabilizes held placement and the final release, but resets between gestures and respects snap OFF',async()=>{
+    const picked=vi.fn(),preview=vi.fn(),viewer=new DrawingViewer({}as HTMLElement,undefined,picked,undefined,preview);
+    await viewer.load(new File(['0\nEOF\n'],'stable.dxf'),vi.fn());vi.useFakeTimers();
+    const native=state.current;Object.assign(native.canvas,{clientWidth:1000,clientHeight:2000,style:{},getBoundingClientRect:()=>({left:0,top:0,width:1000,height:2000})});
+    Object.assign(native.camera,{left:0,right:1000,top:1000,bottom:-1000});native.camera.updateProjectionMatrix();
+    (viewer as any).geometry=buildMeasurementGeometry({entities:[0,6].map(y=>({type:'LINE',vertices:[{x:0,y},{x:1000,y}]}))}as any,{},undefined,true);
+    const emit=(type:string,id:number,x=100,y=2.8)=>native.canvas.dispatchEvent(Object.assign(new Event(type),{pointerId:id,clientX:x,clientY:1000-y+64,pointerType:'touch',button:0}));
+    const current=()=>preview.mock.calls.filter(c=>c[0]).at(-1)![0];
+    viewer.configureMeasurement({enabled:true,mode:'distance',points:[],snapping:true,entity:null});
+    emit('pointerdown',1);vi.advanceTimersByTime(350);expect(current().point.y).toBe(0);
+    for(let i=0;i<20;i++){emit('pointermove',1,101+i,i%2?3.4:2.6);expect(current().point.y).toBe(0);expect(current().point.x).toBeCloseTo(101+i,7);}
+    const displayed=current().point;emit('pointerup',1,120,3.4);expect(picked.mock.calls[0][0].point).toEqual(displayed);
+    emit('pointerdown',2,120,3.4);vi.advanceTimersByTime(350);expect(current().point.y).toBe(6);emit('pointercancel',2);expect(picked).toHaveBeenCalledTimes(1);
+    emit('pointerdown',3);vi.advanceTimersByTime(350);viewer.configureMeasurement({enabled:true,mode:'distance',points:[],snapping:false,entity:null});emit('pointermove',3,130,3.4);expect(current().snapped).toBeNull();expect(current().point.y).toBeCloseTo(3.4,7);emit('pointercancel',3);
+    viewer.configureMeasurement({enabled:true,mode:'distance',points:[],snapping:true,entity:null});emit('pointerdown',4);vi.advanceTimersByTime(350);viewer.setBaseDrawingVisible(false);emit('pointermove',4,130,3.4);expect(current().snapped).toBeNull();emit('pointercancel',4);viewer.destroy();
+  });
   it('shares weak midpoint and either-end perpendicular picks across tools, retaining OFF and completed-measurement behavior',async()=>{
     const viewer=new DrawingViewer({}as HTMLElement);await viewer.load(new File(['0\nEOF\n'],'weak.dxf'),vi.fn());
     const native=state.current;Object.assign(native.canvas,{clientWidth:1000,clientHeight:2000,getBoundingClientRect:()=>({left:0,top:0,width:1000,height:2000})});
