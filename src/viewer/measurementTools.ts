@@ -1,5 +1,6 @@
 import { distance, measuredAngle, pathLength, polygonArea, type LinearAxis, type MeasurementSettings } from "./measurementGeometry";
 import type { DrawingPoint } from "./savedView";
+import type {CircularSelection} from './circularSnap';
 
 export const isDistanceMode = (mode: MeasurementSettings["mode"]): boolean => mode === "distance" || mode === "linear";
 export const measurementPointLimit = (mode: MeasurementSettings["mode"]): number => isDistanceMode(mode)||mode==="radius" ? 2 : mode === "angle" ? 3 : 256;
@@ -16,7 +17,7 @@ export function measurementValue(settings: MeasurementSettings): number | undefi
   if (settings.mode === "angle") return measuredAngle(settings.points) ?? undefined;
   if (settings.mode === "area") return settings.points.length >= 3 ? polygonArea(settings.points) : undefined;
   if (settings.mode === "linear") return linearMeasurement(settings.points, settings.linearAxis)?.value;
-  if (settings.mode === "radius") return settings.points.length===2?distance(settings.points[0],settings.points[1]):undefined;
+  if (settings.mode === "radius") return settings.radius?.arc.radius??(settings.points.length===2?distance(settings.points[0],settings.points[1]):undefined);
   return settings.points.length >= 2 ? pathLength(settings.points) : undefined;
 }
 /** Drafts expose only the latest edge; totals become readable after completion is saved. */
@@ -46,6 +47,22 @@ export function measurementPointsAfterPick(settings: MeasurementSettings, point:
   const limit = measurementPointLimit(settings.mode);
   const points = (limit <= 3 && settings.points.length >= limit) || (settings.mode === "path" && pathIsClosed(settings.points)) ? [] : settings.points;
   return points.length >= limit ? [...points] : [...points, point];
+}
+/** A radius has two actions: choose a real curve, then place its leader/label. */
+export function measurementAfterPick(settings:MeasurementSettings,pick:{point:DrawingPoint;radius?:CircularSelection;replaceIndex?:number;entity?:MeasurementSettings['entity']}):MeasurementSettings|null {
+ if(settings.mode==='radius'){
+  if(settings.radius&&!settings.labelPoint){
+   if(![pick.point.x,pick.point.y].every(Number.isFinite)||distance(settings.radius.arc.center,pick.point)<1e-9)return null;
+   return{...settings,labelPoint:{...pick.point}};
+  }
+  if(!pick.radius)return null;
+  return{...settings,radius:pick.radius,points:[pick.radius.arc.center,pick.radius.point],labelPoint:undefined,entity:null};
+ }
+ return settings.mode==='object'?{...settings,entity:pick.entity??null,points:[]}:{...settings,points:measurementPointsAfterPick(settings,pick.point,pick.replaceIndex),entity:null};
+}
+export function undoMeasurementPoint(settings:MeasurementSettings):MeasurementSettings {
+ if(settings.mode==='radius'&&settings.radius)return settings.labelPoint?{...settings,labelPoint:undefined}:{...settings,points:[],radius:undefined,labelPoint:undefined,entity:null};
+ return{...settings,points:settings.points.slice(0,-1),entity:null};
 }
 /** Measurement vertices are snap targets too, even when absent from the CAD file. */
 export function snapToPathStart(settings: MeasurementSettings, point: DrawingPoint, tolerance: number, replaceIndex?: number): DrawingPoint | null {

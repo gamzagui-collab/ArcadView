@@ -37,7 +37,7 @@ import { ViewportCuller } from "./viewportCulling";
 import { DWG_CACHE_VERSION } from "../dwg/conversionCache";
 import { referenceDirections } from "./rightAngles";
 import { isDistanceMode, measurementPointLimit, pathIsClosed, snapToPathStart } from "./measurementTools";
-import {snapToCircularEdge} from "./circularSnap";
+import {snapToCircularEdge,pickCircularEdge,type CircularSelection} from "./circularSnap";
 import { segmentFoot } from "./cadPicking";
 import {endpointPerpendicularCandidate} from './perpendicularSnapping';
 import { masked, visibleEntityFragment, type Annotation } from "./annotations";
@@ -52,7 +52,7 @@ import {SnapStability,type SnapCandidate} from './snapStability';
 import {prepareGeometryQuery,releaseGeometryQuery} from './geometryQuery';
 import {readViewerPreferences} from './viewerPreferences';
 
-export type MeasurementPick = { point: DrawingPoint; snapped: SnapPoint["kind"] | "start" | "perpendicular" | "intersection" | "curve" | "edge" | null; entity: MeasurableEntity | null; replaceIndex?: number;contact?:MoveContact;cadColor?:string|null };
+export type MeasurementPick = { point: DrawingPoint; snapped: SnapPoint["kind"] | "start" | "perpendicular" | "intersection" | "curve" | "edge" | null; entity: MeasurableEntity | null; replaceIndex?: number;contact?:MoveContact;cadColor?:string|null;radius?:CircularSelection };
 export type AnnotationHandleDrag={offset?:DrawingPoint;anchor?:DrawingPoint;translation?:{snap:ReturnType<typeof createMoveSnap>;geometry:MeasurementGeometry;masks:Annotation[]};move(pick:MeasurementPick):void;end(pick:MeasurementPick):void;cancel():void};
 export type AnnotationInput = {tool:string;snapping:boolean;handleSnapping?:boolean;editableDraftPoints?:boolean;anchor?:DrawingPoint;points:DrawingPoint[];referenceSnaps?:SnapPoint[];onHandleDown?(client:DrawingPoint):AnnotationHandleDrag|null;onPick(pick:MeasurementPick):void;onPreview(pick:MeasurementPick|null):void};
 
@@ -149,7 +149,7 @@ export class DrawingViewer {
     if(this.annotationInput?.editableDraftPoints){
       const rect=this.viewer.GetCanvas().getBoundingClientRect();let best=16;
       this.projectPoints(this.annotationInput.points).forEach((p,index)=>{const d=Math.hypot(p.x+rect.left-event.clientX,p.y+rect.top-event.clientY);if(d<=best){best=d;this.precisionIndex=index;}});
-    } else if (!this.annotationInput && this.measurement && this.measurement.mode !== "object") {
+    } else if (!this.annotationInput && this.measurement && this.measurement.mode !== "object" && this.measurement.mode !== "radius") {
       const rect = this.viewer.GetCanvas().getBoundingClientRect();
       const index = this.projectPoints(this.measurement.points).findIndex(p => Math.hypot(p.x + rect.left - event.clientX, p.y + rect.top - event.clientY) <= 16);
       // Returning to the first point finishes an open path, including a precision hold.
@@ -190,6 +190,12 @@ export class DrawingViewer {
     const supplemental=this.takeoffMode?this.takeoffGeometry:null;
     const accept=(p:DrawingPoint,g?:MeasurementGeometry)=>g!==cad||!this.masks.length||!masked(p,this.masks,maskTolerance);
     const geometries=[cad,this.userGeometry,...supplemental?[supplemental]:[]];
+    if(!editor&&measurement.mode==='radius'){
+      this.snapStability.reset();
+      if(measurement.radius&&!measurement.labelPoint)return{point,snapped:null,entity:null};
+      const radius=pickCircularEdge([cad,this.userGeometry],point,tolerance,accept);
+      return{point:radius?.point??point,snapped:radius?'curve':null,entity:null,...(radius?{radius}:{})};
+    }
     const nearest=readViewerPreferences().nearestSnapEnabled!==false&&measurement.mode!=="radius";
     if(this.snapNearestEnabled!==nearest){this.snapStability.reset();this.snapNearestEnabled=nearest;}
     let candidate=measurement.snapping&&measurement.mode!=="object"?pointSnapCandidate(geometries,point,tolerance,accept,nearest,centerKind):null;

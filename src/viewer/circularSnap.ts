@@ -4,10 +4,24 @@ import {circleThrough,normAngle,onArc,TAU} from "./curveGeometry";
 import {queryEntityIds} from './geometryQuery';
 const CHUNK=16384;
 export type CircularEdge={center:P;radius:number;start:number;sweep:number;direction:1|-1};
+export type CircularSelection={arc:CircularEdge;point:P};
 /** Analytic nearest point on the existing arc, never its tessellated chords. */
 export function circularPoint(arc:CircularEdge,target:P):P|null{
  const dx=target.x-arc.center.x,dy=target.y-arc.center.y,length=Math.hypot(dx,dy);if(length<1e-12)return null;
  const p={x:arc.center.x+dx/length*arc.radius,y:arc.center.y+dy/length*arc.radius};return onArc(arc,p)?p:null;
+}
+/** Selection includes the finite arc ends; no chord fitting or arbitrary two-point radius. */
+export function closestCircularPoint(arc:CircularEdge,target:P):P {
+ const p=circularPoint(arc,target);if(p)return p;
+ const at=(a:number)=>({x:arc.center.x+arc.radius*Math.cos(a),y:arc.center.y+arc.radius*Math.sin(a)}),a=at(arc.start),b=at(arc.start+arc.direction*arc.sweep);
+ return Math.hypot(target.x-a.x,target.y-a.y)<=Math.hypot(target.x-b.x,target.y-b.y)?a:b;
+}
+export function pickCircularEdge(geometries:readonly MeasurementGeometry[],target:P,tolerance:number,accept:(p:P,g:MeasurementGeometry)=>boolean=()=>true):CircularSelection|null {
+ if(![target.x,target.y,tolerance].every(Number.isFinite)||tolerance<=0)return null;
+ let result:CircularSelection|null=null,best=tolerance;
+ const box={minX:target.x-tolerance,minY:target.y-tolerance,maxX:target.x+tolerance,maxY:target.y+tolerance};
+ for(const g of geometries)visitCircularEdges(g,box,arc=>{const point=closestCircularPoint(arc,target),d=Math.hypot(point.x-target.x,point.y-target.y);if(d<=best&&accept(point,g)){best=d;result={arc,point};}});
+ return result;
 }
 function circle(kind:string,bounds:MeasurableEntity["bounds"],length:number,points:P[]):CircularEdge|null {
   if(kind==="CIRCLE")return{center:{x:(bounds.minX+bounds.maxX)/2,y:(bounds.minY+bounds.maxY)/2},radius:length/TAU,start:0,sweep:TAU,direction:1};

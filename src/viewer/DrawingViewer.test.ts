@@ -58,6 +58,15 @@ class FakeErrorEvent extends Event {
 }
 
 describe("drawing viewer lifecycle", () => {
+  it('picks a circle edge as a radius object even with snapping off, then leaves placement unconstrained',async()=>{
+    const viewer=new DrawingViewer({}as HTMLElement);await viewer.load(new File(['0\nEOF\n'],'radius.dxf'),vi.fn());
+    const native=state.current;Object.assign(native.canvas,{clientWidth:1000,clientHeight:2000,style:{},getBoundingClientRect:()=>({left:0,top:0,width:1000,height:2000})});Object.assign(native.camera,{left:0,right:1000,top:1000,bottom:-1000});native.camera.updateProjectionMatrix();
+    (viewer as any).geometry=buildMeasurementGeometry({entities:[{type:'CIRCLE',center:{x:400,y:0},radius:100},{type:'LINE',vertices:[{x:700,y:-100},{x:700,y:100}]}]}as any,{},undefined,true);
+    const settings={enabled:true,mode:'radius' as const,points:[],snapping:false,entity:null};viewer.configureMeasurement(settings);
+    const pick=(x:number,y:number)=>(viewer as any).pickAt({x,y:1000-y},false),hit=pick(503,0);expect(hit.radius.arc.radius).toBeCloseTo(100,7);expect(hit.point).toEqual({x:500,y:0});expect(pick(400,0).radius).toBeUndefined();expect(pick(700,0).radius).toBeUndefined();
+    viewer.configureMeasurement({...settings,radius:hit.radius,points:[hit.radius.arc.center,hit.radius.point]});const placed=pick(800,150);expect(placed.point.x).toBeCloseTo(800,7);expect(placed.point.y).toBeCloseTo(150,7);expect(placed.snapped).toBeNull();
+    viewer.setBaseDrawingVisible(false);viewer.configureMeasurement(settings);expect(pick(500,0).radius).toBeUndefined();viewer.destroy();
+  });
   it('stabilizes held placement and the final release, but resets between gestures and respects snap OFF',async()=>{
     const picked=vi.fn(),preview=vi.fn(),viewer=new DrawingViewer({}as HTMLElement,undefined,picked,undefined,preview);
     await viewer.load(new File(['0\nEOF\n'],'stable.dxf'),vi.fn());vi.useFakeTimers();

@@ -32,7 +32,7 @@ import { ViewerToolbar } from "../components/ViewerToolbar";
 import { MeasurementPanel, MeasurementStatus } from "../components/MeasurementPanel";
 import type { MeasurementPick } from "../viewer/DrawingViewer";
 import type { MeasurementGeometry, MeasurementSettings, MeasurementUnit } from "../viewer/measurementGeometry";
-import { canFinishMeasurement,measurementPointsAfterPick,measurementValue,pathIsClosed } from "../viewer/measurementTools";
+import { canFinishMeasurement,measurementAfterPick,measurementValue,pathIsClosed } from "../viewer/measurementTools";
 import { UndoHistory, type EditCommand, type EditHistoryState } from "../viewer/undoHistory";
 import { saveDrawingUnitPreference, type DrawingUnitPreference } from "../viewer/drawingUnitPreferences";
 import { dispatchBackNavigation, useBackNavigation } from "./backNavigation";
@@ -511,8 +511,9 @@ export function App() {
     const current=measurementRef.current;if(!current.enabled||current.displayOnly||localMeasurementSaving.current)return;
     const tool=measurementToolId(current.mode);
     if(commerceSnapshot().managed&&!isUnmeteredTool(tool)&&(measurementOperation.blocked()||!canStart(tool)))return;
-    const next=current.mode==="object"?{...current,entity:pick.entity,points:[]}:{...current,points:measurementPointsAfterPick(current,pick.point,pick.replaceIndex),entity:null};
-    if(commerceSnapshot().managed&&!isUnmeteredTool(tool)){const value=measurementValue(next),complete=next.mode==="object"?!!next.entity:next.mode==="path"?pathIsClosed(next.points):next.mode==="area"?false:next.mode==="angle"?next.points.length===3:next.points.length===2;
+    const next=measurementAfterPick(current,pick);
+    if(!next){if(current.mode==='radius')setMeasurementFeedback(t('measureNoRadius'));return;}
+    if(commerceSnapshot().managed&&!isUnmeteredTool(tool)){const value=measurementValue(next),complete=next.mode==="object"?!!next.entity:next.mode==="path"?pathIsClosed(next.points):next.mode==="area"?false:next.mode==="angle"?next.points.length===3:next.mode==='radius'?!!next.radius&&!!next.labelPoint:next.points.length===2;
       if(complete&&value!==undefined&&Number.isFinite(value)&&value>0){measurementOperation.begin(next,tool);return;}}
     if(!commerceSnapshot().managed&&next.mode==="path"&&pathIsClosed(next.points)&&canFinishMeasurement(next)){finishLocalMeasurement(next);return;}
     measurementHistory.current.record(current);
@@ -534,8 +535,8 @@ export function App() {
     const apply=()=>{
       if(requestIdRef.current!==drawingRequest)return;
       const current=measurementRef.current;
-      if(settings.mode!==current.mode){measurementHistory.current.clear();settings={...settings,displayOnly:false};}
-      else if((settings.points!==current.points&&(settings.points.length>0||current.points.length>0))||settings.entity!==current.entity){measurementHistory.current.record(current);settings={...settings,displayOnly:false};}
+      if(settings.mode!==current.mode){measurementHistory.current.clear();settings={...settings,displayOnly:false,radius:undefined,labelPoint:undefined};}
+      else if((settings.points!==current.points&&(settings.points.length>0||current.points.length>0))||settings.entity!==current.entity||settings.radius!==current.radius||settings.labelPoint!==current.labelPoint){measurementHistory.current.record(current);settings={...settings,displayOnly:false};}
       measurementRef.current=settings;if(settings.enabled)measurementActivated.current=true;
       setMeasurement(settings);setMeasurementFeedback(null);
     };
@@ -548,15 +549,15 @@ export function App() {
     setTakeoffActive(false);setAnnotationActive(false);setAnnotationOpen(false);setMeasurementPanelOpen(open=>!open);
     const current=measurementRef.current;
     if(!hasToolAccess(measurementToolId(current.mode))){
-      const next={...current,mode:"distance" as const,enabled:true,displayOnly:false,points:[],entity:null};
+      const next={...current,mode:"distance" as const,enabled:true,displayOnly:false,points:[],entity:null,radius:undefined,labelPoint:undefined};
       measurementRef.current=next;measurementActivated.current=true;setMeasurement(next);
     }else if(!measurementActivated.current||annotationActive||current.displayOnly){
-      measurementActivated.current=true;const next={...current,enabled:true,displayOnly:false,...(current.displayOnly?{points:[],entity:null}:{})};measurementRef.current=next;setMeasurement(next);
+      measurementActivated.current=true;const next={...current,enabled:true,displayOnly:false,...(current.displayOnly?{points:[],entity:null,radius:undefined,labelPoint:undefined}:{})};measurementRef.current=next;setMeasurement(next);
     }
   };
   const toggleMeasurement=()=>{
     const drawingRequest=requestIdRef.current,tool=measurementToolId(measurementRef.current.mode);
-    const apply=()=>{if(drawingRequest!==requestIdRef.current)return;measurementActivated.current=true;const current=measurementRef.current,next={...current,enabled:current.displayOnly?true:!current.enabled,displayOnly:false,...(current.displayOnly?{points:[],entity:null}:{})};measurementRef.current=next;setMeasurement(next);};
+    const apply=()=>{if(drawingRequest!==requestIdRef.current)return;measurementActivated.current=true;const current=measurementRef.current,next={...current,enabled:current.displayOnly?true:!current.enabled,displayOnly:false,...(current.displayOnly?{points:[],entity:null,radius:undefined,labelPoint:undefined}:{})};measurementRef.current=next;setMeasurement(next);};
     if(commerce.managed&&!canStart(tool,apply))return;apply();
   };
 
@@ -568,11 +569,11 @@ export function App() {
     if(command==="cancel"){
       viewerRef.current?.edit?.("cancel");
       setTakeoffActive(false);setAnnotationActive(false);setAnnotationOpen(false);setLayersOpen(false);setMeasurementPanelOpen(false);setMeasurementFeedback(null);
-      const next={...measurementRef.current,enabled:false,points:[],entity:null};measurementRef.current=next;setMeasurement(next);
+      const next={...measurementRef.current,enabled:false,points:[],entity:null,radius:undefined,labelPoint:undefined};measurementRef.current=next;setMeasurement(next);
       measurementHistory.current.clear();measurementActivated.current=false;
     }else if(measurementRef.current.enabled&&!annotationActive){
       const next=measurementHistory.current[command](measurementRef.current);
-      if(next){const restored={...measurementRef.current,points:next.points,entity:next.entity,displayOnly:next.displayOnly};measurementRef.current=restored;setMeasurement(restored);setMeasurementFeedback(null);}
+      if(next){const restored={...measurementRef.current,points:next.points,entity:next.entity,displayOnly:next.displayOnly,radius:next.radius,labelPoint:next.labelPoint};measurementRef.current=restored;setMeasurement(restored);setMeasurementFeedback(null);}
     }else viewerRef.current?.edit?.(command);
   };
 

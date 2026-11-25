@@ -3,6 +3,7 @@ import { parseDxfXclip } from "../dwg/xclipMetadata";
 import type { DrawingBounds, DrawingPoint } from "./savedView";
 import { MeasurementPacker, SupplementalSnaps, type PackedMeasurement } from "./packedMeasurement";
 import { collectSnapFeatures, type SnapEntity, type SplineInterpolator } from "./snapFeatures";
+import type {CircularSelection} from './circularSnap';
 
 export type MeasurementMode = "distance" | "linear" | "path" | "area" | "radius" | "angle" | "object";
 export type LinearAxis = "auto" | "x" | "y";
@@ -48,6 +49,9 @@ export type MeasurementSettings = {
   snapping: boolean;
   entity: MeasurableEntity | null;
   linearAxis?: LinearAxis;
+  /** Selected analytic CAD circle/arc; its radius is independent of label placement. */
+  radius?: CircularSelection;
+  labelPoint?: DrawingPoint;
 };
 
 type Point = DrawingPoint & { bulge?: number; startWidth?: number; endWidth?: number };

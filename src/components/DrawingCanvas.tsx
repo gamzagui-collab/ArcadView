@@ -20,7 +20,7 @@ import { drawMeasurementOverlay } from "../viewer/measurementOverlay";
 import { AnnotationEditor, type AnnotationEditorHandle } from "./AnnotationEditor";
 import {TakeoffEditor,type TakeoffHandle} from "./TakeoffEditor";
 import type { EditHistoryState } from "../viewer/undoHistory";
-import { measurementReadout,measurementPointsAfterPick } from "../viewer/measurementTools";
+import { measurementReadout,measurementPointsAfterPick,measurementAfterPick } from "../viewer/measurementTools";
 import { formatCadNumber } from "../viewer/displayPrecision";
 import { useI18n } from "../i18n/I18nProvider";
 import {annotationStorage}from'../viewer/annotationStorage';
@@ -79,7 +79,7 @@ export const DrawingCanvas = forwardRef<ViewerHandle, Props>(
       const viewer = viewerRef.current;
       if (!viewer || !overlayRef.current) return;
       const preview=settings.displayOnly?null:previewRef.current;
-      const readout=preview&&(settings.mode==="path"||settings.mode==="area")?{...settings,points:measurementPointsAfterPick(settings,preview.point,preview.replaceIndex)}:settings;
+      const readout=preview&&settings.mode==='radius'?(measurementAfterPick(settings,preview)??settings):preview&&(settings.mode==="path"||settings.mode==="area")?{...settings,points:measurementPointsAfterPick(settings,preview.point,preview.replaceIndex)}:settings;
       const {value,area}=measurementReadout(readout),u=unitRef.current;
       const label=value===undefined?undefined:settings.mode==="angle"?`${formatCadNumber(value,u.precision,u.locale)}°`:`${settings.mode==="radius"?"R ":""}${formatCadNumber(convertMeasurement(value,u.sourceUnit,u.displayUnit,area),u.precision,u.locale)} ${u.displayUnit==="drawing"?"":u.displayUnit}${area?"²":""}`;
       drawMeasurementOverlay(overlayRef.current, settings, points => viewer.projectPoints(points), preview,viewer.getMeasurementReferences(),viewer.getMeasurementEndReferences(),label);

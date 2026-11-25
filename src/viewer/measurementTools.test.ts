@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 import type { MeasurementSettings } from "./measurementGeometry";
-import { canFinishMeasurement,linearMeasurement, measurementPointsAfterPick, measurementReadout,measurementValue, pathIsClosed, snapToPathStart } from "./measurementTools";
+import { canFinishMeasurement,linearMeasurement, measurementPointsAfterPick, measurementReadout,measurementValue, pathIsClosed, snapToPathStart,measurementAfterPick,undoMeasurementPoint } from "./measurementTools";
 const settings = (changes: Partial<MeasurementSettings> = {}): MeasurementSettings => ({ enabled: true, mode: "distance", points: [], snapping: true, entity: null, ...changes });
 const triangle = [{ x: 1e9, y: 1e9 }, { x: 1e9 + 3, y: 1e9 }, { x: 1e9 + 3, y: 1e9 + 4 }];
 it("distinguishes aligned distance from both linear projections in any quadrant", () => {
@@ -44,6 +44,13 @@ it("measures a radius from exactly the center and picked rim, including edits to
  const s=settings({mode:"radius",points:[{x:1e9,y:1e9},{x:1e9+300,y:1e9+400}]});expect(measurementValue(s)).toBe(500);
  expect(measurementValue({...s,points:s.points.slice(0,1)})).toBeUndefined();
  expect(measurementValue({...s,points:measurementPointsAfterPick(s,{x:1e9+600,y:1e9+800},1)})).toBe(1000);
+});
+it('selects a real curve, places its label without changing the radius, and undoes each action separately',()=>{
+ const empty=settings({mode:'radius'}),radius={arc:{center:{x:1e9,y:1e9},radius:500,start:0,sweep:Math.PI*2,direction:1 as const},point:{x:1e9+500,y:1e9}};
+ expect(measurementAfterPick(empty,{point:radius.point})).toBeNull();
+ const selected=measurementAfterPick(empty,{point:radius.point,radius})!;expect(selected.labelPoint).toBeUndefined();expect(measurementValue(selected)).toBe(500);
+ for(const point of [{x:1e9+100,y:1e9+100},{x:1e9+50000,y:1e9-50000}]){const placed=measurementAfterPick(selected,{point})!;expect(placed.labelPoint).toEqual(point);expect(measurementValue(placed)).toBe(500);expect(placed.points).toBe(selected.points);expect(undoMeasurementPoint(placed)).toEqual(selected);expect(measurementAfterPick(placed,{point})).toBeNull();expect(JSON.parse(JSON.stringify(placed))).toEqual(placed);}
+ expect(undoMeasurementPoint(selected).points).toEqual([]);expect(undoMeasurementPoint(selected).radius).toBeUndefined();expect(measurementAfterPick(selected,{point:radius.arc.center})).toBeNull();
 });
 it("shows only the latest segment until open path or area completion is saved, even while paused",()=>{
   for(const mode of ["path","area"] as const){

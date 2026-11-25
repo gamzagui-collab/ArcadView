@@ -9,7 +9,7 @@ import {
   convertMeasurement, pathLength,
   type LinearAxis, type MeasurementGeometry, type MeasurementMode, type MeasurementSettings, type MeasurementUnit,
 } from "../viewer/measurementGeometry";
-import { canFinishMeasurement, isDistanceMode, linearMeasurement, measurementReadout, pathIsClosed } from "../viewer/measurementTools";
+import { canFinishMeasurement, isDistanceMode, linearMeasurement, measurementReadout, pathIsClosed,undoMeasurementPoint } from "../viewer/measurementTools";
 
 type Props = {
   settings: MeasurementSettings;
@@ -33,14 +33,14 @@ export function MeasurementPanel({ settings, geometry, sourceUnit, displayUnit, 
   const { t, locale } = useI18n();
   const format = (value: number, area = false) => `${formatCadNumber(convertMeasurement(value, sourceUnit, displayUnit, area),precision,locale)} ${displayUnit === "drawing" ? t("drawingUnit") : displayUnit}${area ? "²" : ""}`;
   const { value, area, segment } = measurementReadout(settings);
-  const instruction = settings.mode === "object" ? t("measurePickObject") : settings.mode === "angle" ? t("measurePickAngle") : settings.mode==="radius"?t("measurePickRadius"):settings.mode === "area" ? t("measurePickArea") : settings.mode === "path" ? t("measurePickPath") : settings.mode === "linear" ? t("measurePickLinear") : t("measurePickDistance");
+  const instruction = settings.mode === "object" ? t("measurePickObject") : settings.mode === "angle" ? t("measurePickAngle") : settings.mode==="radius"?t(settings.radius&&!settings.labelPoint?"measurePlaceRadius":"measurePickRadiusObject"):settings.mode === "area" ? t("measurePickArea") : settings.mode === "path" ? t("measurePickPath") : settings.mode === "linear" ? t("measurePickLinear") : t("measurePickDistance");
   return (
     <section className="measurement-panel tool-panel" aria-label={t("measure")}>
       <div className="measurement-title tool-panel-header"><strong className="sr-only">{t("measure")}</strong>
       <button type="button" className="icon-button" aria-label={t("closeMeasurement")} onClick={onHide}><CloseIcon /></button></div>
       <ToolStrip className="measurement-modes" tabIndex={0}>
         {(["distance", "linear", "path", "area", "radius", "angle", "object"] as MeasurementMode[]).map((mode) => (
-          <button key={mode} data-mode={mode} type="button" aria-pressed={settings.mode === mode} onClick={() => onSettings({ ...settings, enabled: true, displayOnly:false, mode, points: [], entity: null })}><ToolIcon name={mode}/><span>{t(modeKeys[mode])}{mode==="distance"?<small className="tool-free-label">{locale==="ko"?"무료 · 무제한":locale==="en"?"Free · unlimited":"Ücretsiz · sınırsız"}</small>:null}</span></button>
+          <button key={mode} data-mode={mode} type="button" aria-pressed={settings.mode === mode} onClick={() => onSettings({ ...settings, enabled: true, displayOnly:false, mode, points: [], entity: null,radius:undefined,labelPoint:undefined })}><ToolIcon name={mode}/><span>{t(modeKeys[mode])}{mode==="distance"?<small className="tool-free-label">{locale==="ko"?"무료 · 무제한":locale==="en"?"Free · unlimited":"Ücretsiz · sınırsız"}</small>:null}</span></button>
         ))}
       </ToolStrip>
       <details className="measurement-help tool-help"><summary aria-label={t("measureHelp")} title={t("measureHelp")}>?</summary><p className="measurement-instruction">{instruction}</p></details>
@@ -62,8 +62,8 @@ export function MeasurementPanel({ settings, geometry, sourceUnit, displayUnit, 
         <label className="measurement-snap" title={t("measureSnap")}><input type="checkbox" aria-label={t("measureSnap")} checked={settings.snapping} onChange={(e) => onSettings({ ...settings, snapping: e.target.checked })} />{locale==="ko"?"스냅":locale==="en"?"Snap":"Yak."}</label>
         {!settings.displayOnly&&(settings.mode==="path"||settings.mode==="area")?<button type="button" className="measurement-finish" aria-label={locale==="ko"?"측정 완료":locale==="en"?"Finish measurement":"Ölçümü bitir"} disabled={finishDisabled||!canFinishMeasurement(settings)} onClick={onFinish}>{locale==="ko"?"완료 ✓":locale==="en"?"Finish ✓":"Bitir ✓"}</button>:null}
         <span className="measurement-feedback sr-only" role="status">{feedback ?? t("measure2D")}</span>
-        <button type="button" aria-label={t("measureUndo")} title={t("measureUndo")} disabled={settings.points.length === 0 && !settings.entity} onClick={() => onSettings({ ...settings, points: settings.points.slice(0, -1), entity: null })}><UndoIcon/></button>
-        <button type="button" aria-label={t("measureClear")} title={t("measureClear")} disabled={settings.points.length === 0 && !settings.entity} onClick={() => onSettings({ ...settings, points: [], entity: null })}><ToolIcon name="delete"/></button>
+        <button type="button" aria-label={t("measureUndo")} title={t("measureUndo")} disabled={settings.points.length === 0 && !settings.entity} onClick={() => onSettings(undoMeasurementPoint(settings))}><UndoIcon/></button>
+        <button type="button" aria-label={t("measureClear")} title={t("measureClear")} disabled={settings.points.length === 0 && !settings.entity} onClick={() => onSettings({ ...settings, points: [], entity: null,radius:undefined,labelPoint:undefined })}><ToolIcon name="delete"/></button>
       </div>
     </section>
   );
@@ -75,9 +75,10 @@ export function MeasurementStatus({settings,sourceUnit,displayUnit,feedback,prec
   const unit=displayUnit==="drawing"?t("drawingUnit"):displayUnit;
   const result=value===undefined?"—":settings.mode==="angle"?formatCadNumber(value,precision,locale)+"°":`${settings.mode==="radius"?"R ":""}${formatCadNumber(convertMeasurement(value,sourceUnit,displayUnit,area),precision,locale)} ${unit}${area?"²":""}`;
   const direction=settings.mode==="linear"?linearMeasurement(settings.points,settings.linearAxis)?.axis:undefined;
+  const count=settings.mode==="radius"&&settings.radius?(settings.labelPoint?2:1):settings.points.length;
   const mode=t(modeKeys[settings.mode])+(settings.mode==="distance"?` · ${locale==="ko"?"무료 · 무제한":locale==="en"?"Free · unlimited":"Ücretsiz · sınırsız"}`:"")+(direction?` · ${t(direction==="x"?"measureHorizontal":"measureVertical")}`:"");
   return <ToolbarStatus><div className={`measurement-status ${settings.enabled?"is-active":""}`} role="status">
-    <button type="button" className="measurement-status-copy" title={`${mode} · ${result}`} aria-label={`${mode} · ${settings.points.length} · ${result}`} onClick={onShow}><ToolIcon name={settings.mode}/>{settings.points.length?<b className="status-count" aria-hidden="true">{settings.points.length}</b>:null}<span className="sr-only">{settings.enabled?mode:`${t("measureNavigate")} · ${mode}`} · {settings.points.length}{settings.mode==="angle"?"/3":isDistanceMode(settings.mode)||settings.mode==="radius"?"/2":""} · {settings.snapping?t("measureSnap"):t("measureSnapOff")}{settings.mode==="path"&&pathIsClosed(settings.points)?` · ${t("measureClosed")}`:""}{segment?` · ${locale==="ko"?"직전 구간":locale==="en"?"Last segment":"Son parça"}`:""}</span><strong className="measurement-status-result sr-only">{result}</strong>{settings.enabled&&feedback?<small className="sr-only">{feedback}</small>:null}</button>
+    <button type="button" className="measurement-status-copy" title={`${mode} · ${result}`} aria-label={`${mode} · ${count} · ${result}`} onClick={onShow}><ToolIcon name={settings.mode}/>{count?<b className="status-count" aria-hidden="true">{count}</b>:null}<span className="sr-only">{settings.enabled?mode:`${t("measureNavigate")} · ${mode}`} · {count}{settings.mode==="angle"?"/3":isDistanceMode(settings.mode)||settings.mode==="radius"?"/2":""} · {settings.snapping?t("measureSnap"):t("measureSnapOff")}{settings.mode==="path"&&pathIsClosed(settings.points)?` · ${t("measureClosed")}`:""}{segment?` · ${locale==="ko"?"직전 구간":locale==="en"?"Last segment":"Son parça"}`:""}</span><strong className="measurement-status-result sr-only">{result}</strong>{settings.enabled&&feedback?<small className="sr-only">{feedback}</small>:null}</button>
     {!settings.displayOnly&&(settings.mode==="path"||settings.mode==="area")?<button type="button" className="measurement-finish" aria-label={locale==="ko"?"측정 완료":locale==="en"?"Finish measurement":"Ölçümü bitir"} disabled={finishDisabled||!canFinishMeasurement(settings)} onClick={onFinish}>{locale==="ko"?"완료":locale==="en"?"Finish":"Bitir"}</button>:null}
     <button type="button" className="measurement-toggle" onClick={onToggle} aria-label={settings.enabled&&!settings.displayOnly?t("measurePause"):t("measureResume")} title={settings.enabled&&!settings.displayOnly?t("measurePause"):t("measureResume")}>{settings.enabled&&!settings.displayOnly?"Ⅱ":"▶"}</button>
   </div></ToolbarStatus>;

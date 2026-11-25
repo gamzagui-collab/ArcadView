@@ -2,13 +2,29 @@ import type { MeasurementSettings } from "./measurementGeometry";
 import type { MeasurementPick } from "./DrawingViewer";
 import type { DrawingPoint } from "./savedView";
 import { rightAngleCorners } from "./rightAngles";
-import { isDistanceMode, linearMeasurement, measurementPointsAfterPick, pathIsClosed } from "./measurementTools";
+import { isDistanceMode, linearMeasurement, measurementPointsAfterPick, pathIsClosed,measurementAfterPick } from "./measurementTools";
+import {closestCircularPoint} from './circularSnap';
 const NS = "http://www.w3.org/2000/svg";
 const pointWindows=new WeakMap<SVGSVGElement,string>();
 let nextPointWindow=0;
 /** Updated in the same Render call as WebGL, without a deferred React commit. */
 export function drawMeasurementOverlay(svg: SVGSVGElement, settings: MeasurementSettings, project: (points: readonly DrawingPoint[]) => DrawingPoint[], preview: MeasurementPick | null, references: readonly DrawingPoint[] = [],endReferences:readonly DrawingPoint[]=[],label?:string,draftPoints?:readonly DrawingPoint[]): string|undefined {
   if (!settings.enabled) { svg.replaceChildren(); return; }
+  if(settings.mode==='radius'&&(settings.radius||preview?.radius)){
+    const current=preview?(measurementAfterPick(settings,preview)??settings):settings,selected=current.radius;
+    if(selected){
+      const {arc,point}=selected,c=arc.center,labelPoint=current.labelPoint??{x:c.x+(point.x-c.x)*1.35,y:c.y+(point.y-c.y)*1.35},rim=closestCircularPoint(arc,labelPoint);
+      const elements:SVGElement[]=[],make=(tag:string,attrs:Record<string,string|number>)=>{const e=document.createElementNS(NS,tag);for(const[k,v]of Object.entries(attrs))e.setAttribute(k,String(v));elements.push(e);return e;};
+      const count=Math.max(12,Math.ceil(arc.sweep*24)),outline=project(Array.from({length:count+1},(_,i)=>{const a=arc.start+arc.direction*arc.sweep*i/count;return{x:c.x+arc.radius*Math.cos(a),y:c.y+arc.radius*Math.sin(a)}}));
+      make('polyline',{points:outline.map(p=>`${p.x},${p.y}`).join(' '),class:'measurement-radius-source'});
+      const [center,tip,labelPosition]=project([c,rim,labelPoint]),leader=`${center.x},${center.y} ${tip.x},${tip.y} ${labelPosition.x},${labelPosition.y}`;
+      make('polyline',{points:leader,class:'measurement-radius-leader-halo'});make('polyline',{points:leader,class:'measurement-radius-leader'});
+      const dx=center.x-tip.x,dy=center.y-tip.y,l=Math.hypot(dx,dy);if(l>1e-8){const ux=dx/l,uy=dy/l,h=Math.min(9,l*.4),x=tip.x+ux*h,y=tip.y+uy*h;make('polygon',{points:`${tip.x},${tip.y} ${x-uy*h*.35},${y+ux*h*.35} ${x+uy*h*.35},${y-ux*h*.35}`,class:'measurement-radius-arrow'});}
+      make('circle',{cx:center.x,cy:center.y,r:2,class:'measurement-point-dot'});
+      if(label){const width=Math.min(300,label.length*8+22);make('rect',{x:labelPosition.x-width/2,y:labelPosition.y-14,width,height:29,rx:7,class:'measurement-value-badge'});make('text',{x:labelPosition.x,y:labelPosition.y+5,'text-anchor':'middle',class:'measurement-value-label'}).textContent=label;}
+      svg.replaceChildren(...elements);return;
+    }
+  }
   let points = settings.mode === "object" ? settings.entity?.points ?? [] : settings.points;
   if(draftPoints)points=[...draftPoints];
   else if (preview && settings.mode !== "object") points = measurementPointsAfterPick(settings, preview.point, preview.replaceIndex);

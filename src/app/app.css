@@ -1606,6 +1606,10 @@ a:focus-visible {
 .measurement-overlay text { fill: #b6edff; }
 .measurement-overlay .measurement-right-angle-halo { fill: none; stroke: #03101d; stroke-width: 5; stroke-linejoin: miter; }
 .measurement-overlay .measurement-right-angle { fill: none; stroke: #65e3a4; stroke-width: 2.5; stroke-linejoin: miter; }
+.measurement-overlay .measurement-radius-source { fill:none;stroke:#63d5ff;stroke-width:2;opacity:.8; }
+.measurement-overlay .measurement-radius-leader-halo { fill:none;stroke:#03101d;stroke-width:4; }
+.measurement-overlay .measurement-radius-leader { fill:none;stroke:#ecfbff;stroke-width:1.5; }
+.measurement-overlay .measurement-radius-arrow { fill:#ecfbff;stroke:none; }
 @media (min-width: 700px) and (min-height: 600px) {
   .viewer-shell .measurement-panel { bottom: calc(65px + env(safe-area-inset-bottom)); }
   .measurement-status { bottom: calc(20px + env(safe-area-inset-bottom)); }
